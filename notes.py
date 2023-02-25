@@ -533,33 +533,33 @@ if __name__ == '__main__':
 
     ### name/value/pitch conversion tests:
 
-    # print('\n=== Value to name:\n')
-    # test(v2n(1), 'A0')
-    # test(v2n(13), 'A1')
-    # test(v2n(14), 'A#1')
-    # test(v2n(40), 'C4')
-    #
-    # print('\n=== Name to value:\n')
-    # test(n2v('A0'), 1)
-    # test(n2v('A#1'), 14)
-    # test(n2v('C4'), 40)
-    # test(n2v('D'), 42)
-    #
-    # print('\n=== Value to pitch:\n')
-    # test(v2p(49), 440.)
-    # test(v2p(40), 261.63)
-    #
-    # print('\n=== Pitch to value:\n')
-    # test(p2v(440), 49)
-    # test(p2v(261.63), 40)
-    #
-    # print('\n=== Polymorphisms:\n')
-    # test(note_name(40), 'C4')
-    # test(note_name(440.), 'A4')
-    # test(note_value('C4'), 40)
-    # test(note_value(440.), 49)
-    # test(note_pitch('C4'), 261.63)
-    # test(note_pitch(49), 440.)
+    print('\n=== Value to name:\n')
+    test(v2n(1), 'A0')
+    test(v2n(13), 'A1')
+    test(v2n(14), 'A#1')
+    test(v2n(40), 'C4')
+
+    print('\n=== Name to value:\n')
+    test(n2v('A0'), 1)
+    test(n2v('A#1'), 14)
+    test(n2v('C4'), 40)
+    test(n2v('D'), 42)
+
+    print('\n=== Value to pitch:\n')
+    test(v2p(49), 440.)
+    test(v2p(40), 261.63)
+
+    print('\n=== Pitch to value:\n')
+    test(p2v(440), 49)
+    test(p2v(261.63), 40)
+
+    print('\n=== Polymorphisms:\n')
+    test(note_name(40), 'C4')
+    test(note_name(440.), 'A4')
+    test(note_value('C4'), 40)
+    test(note_value(440.), 49)
+    test(note_pitch('C4'), 261.63)
+    test(note_pitch(49), 440.)
 
     # magic method tests:
     # chromas:

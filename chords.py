@@ -369,8 +369,8 @@ class Progression:
             return item in self.chroma_set
 
     def __str__(self):
-        chord_set_str = ','.join([c.name for c in self.chords])
-        return f'Progression: |{chord_set_str}|'
+        chord_set_str = ','.join(['♬ ' + c.name for c in self.chords])
+        return f'𝄆 {chord_set_str} 𝄇'
 
     def __repr__(self):
         return str(self)
@@ -403,5 +403,3 @@ if __name__ == '__main__':
     test(Chord('Cadd9'), Chord('C', [4, 7, 14]))
     test(Chord('Cm/maj7'), Chord('C', 'minor-major 7th'))
     test(Chord('A minor'), StackedChord('A', [Min3, Maj3]))
-
-    x = ChordSet(['Amin', 'Bmaj', 'Cmaj', 'Dmin'])

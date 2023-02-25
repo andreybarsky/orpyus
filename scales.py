@@ -283,37 +283,6 @@ class Key:
         elif isinstance(other, int):
             return self.counterclockwise(other)
         elif isinstance(other, Key):
-            # circle of fifths distance
-            # clockwise_distance = 0
-            # found_self = False
-            # for k in cycle(circle_of_fifths_clockwise):
-            #     if not found_self:
-            #         if k == self:
-            #             found_self = True
-            #             clockwise_distance = 0
-            #     if found_self:
-            #         if k == other:
-            #             break
-            #         elif clockwise_distance > 12:
-            #             raise Exception('Infinite loop error')
-            #         else:
-            #             clockwise_distance += 1
-            #
-            # counterclockwise_distance = 0
-            # found_self = False
-            # for k in cycle(circle_of_fifths_counterclockwise):
-            #     if not found_self:
-            #         if k == self:
-            #             found_self = True
-            #             counterclockwise_distance = 0
-            #     if found_self:
-            #         if k == other:
-            #             break
-            #         elif counterclockwise_distance > 12:
-            #             raise Exception('Infinite loop error')
-            #         else:
-            #             counterclockwise_distance += 1
-
             assert self.type == other.type == 'diatonic'
             self_pos = co5s_positions[self]
             other_pos = co5s_positions[other]
@@ -344,15 +313,6 @@ class Key:
         assert not self.major, f'{self} is already major, and therefore has no relative major'
         rm_tonic = notes.relative_majors[self.tonic]
         return Key(rm_tonic)
-
-# circle_of_fifths_clockwise = { 0: Key('C')}
-# for i in range(11):
-#     cur_key = circle_of_fifths_clockwise[-1]
-#     cur_key = circle_of_fifths_clockwise.append(cur_key + 7)
-# circle_of_fifths_counterclockwise = {Key('C')}
-# for i in range(11):
-#     cur_key = circle_of_fifths_counterclockwise[-1]
-#     cur_key = circle_of_fifths_counterclockwise.append(cur_key - 7)
 
 # construct circle of fifths:
 circle_of_fifths = {0: Key('C')}
