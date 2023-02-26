@@ -3,22 +3,22 @@ from util import log, test
 # import constants as con
 
 # possibly replace this dict with a procedural method that just parses value and quality?
-# interval_names = {0: 'Unison',
-# 1: 'Minor Second',
-# 2: 'Major Second',
-# 3: 'Minor Third',
-# 4: 'Major Third',
-# 5: 'Perfect Fourth',
-# 6: 'Diminished Fifth',
-# 7: 'Perfect Fifth',
-# 8: 'Minor Sixth',
-# 9: 'Major Sixth',
-# 10: 'Minor Seventh',
-# 11: 'Major Seventh',
-# 12: 'Octave',
-# 13: 'Minor Ninth',
-# 14: 'Major Ninth'
-# 17:'}
+interval_names = {0: 'unison',
+1: 'minor mecond',
+2: 'major second',
+3: 'minor third',
+4: 'major third',
+5: 'perfect fourth',
+6: 'diminished fifth',
+7: 'perfect fifth',
+8: 'minor sixth',
+9: 'sajor sixth',
+10: 'minor seventh',
+11: 'major seventh',
+12: 'octave',
+13: 'minor ninth',
+14: 'major ninth',}
+
 default_qualities = {0: 'perfect',
                     1: 'minor',
                     2: 'major',
@@ -83,7 +83,7 @@ major_intervals = {1: 0, # unison
 class Interval:
 
     """a distance between notes, in semitones"""
-    def __init__(self, value, degree=None):
+    def __init__(self, value):
         """Interval init accepts a value as well as an optional degree (position in whole tones relative to tonic=1).
         if degree is not given, we infer whether it is a major or minor chord from its interval.
         otherwise, we detect it as 'diminished' or 'augmented' etc."""
@@ -97,49 +97,7 @@ class Interval:
         self.ascending = (value > 0)
         self.descending = (value < 0)
 
-        if degree is None:
-            # auto detect degree and quality:
-            if self.value in interval_degrees.keys():
-                self.degree = interval_degrees[self.value]
-            elif -self.value in interval_degrees.keys():
-                self.degree = interval_degrees[-self.value]
-            else:
-                self.degree = interval_degrees[self.mod]
-            self.quality = default_qualities[self.mod]
-        else:
-            self.degree = degree
-            # degree is specified, auto detect quality:
-            if self.value in interval_degrees.keys():
-                major_degree = interval_degrees[self.value]
-            else:
-                major_degree = interval_degrees[self.mod]
-
-            expected_major_interval = major_intervals[degree]
-            diff = self.mod - expected_major_interval
-            if major_degree in [4,5]:
-                diff_names = {  -2: 'double diminished',
-                                -1: 'diminished',
-                                 0: 'perfect',
-                                 1: 'augmented',
-                                 2: 'double augmented'}
-
-                # log(f'Interval of mod-width {self.mod} corresponds to a perfect {major_degree}th')
-            elif major_degree in [2,3,6,7]:
-                diff_names = {  -3: 'double diminished',
-                                -2: 'diminished',
-                                -1: 'minor',
-                                 0: 'major',
-                                 1: 'augmented',
-                                 2: 'double augmented'}
-                # log(f'Interval has mod-width {self.mod}, asked to correspond to a {major_degree}th (where major has interval width:{expected_major_interval})')
-
-            if diff in diff_names.keys():
-                self.quality = diff_names[diff]
-                # log(f'but is shifted by {diff} relative to {diff_names[0].lower()}, making it {self.quality}')
-
-            else:
-                degree_name = degree_names[degree]
-                raise ValueError('Interval of mod-width {self.mod} cannot correspond to a {degree_name} whole-tone degree')
+        self.quality = default_qualities[self.mod]
 
         # deduce whether interval is im/perfectly consonant:
         if self.mod in [1, 6, 11]:
@@ -155,16 +113,20 @@ class Interval:
             self.imperfect = True
             self.consonance = 0.5
 
-
         # name this interval:
-        if self.degree in degree_names.keys():
-            degree_name = degree_names[self.degree] # name ninths, 11ths, etc.
-            self.componud = False  # interval is called 'compound' if it doesn't have another name
-        else:
-            degree_name = degree_names[self.degree % 12] # name basic intervals inside the octave
-            self.compound = True
 
-        # quality = self.quality[0].upper() + self.quality[1:].lower()
+        self.compound = abs(self.value) > 12
+
+        # we auto detect degree name in this case, but we don't store it as an attribute in this class
+        if self.value in interval_degree_names.keys():
+            degree_name = interval_degree_names[self.value] # name ninths, 11ths, etc.
+            self.call_compound = False  # interval is called 'compound' if it doesn't have another name
+        else:
+            degree_name = interval_degree_names[self.mod] # name basic intervals inside the octave
+            self.call_compound = True
+
+        # if we're calling it compound, how far apart is the gap?
+        self.octave_span = self.value // 12
 
         # interval names for non octaves:
         if self.mod != 0:
@@ -183,25 +145,25 @@ class Interval:
                     # 4 octaves, 5 octaves etc.
                     interval_name = f'{num_octaves} Octaves'
 
-
-
         qualifiers = []
         # if self.mod == 0 and self.value != 0:
         #     qualifiers.append('octave')
         if self.descending:
             qualifiers.append('descending')
-        if self.compound:
+        if self.call_compound:
             qualifiers.append('compound')
 
         qual_string = f' ({", ".join(qualifiers)})' if len(qualifiers) > 0 else ''
-        # we can name 9ths, 11ths, etc. explicitly:
-        if abs(value) in interval_degrees.keys():
-            self.name = interval_name + qual_string
-        else:
-            self.name = interval__name + qual_string
 
-        # log(f'Initialised interval of width {self.value} and degree {self.degree} with name: {self.name}')
+        self.name = interval_name + qual_string
 
+        # # we can name 9ths, 11ths, etc. explicitly:
+        # if abs(value) in interval_degrees.keys():
+        #     self.name = interval_name + qual_string
+        # else:
+        #     self.name = interval_name + qual_string
+
+        # quality = self.quality[0].upper() + self.quality[1:].lower()
 
 
     def __add__(self, other):
@@ -269,6 +231,79 @@ class Interval:
 
     def __repr__(self):
         return str(self)
+
+
+
+class IntervalDegree(Interval):
+    """a distance between notes, in semitones,
+    that is also associated with a particular degree in a scale,
+    which can be used to determine its quality"""
+
+    def __init__(self, value, degree=None):
+        super().__init__(self, value)
+
+        if degree is None:
+            # auto detect degree and quality:
+            if self.value in interval_degrees.keys():
+                self.degree = interval_degrees[self.value]
+            elif -self.value in interval_degrees.keys():
+                self.degree = interval_degrees[-self.value]
+            else:
+                self.degree = interval_degrees[self.mod]
+            self.quality = default_qualities[self.mod]
+
+        else:
+            # main use case of this class: specifying a degree that this interval belongs to:
+            # (to distinguish between, for instance, a dim5 and an aug4, or an aug5 and a min6)
+            self.degree = degree
+            # degree is specified, auto detect quality:
+            if self.value in interval_degrees.keys():
+                major_degree = interval_degrees[self.value]
+            else:
+                major_degree = interval_degrees[self.mod]
+
+            expected_major_interval = major_intervals[degree]
+            diff = self.mod - expected_major_interval
+            if major_degree in [4,5]:
+                diff_names = {  -2: 'double diminished',
+                                -1: 'diminished',
+                                 0: 'perfect',
+                                 1: 'augmented',
+                                 2: 'double augmented'}
+
+                log(f'Interval of mod-width {self.mod} corresponds to a perfect {major_degree}th')
+            elif major_degree in [2,3,6,7]:
+                diff_names = {  -3: 'double diminished',
+                                -2: 'diminished',
+                                -1: 'minor',
+                                 0: 'major',
+                                 1: 'augmented',
+                                 2: 'double augmented'}
+                log(f'Interval has mod-width {self.mod}, asked to correspond to a {major_degree}th (where major has interval width:{expected_major_interval})')
+
+            if diff in diff_names.keys():
+                self.quality = diff_names[diff]
+                # log(f'but is shifted by {diff} relative to {diff_names[0].lower()}, making it {self.quality}')
+
+            else:
+                degree_name = degree_names[degree]
+                raise ValueError('Interval of mod-width {self.mod} cannot correspond to a {degree_name} whole-tone degree')
+
+
+
+
+
+
+
+
+
+
+
+        # log(f'Initialised interval of width {self.value} and degree {self.degree} with name: {self.name}')
+
+
+
+
 
 # interval aliases:
 

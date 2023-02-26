@@ -28,8 +28,8 @@ note_positions.update({note_name:i for i, note_name in enumerate(note_names_flat
 note_positions.update({note_name:i for i, note_name in enumerate(note_names_sharp_unicode)})
 note_positions.update({note_name:i for i, note_name in enumerate(note_names_natural_unicode)})
 
-# get chroma name string from position in octave:
-def specific_chroma_name(pos, prefer_sharps=PREFER_SHARPS):
+# get note name string from position in octave:
+def specific_note_name(pos, prefer_sharps=PREFER_SHARPS):
     name = note_names_sharp[pos] if prefer_sharps else note_names_flat[pos]
     return name
 
@@ -50,7 +50,7 @@ def location(oct, pos):
 
 def value_to_name(value, prefer_sharps=PREFER_SHARPS):
     oct, pos = oct_pos(value)
-    name = specific_chroma_name(pos, prefer_sharps=prefer_sharps)
+    name = specific_note_name(pos, prefer_sharps=prefer_sharps)
     note_name = f'{name}{oct}'
     return note_name
 
@@ -76,13 +76,13 @@ def parse_accidental(acc):
 def parse_note_name(name):
     """Takes the name of a note as a string,
     for example 'C4' or 'A#3' or 'Gb1',
-    and extracts the chroma and octave components."""
+    and extracts the note and octave components."""
     note_letter = name[0].upper()
     if (len(name) > 1) and is_accidental(name[1]): # check for accidental
         # check string validity:
         accidental = parse_accidental(name[1])
-        chroma_name = note_letter + accidental
-        assert chroma_name in valid_note_names, "Invalid note name"
+        note_name = note_letter + accidental
+        assert note_name in valid_note_names, "Invalid note name"
 
         if len(name) == 2: # default to 4th octave if not specified
             octave = 4
@@ -93,7 +93,7 @@ def parse_note_name(name):
     else: # assume natural note
         # check string validity:
         assert note_letter in valid_note_names, "Invalid note name"
-        chroma_name = note_letter
+        note_name = note_letter
 
         if len(name) == 1: # default to 4th octave if not specified
             octave = 4
@@ -101,16 +101,16 @@ def parse_note_name(name):
             octave = int(name[1])
         else:
             raise ValueError(f'Provided note name is too long: {name}')
-    return chroma_name, octave
+    return note_name, octave
 
 def name_to_value(name):
     # get pitch class and octave
-    chroma_name, oct = parse_note_name(name)
+    note_name, oct = parse_note_name(name)
     # convert pitch class to position within octave:
-    pos = note_positions[chroma_name]
+    pos = note_positions[note_name]
     return location(oct, pos)
     # octave_value = (12*octave)-8
-    # value = octave_value + chroma_name_value
+    # value = octave_value + note_name_value
     # return value
 
 v2n = value_to_name
@@ -193,7 +193,7 @@ def note_pitch(inp):
 
 
 
-class Chroma:
+class Note:
     """a note quality not associated with a specific note inside an octave, such as C or D#"""
     def __init__(self, name=None, position=None, prefer_sharps=None):
 
@@ -207,8 +207,8 @@ class Chroma:
 
         if name is not None:
             if not isinstance(name, str):
-                raise TypeError(f'expected str or int but received {type(name)} to initialise Chroma object')
-            # log(f'Initialising Chroma with name: {name}')
+                raise TypeError(f'expected str or int but received {type(name)} to initialise Note object')
+            # log(f'Initialising Note with name: {name}')
 
             # detect if sharp or flat:
             if prefer_sharps is None:
@@ -227,21 +227,21 @@ class Chroma:
             elif len(name) == 2:
                 name = name[0].upper() + name[1].lower()
             else:
-                raise ValueError(f'{name} is too long to be a valid Chroma')
+                raise ValueError(f'{name} is too long to be a valid Note')
 
             self.position = note_positions[name]
-            self.name = specific_chroma_name(self.position, prefer_sharps=self.prefer_sharps)
+            self.name = specific_note_name(self.position, prefer_sharps=self.prefer_sharps)
         elif position is not None:
             if prefer_sharps is None:
                 self.prefer_sharps = PREFER_SHARPS
             else:
                 self.prefer_sharps = prefer_sharps
-            # log(f'Initialising Chroma with position: {position}')
+            # log(f'Initialising Note with position: {position}')
             self.position = position
-            self.name = specific_chroma_name(position, prefer_sharps=self.prefer_sharps)
+            self.name = specific_note_name(position, prefer_sharps=self.prefer_sharps)
 
-        self.sharp_name = specific_chroma_name(self.position, prefer_sharps=True)
-        self.flat_name = specific_chroma_name(self.position, prefer_sharps=False)
+        self.sharp_name = specific_note_name(self.position, prefer_sharps=True)
+        self.flat_name = specific_note_name(self.position, prefer_sharps=False)
 
         # chord constructor method aliases:
         self.major = self.major_triad = self.major3 = self.maj3 = self.triad = self.maj
@@ -253,10 +253,10 @@ class Chroma:
     def _set_sharp_preference(self, preference):
         """modify sharp preference in place"""
         self.prefer_sharps = preference
-        self.name = specific_chroma_name(self.position, prefer_sharps=self.prefer_sharps)
+        self.name = specific_note_name(self.position, prefer_sharps=self.prefer_sharps)
 
     def properties(self):
-        f"""Describe all the useful properties this Chroma has"""
+        f"""Describe all the useful properties this Note has"""
         prop_str = """<{str(self)}
         name: {self.name}
         position: {self.position}
@@ -265,44 +265,50 @@ class Chroma:
         id: {id(self)}>"""
 
 
-    # chroma constructors:
+    # note constructors:
 
     def __add__(self, interval):
-        """returns a new Chroma based on shifting up or down by some number of semitones"""
-        assert isinstance(interval, (int, Interval)), "Only an integer or Interval can be added to a Chroma"
+        """returns a new Note based on shifting up or down by some number of semitones"""
+        assert isinstance(interval, (int, Interval)), "Only an integer or Interval can be added to a Note"
 
         new_pos = (self.position + interval) % 12
-        chrm = Chroma(position = new_pos, prefer_sharps = self.prefer_sharps) # inherit sharpness from self
-        # log(f'Adding interval ({interval}) to self ({self}) to produce Chroma: {chrm}')
+        chrm = Note(position = new_pos, prefer_sharps = self.prefer_sharps) # inherit sharpness from self
+        # log(f'Adding interval ({interval}) to self ({self}) to produce Note: {chrm}')
         return chrm
 
     def __sub__(self, other):
-        """if 'other' is an integer, returns a new Chroma that is shifted down by that many semitones.
-        if 'other' is another Chroma, return the interval distance between them, with other as the root."""
+        """if 'other' is an integer, returns a new Note that is shifted down by that many semitones.
+        if 'other' is another Note, return the interval distance between them, with other as the root."""
 
-        if isinstance(other, (int, Interval)): # construct Chroma
+        if isinstance(other, (int, Interval)): # construct Note
             new_pos = (self.position - other) % 12
-            chrm = Chroma(position = new_pos, prefer_sharps = self.prefer_sharps)
-            # log(f'Subtracting interval ({other}) from self ({self}) to produce Chroma: {chrm}')
+            chrm = Note(position = new_pos, prefer_sharps = self.prefer_sharps)
+            # log(f'Subtracting interval ({other}) from self ({self}) to produce Note: {chrm}')
             return chrm
-        elif isinstance(other, Chroma):       # construct Interval
+        elif isinstance(other, Note):       # construct Interval
             distance = (self.position - other.position) % 12
             intrv = Interval(distance)
-            # log(f'Subtracting root Chroma ({other}) from self ({self}) to produce Interval: {intrv}')
+            # log(f'Subtracting root Note ({other}) from self ({self}) to produce Interval: {intrv}')
             return Interval(distance)
         else:
-            raise Exception('Only integers, Intervals, and other Chromas can be subtracted from a Chroma')
+            raise Exception('Only integers, Intervals, and other Notes can be subtracted from a Note')
 
-    def note(self, octave=4):
-        """instantiates a Note object corresponding to this Chroma played in a specific octave"""
-        return Note(f'{self.name}{int(octave)}')
+    def __call__(self, octave):
+        """returns OctaveNote in the specified octave"""
+        assert isinstance(octave, int)
+        
+        return self.in_octave(octave)
+
+    def in_octave(self, octave=4):
+        """instantiates an OctaveNote object corresponding to this Note played in a specific octave"""
+        return OctaveNote(f'{self.name}{int(octave)}')
 
     ### chord constructors:
 
     def chord(self, *args):
         """instantiate Chord object by parsing either:
         1) a string denoting a Chord quality, like 'major' or 'minor' or 'dom7'
-        2) a list of semitone intervals relative to this Chroma as root"""
+        2) a list of semitone intervals relative to this Note as root"""
 
         import chords
         # case 1:
@@ -317,17 +323,17 @@ class Chroma:
             return chords.Chord(self.name, intervals)
 
     def __mul__(self, other):
-        """combine with one or more other Chromas to create a Chord"""
-        assert isinstance(other, Chroma), "Chromas can only be combined with other Chromas"
+        """combine with one or more other Notes to create a Chord"""
+        assert isinstance(other, Note), "Notes can only be combined with other Notes"
         other_position = other.position
         return self.chord(other.position)
 
     def maj(self):
-        """returns the Chord of this chroma's major triad"""
+        """returns the Chord of this note's major triad"""
         return self.chord(4, 7)
 
     def min(self):
-        """returns the Chord of this chroma's minor triad"""
+        """returns the Chord of this note's minor triad"""
         return self.chord(3, 7)
 
     def fourth(self):
@@ -353,28 +359,28 @@ class Chroma:
 
     # comparison operators:
     def __eq__(self, other):
-        if isinstance(other, Chroma):
+        if isinstance(other, Note):
             return self.position == other.position
         elif isinstance(other, Note):
-            return self == other.chroma
+            return self == other.note
         else:
-            raise TypeError('Chromas can only be compared to Notes and other Chromas')
+            raise TypeError('Notes can only be compared to Notes and other Notes')
 
     def __hash__(self):
         return hash(str(self))
 
     def __str__(self):
-        # specific_name = specific_chroma_name(self.position, prefer_sharps=self.prefer_sharps)
+        # specific_name = specific_note_name(self.position, prefer_sharps=self.prefer_sharps)
         return f'♩{self.name}'
 
     def __repr__(self):
         return str(self)
 
 
-    # check if string is valid to be initialised as a chroma
+    # check if string is valid to be initialised as a note
     @staticmethod
-    def is_valid_chroma_name(name: str):
-        """returns True if string can be cast to a Chroma,
+    def is_valid_note_name(name: str):
+        """returns True if string can be cast to a Note,
         and False if it cannot (in which case it must be something else, like a Note)"""
         if not isinstance(name, str):
             return False
@@ -388,8 +394,8 @@ class Chroma:
             return False
 
 
-class Note:
-    """a specific pitch, rounded to twelve-tone equal temperament, such as C4 or D#2"""
+class OctaveNote:
+    """a note in a specific octave, rounded to twelve-tone equal temperament, such as C4 or D#2"""
 
     def __init__(self, name=None, value=None, pitch=None):
         """initialises a Note object from one of the following:
@@ -417,25 +423,25 @@ class Note:
 
         if name is not None:
             log(f'Initialising Note with name: {name}')
-            chroma_name, self.octave = parse_note_name(name)
-            self.position = note_positions[chroma_name]
+            chroma, self.octave = parse_note_name(name)
+            self.position = note_positions[chroma]
             self.value = location(self.octave, self.position)
             self.pitch = value_to_pitch(self.value)
-            self.chroma = Chroma(chroma_name)
+            self.note = Note(chroma)
 
         if value is not None:
             log(f'Initialising with value: {value}')
             self.value = value
             self.octave, self.position = oct_pos(value)
             self.pitch = value_to_pitch(self.value)
-            self.chroma = Chroma(self.position)
+            self.note = Note(self.position)
 
         if pitch is not None:
             log(f'Initialising with pitch: {pitch}')
             self.pitch = pitch
             self.value = pitch_to_value(pitch, nearest=True)
             self.octave, self.position = oct_pos(self.value)
-            self.chroma = Chroma(self.position)
+            self.note = Note(self.position)
 
         ### now octave, position, value and pitch are defined
 
@@ -475,7 +481,7 @@ class Note:
         elif isinstance(other, Note):
             return self.value - other.value
         else:
-            raise Exception('Only integers and other Chromas can be subtracted from a Chroma')
+            raise Exception('Only integers and other Notes can be subtracted from a Note')
 
 
     # odd one:
@@ -497,8 +503,8 @@ class Note:
         return self.value == other.value
 
     def __str__(self):
-        chroma_name = specific_chroma_name(self.position, prefer_sharps=PREFER_SHARPS)
-        return f'♪{chroma_name}{self.octave}'
+        note_name = specific_note_name(self.position, prefer_sharps=PREFER_SHARPS)
+        return f'♪{note_name}{self.octave}'
 
     def __repr__(self):
         return str(self)
@@ -506,25 +512,25 @@ class Note:
 
 # constants:
 
-A = Chroma('A')
-Bb = Chroma('Bb')
-B = Chroma('B')
-C = Chroma('C')
-Db = Chroma('Db')
-D = Chroma('D')
-Eb = Chroma('Eb')
-E = Chroma('E')
-F = Chroma('F')
-Gb = Chroma('Gb')
-G = Chroma('G')
-Ab = Chroma('Ab')
+A = Note('A')
+Bb = Note('Bb')
+B = Note('B')
+C = Note('C')
+Db = Note('Db')
+D = Note('D')
+Eb = Note('Eb')
+E = Note('E')
+F = Note('F')
+Gb = Note('Gb')
+G = Note('G')
+Ab = Note('Ab')
 
-# all chromatic pitch classes:
-chromas = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
+# all notetic pitch classes:
+notes = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
 # their relative minors:
-relative_minors = {c : (c - 3) for c in chromas}
-relative_minors.update({c.sharp_name: (c-3).sharp_name for c in chromas})
-relative_minors.update({c.flat_name: (c-3).flat_name for c in chromas})
+relative_minors = {c : (c - 3) for c in notes}
+relative_minors.update({c.sharp_name: (c-3).sharp_name for c in notes})
+relative_minors.update({c.flat_name: (c-3).flat_name for c in notes})
 
 relative_majors = {value:key for key,value in relative_minors.items()}
 
@@ -562,7 +568,7 @@ if __name__ == '__main__':
     test(note_pitch(49), 440.)
 
     # magic method tests:
-    # chromas:
+    # notes:
 
     test(C+2, D)
     test(D-2, C)

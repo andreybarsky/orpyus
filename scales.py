@@ -1,7 +1,7 @@
 import pdb
 
 import notes
-from notes import Chroma, Note
+from notes import Note, Note
 from chords import Chord, chord_names, detect_sharp_preference
 from util import log, test
 from itertools import cycle
@@ -41,8 +41,8 @@ for intervals, names in key_names.items():
             key_intervals[key_name_alias[1:]] = intervals
 
         # build up whole-key-names (like 'C# minor')
-        for c in notes.chromas:
-            # parse both flat and sharp chroma names:
+        for c in notes.notes:
+            # parse both flat and sharp note names:
             whole_name_strings = [f'{c.sharp_name}{key_name_alias}', f'{c.flat_name}{key_name_alias}']
             if len(key_name_alias) > 0 and key_name_alias[0] == ' ':
                 whole_name_strings.append(f'{c.sharp_name}{key_name_alias[1:]}')
@@ -55,7 +55,7 @@ for intervals, names in key_names.items():
 # circle_of_fifths = cycle(['C'])
 # circle_of_fifths_minor = cycle()
 
-class KeyChroma(Chroma):
+class KeyNote(Note):
     def __init__(self, *args, key, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -66,21 +66,21 @@ class KeyChroma(Chroma):
 
         # inherit sharp preference from parent key:
         self.prefer_sharps = self.key.prefer_sharps
-        self.name = notes.specific_chroma_name(self.position, prefer_sharps=self.prefer_sharps)
+        self.name = notes.specific_note_name(self.position, prefer_sharps=self.prefer_sharps)
 
     def __add__(self, other):
-        # transposing a KeyChroma stays within the same key:
+        # transposing a KeyNote stays within the same key:
         result = super().__add__(other)
-        return KeyChroma(result.name, key=self.key)
+        return KeyNote(result.name, key=self.key)
 
     def __sub__(self, other):
-        # transposing a KeyChroma stays within the same key:
+        # transposing a KeyNote stays within the same key:
         if isinstance(other, (int, Interval)):
             result = super().__sub__(other)
-            return KeyChroma(result.name, key=self.key)
+            return KeyNote(result.name, key=self.key)
         else:
-            assert isinstance(other, Chroma)
-            # but subtracting by another chroma still just returns an interval:
+            assert isinstance(other, Note)
+            # but subtracting by another note still just returns an interval:
             return super().__sub__(other)
 
 class KeyChord(Chord):
@@ -117,7 +117,7 @@ class Key:
     # TBI: modes??
     def __init__(self, name, quality=None, prefer_sharps=None):
         """Initialise a Key from a name like 'D major' or 'C#m',
-        or by passing a Note, Chroma, or string that can be cast to Chroma,
+        or by passing a Note, Note, or string that can be cast to Note,
             (which we interpet as the key's tonic) and specifiying a quality
             like 'major', 'minor', 'harmonic', etc."""
         ### parse name:
@@ -133,17 +133,17 @@ class Key:
 
         else:
             # get tonic from name argument:
-            if isinstance(name, Chroma):
-                log(f'Initialising scale from Chroma: {name}')
+            if isinstance(name, Note):
+                log(f'Initialising scale from Note: {name}')
                 self.tonic = name
             elif isinstance(name, Note):
                 log(f'Initialising scale from Note: {name}')
-                self.tonic = name.chroma
+                self.tonic = name.note
             elif isinstance(name, str):
                 log(f'Initialising scale from string denoting tonic: {name}')
-                self.tonic = Chroma(name)
+                self.tonic = Note(name)
             else:
-                raise TypeError(f'Expected to initialise Key with tonic argument of type Chroma, Note, or str, but got: {type(name)}')
+                raise TypeError(f'Expected to initialise Key with tonic argument of type Note, Note, or str, but got: {type(name)}')
             # and get intervals from quality argument
             self.intervals = key_intervals[quality]
 
@@ -158,7 +158,7 @@ class Key:
         self.prefer_sharps = detect_sharp_preference(self.tonic, self.suffix, default=True if prefer_sharps is None else prefer_sharps)
 
         # set tonic to use preferred sharp convention:
-        self.tonic = KeyChroma(self.tonic.name, key=self)
+        self.tonic = KeyNote(self.tonic.name, key=self)
 
         # and name self accordingly:
         self.name = f'{self.tonic.name}{self.suffix}'
@@ -166,8 +166,8 @@ class Key:
         # form notes in scale:
         self.scale = [self.tonic]
         for i in self.intervals:
-            new_chroma = self.tonic + i
-            self.scale.append(new_chroma)
+            new_note = self.tonic + i
+            self.scale.append(new_note)
         # what kind of scale are we?
         if len(self) == 7:
             self.type = 'diatonic'
@@ -195,12 +195,12 @@ class Key:
         chord_hash = {}
 
         for intervals, names in chord_names.items():
-            for chroma in self.scale:
-                this_chord = KeyChord(chroma, intervals, key=self)
+            for note in self.scale:
+                this_chord = KeyChord(note, intervals, key=self)
                 # is it valid? assume it is and disquality it if not
                 valid = True
-                for chroma in this_chord.chromas:
-                    if chroma not in self.scale:
+                for note in this_chord.notes:
+                    if note not in self.scale:
                         valid = False
                 # add to our hash if it is:
                 if valid:
@@ -209,19 +209,19 @@ class Key:
                     else:
                         chord_hash[this_chord] += 1
 
-        return chord_hash
+        return list(chord_hash.keys())
 
     def __contains__(self, item):
-        """is this Chord or Chroma part of this key?"""
+        """is this Chord or Note part of this key?"""
         if self.type == 'chromatic':
             return True # chromatic scale contains everything
-        elif isinstance(item, Chroma):
+        elif isinstance(item, Note):
             return item in self.scale
         elif isinstance(item, Chord):
             return item in self.chords
 
     def __getitem__(self, i):
-        """Index scale chromas by degree (where tonic=1)"""
+        """Index scale notes by degree (where tonic=1)"""
         if i == 0:
             raise ValueError('Scales are 1-indexed, with the tonic corresponding to [1]')
 

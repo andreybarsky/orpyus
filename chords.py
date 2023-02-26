@@ -1,14 +1,14 @@
 
 import notes
-from notes import Chroma, Note
+from notes import Note, Note
 from intervals import *
 from collections import defaultdict
 
 from util import log, test
 import pdb
 
-
-
+### to fix:
+# harmonic minor key doesn't understand augmented 5th chords
 
 
 # all accepted aliases for chord names - common suffix is FIRST, this is the one chosen by automatic chord parsing
@@ -67,23 +67,20 @@ sharp_tonic_names = ['G', 'D', 'A', 'E', 'B']
 flat_tonic_names = ['F', 'Bb', 'Eb', 'Ab', 'Db']
 neutral_tonic_names = ['C', 'Gb'] # no sharp/flat preference, fall back on default
 
-sharp_major_tonics = [Chroma(t) for t in sharp_tonic_names]
-flat_major_tonics = [Chroma(t) for t in flat_tonic_names]
-neutral_major_tonics = [Chroma(t) for t in neutral_tonic_names]
+sharp_major_tonics = [Note(t) for t in sharp_tonic_names]
+flat_major_tonics = [Note(t) for t in flat_tonic_names]
+neutral_major_tonics = [Note(t) for t in neutral_tonic_names]
 
-sharp_minor_tonics = [notes.relative_minors[Chroma(t)] for t in sharp_tonic_names]
-flat_minor_tonics = [notes.relative_minors[Chroma(t)] for t in flat_tonic_names]
-neutral_minor_tonics = [notes.relative_minors[Chroma(t)] for t in neutral_tonic_names]
-
-
-
+sharp_minor_tonics = [notes.relative_minors[Note(t)] for t in sharp_tonic_names]
+flat_minor_tonics = [notes.relative_minors[Note(t)] for t in flat_tonic_names]
+neutral_minor_tonics = [notes.relative_minors[Note(t)] for t in neutral_tonic_names]
 
 def detect_sharp_preference(tonic, quality='major', default=True):
     """detect if a chord should prefer sharp or flat labelling
     depending on its tonic and quality"""
     if isinstance(tonic, str):
-        tonic = Chroma(str)
-    assert isinstance(tonic, Chroma)
+        tonic = Note(str)
+    assert isinstance(tonic, Note)
 
     if quality in chord_names[(Maj3, Per5)]: # aliases for 'major':
         if tonic in sharp_major_tonics:
@@ -105,16 +102,16 @@ def detect_sharp_preference(tonic, quality='major', default=True):
 class Chord:
     ### to do: inversions?
     def __init__(self, arg1, arg2=None, prefer_sharps=None):
-        """a set of Chromas, defined by some theoretical name like C#m7.
+        """a set of Notes, defined by some theoretical name like C#m7.
         arg1 can be one of:
-            1) a single Chroma (or string that can be cast as a Chroma) to use as the tonic.
-            2) an iterable of Chromas, the first of which is the tonic
+            1) a single Note (or string that can be cast as a Note) to use as the tonic.
+            2) an iterable of Notes, the first of which is the tonic
             3) a string naming a chord, like 'Dm' 'C#7' or 'Gbsus4'
 
         in case #1, we consult arg2 to determine the other notes.
         arg2 can be a string, in which case we interpret it as the 'quality' of the chord,
         or it can be an iterable of integers or Intervals, in which case we interpret those
-          as the intervals of the chord's other chromas relative to the tonic.
+          as the intervals of the chord's other notes relative to the tonic.
         if arg2 is not provided, we assume a major triad by default.
 
         quality must one of:
@@ -132,11 +129,11 @@ class Chord:
 
         ### parse input:
         # case 1:
-        if isinstance(arg1, Chroma) or (isinstance(arg1, str) and Chroma.is_valid_chroma_name(arg1)):
+        if isinstance(arg1, Note) or (isinstance(arg1, str) and Note.is_valid_note_name(arg1)):
             # tonic has been given
             log(f'Parsing arg1 ({arg1}) as tonic of Chord')
             if isinstance(arg1, str):
-                self.tonic = Chroma(arg1)
+                self.tonic = Note(arg1)
             else:
                 self.tonic = arg1
 
@@ -158,12 +155,12 @@ class Chord:
 
         # case 2:
         elif isinstance(arg1, (list, tuple)):
-            # iterable of chromas has been given
-            log(f'Parsing arg1 ({arg1}) as {type(arg1)} of Chromas')
-            chromas = [item if isinstance(item, Chroma) else Chroma(item) for item in arg1]
-            self.tonic = chromas[0]
+            # iterable of notes has been given
+            log(f'Parsing arg1 ({arg1}) as {type(arg1)} of Notes')
+            notes = [item if isinstance(item, Note) else Note(item) for item in arg1]
+            self.tonic = notes[0]
 
-            self.intervals = [c - self.tonic for c in chromas[1:]]
+            self.intervals = [c - self.tonic for c in notes[1:]]
 
         # case 3:
         else:
@@ -172,13 +169,13 @@ class Chord:
             log(f'Parsing arg1 ({arg1}) as string indicating chord name')
             name = arg1
             if len(name) == 1:
-                self.tonic = Chroma(name.upper())
+                self.tonic = Note(name.upper())
                 quality_idx = 1
             elif name[1] in ['#', '♯', 'b', '♭']:
-                self.tonic = Chroma(name[0].upper() + '#') if name[1] in ['#', '♯'] else Chroma(name[0].upper() + 'b')
+                self.tonic = Note(name[0].upper() + '#') if name[1] in ['#', '♯'] else Note(name[0].upper() + 'b')
                 quality_idx = 2 # where we read the rest of the string from
             else:
-                self.tonic = Chroma(name[0].upper())
+                self.tonic = Note(name[0].upper())
                 quality_idx = 1
 
             assert self.tonic.name in notes.valid_note_names, f'{self.tonic} is not a valid Chord tonic'
@@ -189,6 +186,40 @@ class Chord:
         # tonic and intervals have been assigned
         # make sure intervals are in order:
         self.intervals = sorted(self.intervals)
+
+        # assume non-inverted for now:
+        # but inversions are TBI
+        self.root = self.tonic
+
+        # parse chord factors:
+        self.third = None
+        self.fifth = None
+        self.sixth = None
+        self.seventh = None
+        self.ninth = None
+
+        self.factors = {}
+
+        if self.intervals[0].quality != 'indeterminate':
+            # first interval is always the third, except in fifth chords
+            self.third = self.intervals[0]
+            self.factors[3] = self.third
+            if len(self.intervals) >= 2:
+                # interpret
+
+
+                if len(self.intervals >= 3):
+                    # this is a sixth or seventh or something
+
+        elif self.intervals[0] == Per5:
+            self.fifth = self.intervals[0]
+            self.factors[5] = self.fifth
+
+
+
+
+
+
 
         # formulate unique intervals to determine chord naming
         self.unique_intervals = []
@@ -212,19 +243,17 @@ class Chord:
 
         # figure out if we should prefer sharps or flats by the tonic:
         self.prefer_sharps = detect_sharp_preference(self.tonic, quality=self.suffix, default=True if prefer_sharps is None else prefer_sharps)
-        # set tonic chroma to use preferred sharp convention:
+        # set tonic note to use preferred sharp convention:
         self.tonic._set_sharp_preference(self.prefer_sharps)
 
         # now we name the chord:
         self.name = self.tonic.name + suffix
         log(f'Detected chord: {self.name}')
 
-        # assume non-inverted for now:
-        # but inversions are TBI
-        self.root = self.tonic
 
-        self.chromas = ([self.tonic] + [self.tonic + i for i in self.intervals])
-        log(f'  consisting of: {self.chromas}')
+
+        self.notes = ([self.tonic] + [self.tonic + i for i in self.intervals])
+        log(f'  consisting of: {self.notes}')
 
         # determine quality:
         # chord qualities (major, minor, augmented, suspended, indeterminate):
@@ -237,7 +266,7 @@ class Chord:
             self.quality = 'suspended'
         elif Dim5 in self.intervals and 'diminished' in [i.quality for i in self.intervals]:
             self.quality = 'diminished'
-        elif Aug4 in self.intervals and 'augmented' in [i.quality for i in self.intervals]:
+        elif Aug5 in self.intervals and 'augmented' in [i.quality for i in self.intervals]:
             self.quality = 'augmented'
         else:
             self.quality = 'indeterminate'
@@ -261,10 +290,10 @@ class Chord:
     def __eq__(self, other):
         # assert isinstance(other, Chord), 'Chords can only be compared to other Chords'
         matching_notes = 0
-        for note in self.chromas:
-            if note in other.chromas:
+        for note in self.notes:
+            if note in other.notes:
                 matching_notes += 1
-        if matching_notes == len(self.chromas) and len(self.chromas) == len(other.chromas):
+        if matching_notes == len(self.notes) and len(self.notes) == len(other.notes):
             return True
         else:
             return False
@@ -287,7 +316,7 @@ class Chord:
         return hash(str(self))
 
     def __str__(self):
-        return f'♬ {self.name} {self.chromas}'
+        return f'♬ {self.name} {self.notes}'
 
     def __repr__(self):
         return str(self)
@@ -307,7 +336,7 @@ class Chord:
         self.prefer_sharps = preference
         self.tonic._set_sharp_preference(preference)
         self.name = self.tonic.name + self.suffix
-        for c in self.chromas:
+        for c in self.notes:
             c._set_sharp_preference(preference)
 
 
@@ -323,14 +352,39 @@ def StackedChord(tonic, intervals):
     log(f'Relative to tonic, those are: {intervals_from_tonic}, which we call: {c.name}')
     return c
 
+roman_numerals = {'I':   1,
+                  'II':  2,
+                  'III': 3,
+                  'IV':  4,
+                  'V':   5,
+                  'VI':  6,
+                  'VII': 7}
+
 class Progression:
-    """container class for Chord objects"""
+    """A theoretical progression between unspecified chords,
+    initialised as e.g. Progression('I', 'IV', 'iii', 'V')"""
+    def __init__(self, degrees):
+        assert isinstance(degrees, (list, tuple)), "Expected a list or tuple of numeric degrees for Progression initialisation"
+        for deg in degrees:
+            if isinstance(deg, str):
+                if deg == deg.upper():
+                    major = True
+                else:
+                    major = False
+
+            elif isinstance(deg, int):
+                # we interpret positive numbers as major degrees
+                # and negative numbers as minor degrees
+
+
+class ChordProgression(Progression):
+    """Progression subtype defined using specific chords, also acts as container class for Chord objects"""
     def __init__(self, chords):
         # parse chords arg:
         self.chords = []
         self.chord_count = {}
-        self.chromas = []
-        self.chroma_count = {}
+        self.notes = []
+        self.note_count = {}
 
         self.contains_duplicates = False
 
@@ -348,25 +402,25 @@ class Progression:
                 self.chords.append(c)
                 self.chord_count[c] = 1
 
-                self.chromas.extend(c.chromas)
-                for ch in c.chromas:
-                    if ch not in self.chroma_count.keys():
-                        self.chroma_count[ch] = 1
+                self.notes.extend(c.notes)
+                for ch in c.notes:
+                    if ch not in self.note_count.keys():
+                        self.note_count[ch] = 1
                     else:
-                        self.chroma_count[ch] += 1
+                        self.note_count[ch] += 1
             else:
                 self.contains_duplicates = True
                 self.chords.append(c)
                 self.chord_count[c] += 1
 
-        self.chroma_set = set(self.chromas)
+        self.note_set = set(self.notes)
 
     def __contains__(self, item):
         if isinstance(item, Chord):
             # efficient lookup by checking hash table keys:
             return item in self.chord_count.keys()
-        elif isinstance(item, Chroma):
-            return item in self.chroma_set
+        elif isinstance(item, Note):
+            return item in self.note_set
 
     def __str__(self):
         chord_set_str = ','.join(['♬ ' + c.name for c in self.chords])
@@ -396,10 +450,10 @@ if __name__ == '__main__':
     test(Chord('D#sus4'), Chord('d#', 'suspended fourth'))
     test(Chord('Esus2'), Chord('E', 'sus2'))
     test(Chord('Gbdom7'), Chord('Gb', 'dominant 7th'))
-    from notes import C, E, G
-    test(Chord([C, E, G]), Chord(['C', 'E', 'G']))
-    test(Chord([C, E, G]), C.chord(4,7))
-    test(Chord([C, E, G]), C.major())
+    Cn, En, Gn = notes.C, notes.E, notes.G
+    test(Chord([Cn, En, Gn]), Chord(['C', 'E', 'G']))
+    test(Chord([Cn, En, Gn]), Cn.chord(4,7))
+    test(Chord([Cn, En, Gn]), Cn.major())
     test(Chord('Cadd9'), Chord('C', [4, 7, 14]))
     test(Chord('Cm/maj7'), Chord('C', 'minor-major 7th'))
     test(Chord('A minor'), StackedChord('A', [Min3, Maj3]))
