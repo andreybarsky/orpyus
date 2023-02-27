@@ -263,6 +263,10 @@ class Note:
         sharp preference: {self.prefer_sharps}
         type: {type(self)}
         id: {id(self)}>"""
+        return prop_str
+
+    def summary(self):
+        print(self.properties())
 
 
     # note constructors:
@@ -296,7 +300,7 @@ class Note:
     def __call__(self, octave):
         """returns OctaveNote in the specified octave"""
         assert isinstance(octave, int)
-        
+
         return self.in_octave(octave)
 
     def in_octave(self, octave=4):

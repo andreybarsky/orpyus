@@ -18,8 +18,8 @@ chord_names = defaultdict(lambda: [' (unknown chord)'],
     (Per5, ): ['5', '5th', 'fifth'], # does octave belong here??
 
     # weird triads
-    (Maj2, Per5): ['sus2', 'suspended 2nd', 'suspended second', 's2'],
-    (Per4, Per5): ['sus4', 'suspended 4th', 'suspended fourth', 's4'],
+    (Dim3, Per5): ['sus2', 'suspended 2nd', 'suspended second', 's2'],
+    (Aug3, Per5): ['sus4', 'suspended 4th', 'suspended fourth', 's4'],
     (Maj3, Aug5): ['+', 'augmented triad', 'augmented fifth', 'augmented 5th', 'aug'],
     (Min3, Dim5): ['dim', 'o', 'o', 'diminished', 'diminished triad', 'diminished fifth', 'diminished 5th'],
 
@@ -98,6 +98,48 @@ def detect_sharp_preference(tonic, quality='major', default=True):
             return default
     else:
         return default
+
+def detect_interval_factors(intervals):
+    """for an iterable of intervals, return the chord factors that we think
+    those intervals correspond to, making assumptions about fifths/sevenths/etc"""
+    # strip root/tonic just in case it's been given, as well as any octave notes:
+    intervals = [i for i in intervals if i.mod != 0]
+
+    num_notes = len(intervals) + 1
+    factors = default_dict(lambda: None, {})
+
+    # we don't assume that intervals are sorted in order of ascending value,
+    # but we DO assume that they are in factor order: e.g. thirds always before fifths always before sevenths
+
+
+
+    if num_notes == 2:
+        # this is a dyad
+        i = intervals[0]
+        if i.degree == 5 or i.valid_fifth():
+            factors[5] = IntervalDegree(i.value, 5)
+        elif i.degree == 4 or i.valid_fourth():
+            factors[4] = IntervalDegree(i.value, 4)
+        else:
+            print(f"Non-perfect dyad chord: {intervals} doesn't include a fifth")
+            this_degree = i.degree if i.degree is not None else i.expected_degree
+            factors[this_degree] = i
+        # finished
+        return factors
+
+    elif num_notes == 3:
+        # this is a triad, assume there is a third and a fifth:
+        third, fifth = intervals[0], intervals[1]
+        if third.degree == 3 or third.valid_third():
+            factors[3] = IntervalDegree(third.value, 3)
+        else:
+            print(f"Irregular triad chord: {third} is not a valid third")
+            this_degree = third.degree if third.degree is not None else third.expected_degree
+            factors[this_degree] = IntervalDegree(third.value, this_degree)
+
+        if fifth.degree == 5 or fifth.valid_fifth():
+            factors[5] = IntervalDegree(fifth.value, 5)
+
 
 class Chord:
     ### to do: inversions?
@@ -191,27 +233,40 @@ class Chord:
         # but inversions are TBI
         self.root = self.tonic
 
-        # parse chord factors:
-        self.third = None
-        self.fifth = None
-        self.sixth = None
-        self.seventh = None
-        self.ninth = None
+        ### parse chord factors:
+        # self.third = None
+        # self.fifth = None
+        # self.sixth = None
+        # self.seventh = None
+        # self.ninth = None
 
-        self.factors = {}
+        self.factors = default_dict(lambda: None, {})
 
-        if self.intervals[0].quality != 'indeterminate':
+        if self.intervals[0].quality != 'perfect':
             # first interval is always the third, except in fifth chords
-            self.third = self.intervals[0]
-            self.factors[3] = self.third
+            # this is going to be a minor or major
+            self.factors[3] = self.intervals[0]
             if len(self.intervals) >= 2:
-                # interpret
+                # interpret second interval as the fifth
+                if isinstance(self.intervals[1], IntervalDegree):
+                    assert self.intervals[1].degree == 5, "Attempted to parse a chord without a fifth"
+                    # we've been given an interval that is explicitly a fifth
+                    self.factors[5] = self.intervals[1]
+                    if self.factors[5].value != 7:
+                        print('')
+                elif isinstance(self.intervals[1], Interval):
+                    # parse as a fifth:
+                    self.intervals[1] = IntervalDegree(self.intervals[1].value, degree=5)
 
+
+                else:
+                    # this could be a dim5
 
                 if len(self.intervals >= 3):
                     # this is a sixth or seventh or something
 
         elif self.intervals[0] == Per5:
+            # this is a 5th chord, self.third remains None
             self.fifth = self.intervals[0]
             self.factors[5] = self.fifth
 
