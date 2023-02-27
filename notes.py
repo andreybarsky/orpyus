@@ -398,7 +398,7 @@ class Note:
             return False
 
 
-class OctaveNote:
+class OctaveNote(Note):
     """a note in a specific octave, rounded to twelve-tone equal temperament, such as C4 or D#2"""
 
     def __init__(self, name=None, value=None, pitch=None):
@@ -475,15 +475,15 @@ class OctaveNote:
     def __add__(self, interval: int):
         """returns a new Note that is shifted up by some integer number of semitones."""
         assert isinstance(interval, (int, Interval)), "Only an integer interval can be added or subtracted to a note"
-        return Note(value = self.value + interval)
+        return OctaveNote(value = self.value + interval)
 
     def __sub__(self, other):
         """if 'other' is an integer or Interval, returns a new Note that is shifted down by that many semitones.
         if 'other' is another Note, return the interval distance between them, with other as the root."""
         if isinstance(other, (int, Interval)):
-            return Note(value = self.value - other)
-        elif isinstance(other, Note):
-            return self.value - other.value
+            return OctaveNote(value = self.value - other)
+        elif isinstance(other, OctaveNote):
+            return Interval(self.value - other.value)
         else:
             raise Exception('Only integers and other Notes can be subtracted from a Note')
 
@@ -495,15 +495,15 @@ class OctaveNote:
 
 
     def __ge__(self, other):
-        assert isinstance(other, Note), "Notes can only be greater or less than other notes"
+        assert isinstance(other, OctaveNote), "OctaveNotes can only be greater or less than other notes"
         return self.value >= other.value
 
     def __lt__(self, other):
-        assert isinstance(other, Note), "Notes can only be greater or less than other notes"
+        assert isinstance(other, OctaveNote), "OctaveNotes can only be greater or less than other notes"
         return self.value < other.value
 
     def __eq__(self, other):
-        assert isinstance(other, Note), "Notes can only be equal to other notes"
+        assert isinstance(other, OctaveNote), "OctaveNotes can only be equal to other notes"
         return self.value == other.value
 
     def __str__(self):

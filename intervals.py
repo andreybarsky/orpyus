@@ -127,7 +127,9 @@ def is_perfect_degree(deg):
     else:
         return False
 
-
+# sort intervals by their mod values, rather than their raw values:
+def mod_sort(intervals):
+    return sorted(intervals, key=lambda x: x.mod)
 
 
 class Interval:
