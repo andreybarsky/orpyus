@@ -51,9 +51,10 @@ for intervals, names in key_names.items():
             for whole_key_name in whole_name_strings:
                 whole_key_name_intervals[whole_key_name] = (c, intervals)
 
+# notes in order of which are flattened/sharpened in a key signature:
+flat_order = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
+sharp_order = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
 
-# circle_of_fifths = cycle(['C'])
-# circle_of_fifths_minor = cycle()
 
 class KeyNote(Note):
     def __init__(self, *args, key, **kwargs):
@@ -183,8 +184,9 @@ class Key:
         log('Initialised key: {self} ({self.scale})')
 
     def build_triad(self, degree: int):
-        # assumed only a diatonic scale will call this method
-
+        """Returns the triad chord built on the notes of this scale, with
+        specified degree as the chord root"""
+        # assumed that only a diatonic scale will call this method
         # scales are 1-indexed which makes it hard to modso we correct here:
 
         root, third, fifth = self[degree], self[degree+2], self[degree+4]
@@ -274,22 +276,34 @@ class Key:
 
     def __sub__(self, other):
         """if other is an integer, move the key counterclockwise that many steps around the circle of fifths
-        or if other is an Interval, transpose it up that many steps
+        or if other is an Interval, transpose it down that many steps
         or if other is another Key, get distance along circle of fifths"""
 
-        if isinstance(other, (int, Interval)):
+        if isinstance(other, int):
+            # counterclockwise movement around Co5s
+            return self.counterclockwise(other)
+        elif isinstance(other, (int, Interval)):
+            # transposition by interval semitones
             new_tonic = self.tonic - other
             return Key(f'{new_tonic.name}{self.suffix}')
-        elif isinstance(other, int):
-            return self.counterclockwise(other)
         elif isinstance(other, Key):
+            # distance from other key along Co5s
             assert self.type == other.type == 'diatonic'
-            self_pos = co5s_positions[self]
-            other_pos = co5s_positions[other]
+
+            self_reference_key = self if self.major else self.relative_major()
+            other_reference_key = other if other.major else other.relative_major()
+
+            self_pos = co5s_positions[self_reference_key]
+            other_pos = co5s_positions[other_reference_key]
             clockwise_distance = (other_pos - self_pos) % 12
             counterclockwise_distance = (self_pos - other_pos) % 12
 
-            return min([abs(clockwise_distance), abs(counterclockwise_distance)])
+            distance = float(min([clockwise_distance, counterclockwise_distance]))
+            # if one key is major and the other minor, add a half-step of distance:
+            if self.major != other.major:
+                distance += 0.5
+
+            return min([clockwise_distance, counterclockwise_distance])
 
     def clockwise(self, value=1):
         """fetch the next key from clockwise around the circle of fifths,

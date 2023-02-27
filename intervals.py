@@ -127,6 +127,9 @@ def is_perfect_degree(deg):
     else:
         return False
 
+
+
+
 class Interval:
 
     """a distance between notes, in semitones"""
@@ -340,9 +343,6 @@ class Interval:
     def valid_third(self):
         return self.valid_degree(3)
 
-    def valid_fourth(self):
-        return self.valid_degree(4)
-
     def valid_fifth(self):
         return self.valid_degree(5)
 
@@ -378,6 +378,34 @@ class Interval:
     def summary(self):
         print(self.properties())
 
+    @staticmethod
+    def from_degree(deg, quality=None):
+        """returns an Interval object for some desired degree and quality"""
+        major_value = degree_major_intervals(deg)
+
+        if quality is None:
+            quality = 'perfect' if is_perfect_degree(deg) else 'major'
+
+        if is_perfect_degree(deg):
+            name_variations = {'double diminished': -2,
+                               'diminished': -1,
+                               'perfect': 0,
+                               'augmented': 1,
+                               'double augmented': 2}
+        else:
+            name_variations = {'double diminished': -3,
+                               'diminished': -2,
+                               'minor': -1,
+                               'major': 0,
+                               'augmented': 1,
+                               'double augmented': 2}
+
+        modifier = name_variations[quality]
+        value = major_value + modifier
+        if deg > 8:
+            return IntervalDegree(value, degree=deg)
+        else:
+            return ExtendedInterval(value, degree=deg)
 
 
 class IntervalDegree(Interval):

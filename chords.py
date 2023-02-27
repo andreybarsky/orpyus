@@ -99,46 +99,7 @@ def detect_sharp_preference(tonic, quality='major', default=True):
     else:
         return default
 
-def detect_interval_factors(intervals):
-    """for an iterable of intervals, return the chord factors that we think
-    those intervals correspond to, making assumptions about fifths/sevenths/etc"""
-    # strip root/tonic just in case it's been given, as well as any octave notes:
-    intervals = [i for i in intervals if i.mod != 0]
 
-    num_notes = len(intervals) + 1
-    factors = default_dict(lambda: None, {})
-
-    # we don't assume that intervals are sorted in order of ascending value,
-    # but we DO assume that they are in factor order: e.g. thirds always before fifths always before sevenths
-
-
-
-    if num_notes == 2:
-        # this is a dyad
-        i = intervals[0]
-        if i.degree == 5 or i.valid_fifth():
-            factors[5] = IntervalDegree(i.value, 5)
-        elif i.degree == 4 or i.valid_fourth():
-            factors[4] = IntervalDegree(i.value, 4)
-        else:
-            print(f"Non-perfect dyad chord: {intervals} doesn't include a fifth")
-            this_degree = i.degree if i.degree is not None else i.expected_degree
-            factors[this_degree] = i
-        # finished
-        return factors
-
-    elif num_notes == 3:
-        # this is a triad, assume there is a third and a fifth:
-        third, fifth = intervals[0], intervals[1]
-        if third.degree == 3 or third.valid_third():
-            factors[3] = IntervalDegree(third.value, 3)
-        else:
-            print(f"Irregular triad chord: {third} is not a valid third")
-            this_degree = third.degree if third.degree is not None else third.expected_degree
-            factors[this_degree] = IntervalDegree(third.value, this_degree)
-
-        if fifth.degree == 5 or fifth.valid_fifth():
-            factors[5] = IntervalDegree(fifth.value, 5)
 
 
 class Chord:
@@ -199,10 +160,10 @@ class Chord:
         elif isinstance(arg1, (list, tuple)):
             # iterable of notes has been given
             log(f'Parsing arg1 ({arg1}) as {type(arg1)} of Notes')
-            notes = [item if isinstance(item, Note) else Note(item) for item in arg1]
-            self.tonic = notes[0]
+            chord_notes = [item if isinstance(item, Note) else Note(item) for item in arg1]
+            self.tonic = chord_notes[0]
 
-            self.intervals = [c - self.tonic for c in notes[1:]]
+            self.intervals = [c - self.tonic for c in chord_notes[1:]]
 
         # case 3:
         else:
@@ -228,52 +189,7 @@ class Chord:
         # tonic and intervals have been assigned
         # make sure intervals are in order:
         self.intervals = sorted(self.intervals)
-
-        # assume non-inverted for now:
-        # but inversions are TBI
-        self.root = self.tonic
-
         ### parse chord factors:
-        # self.third = None
-        # self.fifth = None
-        # self.sixth = None
-        # self.seventh = None
-        # self.ninth = None
-
-        self.factors = default_dict(lambda: None, {})
-
-        if self.intervals[0].quality != 'perfect':
-            # first interval is always the third, except in fifth chords
-            # this is going to be a minor or major
-            self.factors[3] = self.intervals[0]
-            if len(self.intervals) >= 2:
-                # interpret second interval as the fifth
-                if isinstance(self.intervals[1], IntervalDegree):
-                    assert self.intervals[1].degree == 5, "Attempted to parse a chord without a fifth"
-                    # we've been given an interval that is explicitly a fifth
-                    self.factors[5] = self.intervals[1]
-                    if self.factors[5].value != 7:
-                        print('')
-                elif isinstance(self.intervals[1], Interval):
-                    # parse as a fifth:
-                    self.intervals[1] = IntervalDegree(self.intervals[1].value, degree=5)
-
-
-                else:
-                    # this could be a dim5
-
-                if len(self.intervals >= 3):
-                    # this is a sixth or seventh or something
-
-        elif self.intervals[0] == Per5:
-            # this is a 5th chord, self.third remains None
-            self.fifth = self.intervals[0]
-            self.factors[5] = self.fifth
-
-
-
-
-
 
 
         # formulate unique intervals to determine chord naming
@@ -286,11 +202,22 @@ class Chord:
             is_unique = True
             other_intervals = [other_interval for j, other_interval in enumerate(self.intervals) if j != i] + [Unison]
             for other_interval in other_intervals:
-                if this_interval & other_interval: # enharmonic equivalence
+                if this_interval.mod == other_interval.mod: # enharmonic equivalence
                     is_unique = False
             if not is_unique:
                 self.repeated_intervals.append(this_interval)
 
+
+        self.factor_intervals = detect_interval_factors(self.unique_intervals)
+        self.fundamental_intervals = tuple(self.factor_intervals.values()) # the tuple used to determine chord name
+
+        self.factor_notes = {f: (self.tonic + i.value) for f, i in self.factor_intervals.items() if i is not None}
+        self.fundamental_notes = tuple(self.factor_notes.values()) # the tuple used to determine chord name
+        self.notes = [self.tonic + i.value for i in self.intervals] # this one includes octaves and repeats and so on
+
+        # assume non-inverted for now:
+        # but inversions are TBI
+        self.root = self.tonic
 
         # figure out the proper/common name for its quality (m, dim7, etc.)
         suffix = chord_names[tuple(self.unique_intervals)][0]
@@ -304,8 +231,6 @@ class Chord:
         # now we name the chord:
         self.name = self.tonic.name + suffix
         log(f'Detected chord: {self.name}')
-
-
 
         self.notes = ([self.tonic] + [self.tonic + i for i in self.intervals])
         log(f'  consisting of: {self.notes}')
@@ -394,8 +319,6 @@ class Chord:
         for c in self.notes:
             c._set_sharp_preference(preference)
 
-
-
 def StackedChord(tonic, intervals):
     """Initialise a chord by a series of intervals each relative to the previous interval.
     e.g. StackedChord('C', Min3, Maj3) returns C major"""
@@ -406,6 +329,71 @@ def StackedChord(tonic, intervals):
     c = Chord(tonic, intervals_from_tonic)
     log(f'Relative to tonic, those are: {intervals_from_tonic}, which we call: {c.name}')
     return c
+
+def detect_interval_factors(intervals):
+    """for an iterable of intervals, return the chord factors that we think
+    those intervals correspond to, making assumptions about fifths/sevenths/etc"""
+    # strip root/tonic just in case it's been given, as well as any octave notes:
+    intervals = [i for i in intervals if i.mod != 0]
+
+    num_notes = len(intervals) + 1
+    factors = defaultdict(lambda: None, {})
+
+    # we don't assume that intervals are sorted in order of ascending value,
+    # but we DO assume that they are in factor order: e.g. thirds always before fifths always before sevenths
+    if num_notes == 2:
+        # this is a dyad
+        i = intervals[0]
+        if i.degree == 5 or i.valid_fifth():
+            factors[5] = IntervalDegree(i.value, 5)
+        elif i.degree == 4 or i.valid_degree(4):
+            factors[4] = IntervalDegree(i.value, 4)
+        else:
+            print(f"Non-perfect dyad chord: {intervals} doesn't include a fifth")
+            this_degree = i.degree if i.degree is not None else i.expected_degree
+            factors[this_degree] = i
+        # finished
+        return factors
+
+    elif num_notes >= 3:
+        # this is a triad, assume there is a third and a fifth:
+        third, fifth = intervals[0], intervals[1]
+        if third.degree == 3 or third.valid_third():
+            factors[3] = IntervalDegree(third.value, 3)
+        else:
+            print(f"Irregular triad chord: {third} is not a valid third")
+            this_degree = third.degree if third.degree is not None else third.expected_degree
+            factors[this_degree] = IntervalDegree(third.value, this_degree)
+
+        if fifth.degree == 5 or fifth.valid_fifth():
+            factors[5] = IntervalDegree(fifth.value, 5)
+        else:
+            print(f"Irregular triad chord: {fifth} is not a valid fifth")
+            this_degree = fifth.degree if fifth.degree is not None else fifth.expected_degree
+            factors[this_degree] = IntervalDegree(fifth.value, this_degree)
+
+        if num_notes == 4:
+            # this could be a sixth, seventh, or an add9
+            # detect add9 first:
+            i = intervals[2]
+            if i.degree == 9 or i.valid_degree(9):
+                factors[9] = ExtendedInterval(i.value, 9)
+            # sevenths are more likely than sixths:
+            elif i.degree == 7 or i.valid_seventh():
+                factors[7] = IntervalDegree(i.value, 7)
+            elif i.degree == 6 or i.valid_degree(6):
+                factors[6] = IntervalDegree(i.value, 6)
+        else:
+            # more than 4 notes, we can't make assumptions anymore
+            # so just loop through remaining intervals and use expected degrees:
+            for i in intervals[2:]:
+                this_degree = i.degree if i.degree is not None else i.expected_degree
+                if this_degree > 7:
+                    factors[this_degree] = ExtendedInterval(i.value, this_degree)
+                else:
+                    factors[this_degree] = IntervalDegree(i.value, this_degree)
+
+    return factors
 
 roman_numerals = {'I':   1,
                   'II':  2,
@@ -419,18 +407,66 @@ class Progression:
     """A theoretical progression between unspecified chords,
     initialised as e.g. Progression('I', 'IV', 'iii', 'V')"""
     def __init__(self, degrees):
+        self.intervals = []
+
         assert isinstance(degrees, (list, tuple)), "Expected a list or tuple of numeric degrees for Progression initialisation"
-        for deg in degrees:
+
+        ### determine progression quality from degree of the first chord:
+        first_degree= degrees[0]
+        if isinstance(root, str):
+            if first_degree == first_degreeupper():
+                self.quality = 'major'
+            elif root == root.lower():
+                self.quality = 'minor'
+            else:
+                raise ValueError(f'unexpected string passed to Progression init: {root}')
+            first_degree_int = roman_numeral[first_degree.upper()]
+        elif isinstance(first_degree, int):
+            if root > 0:
+                self.quality = 'major'
+            elif root < 0:
+                self.quality = 'minor'
+            else:
+                raise ValueError('Progression cannot include 0th degrees (no such thing)')
+            first_degree_int = first_degree
+
+        first_interval = Interval.from_degree(first_degree_int, quality=self.quality)
+
+        self.intervals.append(first_interval)
+
+        ### determine intervals from root
+        for deg in degrees[1:]:
             if isinstance(deg, str):
-                if deg == deg.upper():
-                    major = True
-                else:
-                    major = False
-
+                deg_int = roman_numerals[deg.upper()]
+                deg_quality = 'minor' if deg == deg.lower() else 'major'
             elif isinstance(deg, int):
-                # we interpret positive numbers as major degrees
-                # and negative numbers as minor degrees
+                deg_int = abs(deg)
+                deg_quality = 'minor' if deg < 0 else 'major'
+                if deg not in range(1,8):
+                    raise ValueError(f'invalid progression degree: {deg}')
 
+            # handle diminished scale-chords and overwrite deg quality for diatonic major-scale 7ths and minor-scale 2nds
+            if (self.quality == 'major' and deg_int == 7) or (self.quality == 'minor' and deg_int == 2):
+                if deg_quality == 'minor':
+                    deg_quality = 'diminished'
+
+            # elif isinstance(deg, int):
+            #     # we interpret positive numbers as major degrees
+            #     # and negative numbers as minor degrees
+            #     deg_int = deg
+            #     if self.quality == 'major' and deg_int == 7:
+            #         if deg.lower() == deg:
+            #             deg_quality = 'diminished'
+            #         elif deg.upper() == deg:
+            #             deg_quality = 'major'
+            #     elif self.quality == 'minor' and deg_int == 2:
+            #         if deg.lower() == deg:
+            #             deg_quality = 'diminished'
+            #         elif deg.upper() == deg:
+            #             deg_quality = 'major'
+
+            deg_interval = Interval.from_degree(deg_int, quality=deg_quality)
+            self.intervals.append(deg_interval)
 
 class ChordProgression(Progression):
     """Progression subtype defined using specific chords, also acts as container class for Chord objects"""
@@ -469,6 +505,15 @@ class ChordProgression(Progression):
                 self.chord_count[c] += 1
 
         self.note_set = set(self.notes)
+
+        # tonic is just first chord's tonic for now:
+        # progressions that start on a non-tonic are TBI
+        # self.tonic
+
+        ### determine chord intervals for back-compatibility with Progression parent class:
+        # self.
+        self.intervals = []
+        # for chord in self.chords
 
     def __contains__(self, item):
         if isinstance(item, Chord):
