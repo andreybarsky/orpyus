@@ -231,11 +231,15 @@ class Key:
         if i > len(self):
             i = ((i - 1) % len(self)) + 1
 
-        return self.scale[(i-1) % (len(self)+1)]
+        return self.scale[i-1]
 
     def __call__(self, i):
         """Index scale chords by degree (where tonic=1)"""
-        return self.chords[(i-1) % (len(self)+1)]
+        if i == 0:
+            raise ValueError('Scales are 1-indexed, with the tonic corresponding to [1]')
+        if i > len(self):
+            i = ((i - 1) % len(self)) + 1
+        return self.chords[i-1]
 
     def __str__(self):
         return f'𝄞{self.name}'
@@ -327,6 +331,11 @@ class Key:
         assert not self.major, f'{self} is already major, and therefore has no relative major'
         rm_tonic = notes.relative_majors[self.tonic]
         return Key(rm_tonic)
+
+def detect_key(chords):
+    """given an iterable of Chord objects,
+    determine and rank the keys that those chords could belong to"""
+
 
 # construct circle of fifths:
 circle_of_fifths = {0: Key('C')}

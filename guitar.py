@@ -1,6 +1,6 @@
 import notes
 from notes import OctaveNote
-from chords import Chord
+from chords import Chord, most_likely_chord
 import pdb
 
 class String(OctaveNote):
@@ -12,19 +12,27 @@ class String(OctaveNote):
 
 tunings = {'standard': [String('E2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')],
            'dropD':   [String('D2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')],
-           'openD':   [String('D2'), String('A2'), String('D3'), String('G3'), String('A3'), String('D4')]}
+           'dropC':   [String('C2'), String('G2'), String('C3'), String('F3'), String('A3'), String('D4')],
+           'dropB':   [String('B1'), String('Gb2'), String('B2'), String('E3'), String('Ab3'), String('Db4')],
+           'openE':   [String('E2'), String('B2'), String('E3'), String('G#3'), String('B3'), String('E4')],
+           'openD':   [String('D2'), String('A2'), String('D3'), String('G3'), String('A3'), String('D4')], # aka DADGAD
+           'openC':   [String('C2'), String('G2'), String('C3'), String('G3'), String('C4'), String('E4')],
+           'openG':   [String('D2'), String('G2'), String('D3'), String('G3'), String('B3'), String('D4')],
+           }
 
 class Guitar:
     def __init__(self, tuning='standard', strings=6):
         """tuning can be one of:
-        a descriptive string: standard, dropD, openD
+        a descriptive string: standard, dropD, openE, etc.
         or a six-character string like: EADGBE, DADGAD, etc."""
 
         assert isinstance(tuning, str) # for now
 
-        self.num_strings=strings
+        self.num_strings = strings
 
-        tuning = tuning.strip().lower()
+        # loop through each note in tunings, assuming each successive string is higher than the last:
+        tuning = tuning.strip()
+
         if tuning in tunings.keys():
             self.open_strings = tunings[tuning]
 
@@ -41,6 +49,7 @@ class Guitar:
             # first string is going to be in octave 1 or 2, find whichever is closest to E2:
             low_bass, high_bass = String(first_string_note + '1'), String(first_string_note + '2')
             low_dist, high_dist = abs(low_bass - default_bass), abs(high_bass - default_bass)
+
             if low_dist < high_dist:
                 first_string = low_bass
             else:
@@ -68,7 +77,21 @@ class Guitar:
                     self.open_strings.append(high_string)
                 prev_string = self.open_strings[-1]
 
-    def __call__(self, frets):
+    def distance_from_standard(self):
+        """how many semitones up/down must the strings of a standard guitar be tuned to get this tuning?"""
+        distances = []
+        for i, s in enumerate(self.open_strings):
+            distances.append(s - tunings['standard'][i])
+        return distances
+
+    def fret(self, frets):
+        return __getitem__(self, frets)
+
+    def chord(self, frets):
+        return __call__(self, frets)
+
+    def __getitem__(self, frets):
+        """accepts a string or iterable of fret indices, returns a list of the resulting notes"""
         string_notes = []
         if isinstance(frets, (list, tuple)):
             for s, fret in enumerate(frets):
@@ -84,6 +107,19 @@ class Guitar:
                     string_notes.append(self.open_strings[s](int(fret)))
                 else:
                     pass
+        return string_notes
+
+    def __call__(self, frets):
+        """gets the resulting notes from plucking the listed strings,
+        and returns the appropriate auto-detected Chord object"""
         # TBI: turn this into a chord, but that requires parsing the tonic of chords where their first note is not the tonic
         # requires some kind of notes.detect_chord method?
-        return string_notes
+        return most_likely_chord(self.__getitem__(frets))
+
+    def __str__(self):
+        tuning_letters = [string.chroma for string in self.open_strings]
+        tuning_str = ''.join(tuning_letters)
+        return f'|Guitar:{tuning_str}|'
+
+    def __repr__(self):
+        return str(self)

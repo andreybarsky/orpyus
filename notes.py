@@ -82,7 +82,7 @@ def parse_note_name(name):
         # check string validity:
         accidental = parse_accidental(name[1])
         note_name = note_letter + accidental
-        assert note_name in valid_note_names, "Invalid note name"
+        assert note_name in valid_note_names, f"Invalid note name: {note_letter}"
 
         if len(name) == 2: # default to 4th octave if not specified
             octave = 4
@@ -92,7 +92,7 @@ def parse_note_name(name):
             raise ValueError(f'Provided note name is too long: {name}')
     else: # assume natural note
         # check string validity:
-        assert note_letter in valid_note_names, "Invalid note name"
+        assert note_letter in valid_note_names, f"Invalid note name: {note_letter}"
         note_name = note_letter
 
         if len(name) == 1: # default to 4th octave if not specified
@@ -240,6 +240,8 @@ class Note:
             self.position = position
             self.name = specific_note_name(position, prefer_sharps=self.prefer_sharps)
 
+        self.chroma = self.name # is the same for Note class, but may be different for OctaveNote subclass
+
         self.sharp_name = specific_note_name(self.position, prefer_sharps=True)
         self.flat_name = specific_note_name(self.position, prefer_sharps=False)
 
@@ -365,7 +367,7 @@ class Note:
     def __eq__(self, other):
         if isinstance(other, Note):
             return self.position == other.position
-        elif isinstance(other, Note):
+        elif isinstance(other, OctaveNote):
             return self == other.note
         else:
             raise TypeError('Notes can only be compared to Notes and other Notes')
@@ -448,7 +450,7 @@ class OctaveNote(Note):
             self.note = Note(self.position)
 
         ### now octave, position, value and pitch are defined
-
+        self.chroma = self.note.name
 
 
     ### chord constructors:
@@ -487,13 +489,6 @@ class OctaveNote(Note):
         else:
             raise Exception('Only integers and other Notes can be subtracted from a Note')
 
-
-    # odd one:
-    def __mod__(self, root):
-        """return difference in pitch class only?"""
-        return
-
-
     def __ge__(self, other):
         assert isinstance(other, OctaveNote), "OctaveNotes can only be greater or less than other notes"
         return self.value >= other.value
@@ -502,9 +497,13 @@ class OctaveNote(Note):
         assert isinstance(other, OctaveNote), "OctaveNotes can only be greater or less than other notes"
         return self.value < other.value
 
+    # note: octavenote equality compares value with other octavenotes, but position with base class Notes
     def __eq__(self, other):
-        assert isinstance(other, OctaveNote), "OctaveNotes can only be equal to other notes"
-        return self.value == other.value
+        assert isinstance(other, Note), "OctaveNotes can only be equal to other notes"
+        if isinstance(other, OctaveNote):
+            return self.value == other.value
+        elif isinstance(other, Note):
+            return self.position == other.position
 
     def __str__(self):
         note_name = specific_note_name(self.position, prefer_sharps=PREFER_SHARPS)

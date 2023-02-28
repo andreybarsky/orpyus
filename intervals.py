@@ -147,7 +147,7 @@ class Interval:
         self.value = value
         self.width = abs(value)
 
-        # whole-octave width, and interval width-within-octave
+        # whole-octave width, and interval width-within-octave (both strictly positive)
         self.octave_span, self.mod = divmod(self.width, 12)
 
         self.compound = (self.width >= 12)
@@ -265,7 +265,7 @@ class Interval:
     # interval constructor methods:
     def __add__(self, other):
         if isinstance(other, Interval):
-            new_val = self.value + other_value
+            new_val = self.value + other.value
             if abs(new_val) <= 12:
                 return Interval(new_val)
             else:
@@ -296,6 +296,12 @@ class Interval:
         but the inverse of Interval(7) is Interval(-5) (perfect fourth descending)"""
         return Interval(-(12-self.value))
 
+    def __abs__(self):
+        if self.value > 0:
+            return self
+        else:
+            return Interval(-self.value)
+
     def __eq__(self, other):
         """Equality comparison for intervals - returns True if both have same number of signed semitones (but disregard degree and mod value)"""
         if isinstance(other, Interval):
@@ -309,7 +315,7 @@ class Interval:
         if isinstance(other, Interval):
             return self.value > other.value
         elif isinstance(other, int):
-            return Interval(self.value > other)
+            return self.value > other
         else:
             raise TypeError('Intervals can only be compared to integers or other Intervals')
 
@@ -409,6 +415,15 @@ class Interval:
         else:
             return ExtendedInterval(value, degree=deg)
 
+class NullInterval:
+    """has the attributes that an Interval has, but they are all None
+    (useful for defaultdict default values in chord factor detection)"""
+    def __init__(self):
+        self.value = None
+        self.mod = None
+        self.width = None
+        self.degree = None
+        self.quality = None
 
 class IntervalDegree(Interval):
     """a distance between notes, in semitones,
@@ -511,6 +526,12 @@ class IntervalDegree(Interval):
 
         inv_value = (12-self.value)
         return IntervalDegree(-inv_value, inv_degree)
+
+    def __abs__(self):
+        if self.value > 0:
+            return self
+        else:
+            return IntervalDegree(-self.value, degree=self.degree)
 
     def __str__(self):
         return f'«{self.value}:{self.name}»'
