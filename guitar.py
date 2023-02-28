@@ -123,3 +123,8 @@ class Guitar:
 
     def __repr__(self):
         return str(self)
+
+
+standard = Guitar()
+dadgad = Guitar('DADGAD')
+dadgbe = dropD = Guitar('DADGBE')

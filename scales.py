@@ -13,15 +13,15 @@ key_names = defaultdict(lambda: ' (unknown key)',
    {(Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', ' major', 'maj', 'M'],
     (Maj2, Min3, Per4, Per5, Min6, Min7): ['m', ' minor', 'min', ' natural minor'],
 
-    (Maj2, Maj3, Per4, Per5, Min6, Maj7): [' harmonic major'],
-    (Maj2, Min3, Per4, Per5, Min6, Maj7): [' harmonic minor'],
-    # (Maj2, Min3, Per4, Per5, Maj6, Maj7): [' melodic minor ascending'], # TBI? melodic minor descending uses the natural minor scale
+    (Maj2, Maj3, Per4, Per5, Min6, Maj7): [' harmonic major', 'M harmonic', 'maj harmonic'],
+    (Maj2, Min3, Per4, Per5, Min6, Maj7): [' harmonic minor', 'm harmonic'],
+    (Maj2, Min3, Per4, Per5, Maj6, Maj7): [' melodic minor', 'm melodic'], # TBI? melodic minor descending uses the natural minor scale
 
     (Maj2, Maj3, Per5, Maj6): [' pentatonic', ' major pentatonic'],
-    (Min3, Per4, Per5, Min7): ['m pentatonic', ' minor pentatonic'],
+    (Min3, Per4, Per5, Min7): ['m pentatonic', ' minor pentatonic', ' pentatonic minor'],
 
-    (Maj2, Per4, Per5, Maj6): [' blues major', ' blues major pentatonic'],
-    (Min3, Per4, Min6, Min7): [' blues minor', ' blues minor pentatonic'],
+    (Maj2, Per4, Per5, Maj6): [' blues major', ' blues major pentatonic', ' blues'],
+    (Min3, Per4, Min6, Min7): [' blues minor', ' blues minor pentatonic', 'm blues'],
 
     (Min2, Maj2, Min3, Per4, Dim5, Per5, Min6, Maj6, Min7, Maj7): [' chromatic'],
     })
@@ -55,6 +55,10 @@ for intervals, names in key_names.items():
 flat_order = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
 sharp_order = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
 
+# keys arranged vaguely in order of rarity, for auto key detection/searching:
+common_key_suffixes = ['', 'm']
+uncommon_key_suffixes = [' harmonic minor', 'pentatonic', 'm pentatonic']
+rare_key_suffixes = [' harmonic major', ' melodic minor', ' blues major', ' blues minor']
 
 class KeyNote(Note):
     def __init__(self, *args, key, **kwargs):
@@ -116,6 +120,7 @@ class KeyChord(Chord):
 
 class Key:
     # TBI: modes??
+    # TBI: key signature, sharp/flat detection
     def __init__(self, name, quality=None, prefer_sharps=None):
         """Initialise a Key from a name like 'D major' or 'C#m',
         or by passing a Note, Note, or string that can be cast to Note,
@@ -332,9 +337,99 @@ class Key:
         rm_tonic = notes.relative_majors[self.tonic]
         return Key(rm_tonic)
 
-def detect_key(chords):
+
+def rate_keys(chordlist):
     """given an iterable of Chord objects,
-    determine and rank the keys that those chords could belong to"""
+    determine the keys that those chords could belong to"""
+
+    ### check for common chords first:
+    full_matches = []
+    partial_matches = {}
+
+    unique_chords = []
+    for c in chordlist:
+        if isinstance(c, Chord):
+            unique_chords.append(c)
+        elif isinstance(c, str):
+            unique_chords.append(Chord(c))
+
+    unique_chords = list(set(unique_chords))
+
+    for tonic in notes.notes:
+        for quality in common_key_suffixes + uncommon_key_suffixes + rare_key_suffixes:
+            candidate = Key(tonic, quality)
+            belongs = 0
+            for chord in unique_chords:
+                if chord in candidate.chords:
+                    belongs += 1
+            rating = belongs / len(unique_chords)
+            # rating is 1 if every note in the notelist appears in the candidate chord
+
+            if rating == 1 and len(candidate) == len(unique_chords):
+                # one-to-one mapping, perfect match
+                full_matches.append(candidate)
+            else:
+                if rating == 1 and len(candidate) > len(unique_chords):
+                    # good match, but chord has some extra things in it
+                    # penalise rating based on the difference in length
+                    # (intersection over union?)
+                    if len(candidate) > len(unique_chords):
+                        specificity_penalty = len(unique_chords) / len(candidate)
+                        rating *= specificity_penalty
+
+                elif len(candidate) != len(unique_chords):
+                    precision_penalty = 1 / abs(len(candidate) - len(unique_chords))
+                    rating *= precision_penalty
+                    # if len(candidate) > len(unique_notes):
+                    #     # print('Candidate is longer than notelist')
+                    # elif len(unique_notes) > len(candidate):
+                    #     print('Notelist is longer than candidate')
+
+                # uncommon chord types are inherently less likely:
+                if candidate.suffix in uncommon_key_suffixes:
+                    rating *= 0.99
+                elif candidate.suffix in rare_key_suffixes:
+                    rating *= 0.98
+
+                partial_matches[candidate] = round(rating, 2)
+
+    return full_matches, partial_matches
+
+def detect_keys(chordlist, max=5, threshold=0.7):
+    """return a list of the most likely keys that a notelist could belong to,
+    with the very first in the list being a likely first guess"""
+    key_matches, key_ratings = rate_keys(chordlist)
+    if len(key_matches) > 0:
+        return key_matches
+    else:
+        names, ratings = list(key_ratings.keys()), list(key_ratings.values())
+        ranked_keys = sorted(names, key=lambda n: key_ratings[n], reverse=True)
+        ranked_ratings = sorted(ratings, reverse=True)
+
+        ranked_keys = [c for i, c in enumerate(ranked_keys) if ranked_ratings[i] > threshold]
+        ranked_ratings = [r for i, r in enumerate(ranked_ratings) if r > threshold]
+
+        # don't clip off keys with the same rating as those left in the list:
+        truncated_ratings = ranked_ratings[:max]
+        if (len(truncated_ratings) == max) and truncated_ratings[-1] == ranked_ratings[max]:
+            final_ratings = [r for i, r in enumerate(ranked_ratings[max:]) if r == truncated_ratings[-1]]
+            truncated_ratings.extend(final_ratings)
+        truncated_keys = ranked_keys[:len(truncated_ratings)]
+        return {c: r for c, r in zip(truncated_keys, truncated_ratings)}
+
+def most_likely_key(chordlist, return_probability=False):
+    result = detect_keys(chordlist, threshold=0)
+    if isinstance(result, list):
+        # full match, most common chords first
+        probability = 1.00
+        c = result[0]
+    else:
+        c = list(result.keys())[0]
+        probability = list(result.values())[0]
+    if return_probability:
+        return c, probability
+    else:
+        return c
 
 
 # construct circle of fifths:
@@ -345,6 +440,10 @@ co5s = circle_of_fifths
 
 circle_of_fifths_positions = {value:key for key,value in co5s.items()}
 co5s_positions = circle_of_fifths_positions
+
+
+
+
 
 # by semitone, not degree
 scale_semitone_names = {0: "tonic", # 1st

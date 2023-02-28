@@ -7,10 +7,6 @@ from collections import defaultdict
 from util import log, test
 import pdb
 
-### to fix:
-# harmonic minor key doesn't understand augmented 5th chords
-
-
 # all accepted aliases for chord names - common suffix is FIRST, this is the one chosen by automatic chord parsing
 chord_names = defaultdict(lambda: [' (unknown chord)'],
     {(Maj3, Per5): ['', 'major', 'maj', 'major triad', 'M', 'Ma'],
@@ -25,7 +21,7 @@ chord_names = defaultdict(lambda: [' (unknown chord)'],
 
     # sixths
     (Maj3, Per5, Maj6): ['6', 'maj6', 'M6', 'major sixth', 'major 6th'],
-    (Min3, Per5, Min6): ['m6', 'min6', 'minor sixth', 'minor 6th'],
+    (Min3, Per5, Maj6): ['m6', 'min6', 'minor sixth', 'minor 6th'],
 
     # sevenths
     (Maj3, Per5, Min7): ['7', 'dominant seventh', 'dominant 7th', 'dominant 7', 'dom7'],
@@ -39,14 +35,10 @@ chord_names = defaultdict(lambda: [' (unknown chord)'],
     (Maj3, Per5, Maj9): ['add9', 'added ninth', 'added 9th', 'added 9', 'major add9'],
     (Min3, Per5, Maj9): ['madd9', 'minor added ninth', 'minor added 9th', 'minor added 9', 'm add9', 'minor add9'],
     (Maj3, Per5, Maj7, Maj9): ['maj9', 'major ninth', 'major 9th'],
-    (Min3, Per5, Min7, Maj9): ['min9', 'minor ninth', 'minor 9th'],
+    (Min3, Per5, Min7, Maj9): ['m9', 'min9', 'minor ninth', 'minor 9th'],
     (Maj3, Per5, Min7, Maj9): ['9', 'dominant ninth', 'dominant 9th', 'd9'],
     (Maj3, Per5, Min7, Min9): ['dmin9', 'dominant minor ninth', 'dominant minor 9th'],
     })
-
-# common_chords = {key:value for i,(key,value) in enumerate(chord_names.items()) if i < 2}
-# uncommon_chords = {key:value for i,(key,value) in enumerate(chord_names.items()) if i >= 2}
-
 
 
 # minor/major 7 has multiple ways to be written, because the dash could be a dash or a slash or a space or nothing,
@@ -63,6 +55,21 @@ for intervals, names in chord_names.items():
     for name in names:
         chord_intervals[name] = intervals
 
+# chords arranged vaguely in order of rarity, for auto chord detection/searching:
+common_chord_suffixes = ['', 'm', '5']
+uncommon_chord_suffixes = ['sus2', 'sus4', '7', 'maj7', 'm7']
+rare_chord_suffixes = ['6', 'm6', '9', 'm9', 'maj9', 'add9', 'madd9']
+very_rare_chord_suffixes = [v[0] for v in list(chord_names.values()) if v[0] not in (common_chord_suffixes + uncommon_chord_suffixes + rare_chord_suffixes)]
+chord_types = common_chord_suffixes + uncommon_chord_suffixes + rare_chord_suffixes + very_rare_chord_suffixes
+
+roman_numerals = {'I':   1,
+                  'II':  2,
+                  'III': 3,
+                  'IV':  4,
+                  'V':   5,
+                  'VI':  6,
+                  'VII': 7}
+
 # some tonics correspond to a preference for sharps or flats:
 # (applies to diatonic keys only?)
 sharp_tonic_names = ['G', 'D', 'A', 'E', 'B']
@@ -76,6 +83,7 @@ neutral_major_tonics = [Note(t) for t in neutral_tonic_names]
 sharp_minor_tonics = [notes.relative_minors[Note(t)] for t in sharp_tonic_names]
 flat_minor_tonics = [notes.relative_minors[Note(t)] for t in flat_tonic_names]
 neutral_minor_tonics = [notes.relative_minors[Note(t)] for t in neutral_tonic_names]
+
 
 def detect_sharp_preference(tonic, quality='major', default=True):
     """detect if a chord should prefer sharp or flat labelling
@@ -101,20 +109,15 @@ def detect_sharp_preference(tonic, quality='major', default=True):
     else:
         return default
 
-roman_numerals = {'I':   1,
-                  'II':  2,
-                  'III': 3,
-                  'IV':  4,
-                  'V':   5,
-                  'VI':  6,
-                  'VII': 7}
-
 
 class Chord:
 
     @staticmethod
-    def from_notes(notes):
-        candidate = most_likely_chord(notes)
+    def from_notes(notelist):
+        candidate = most_likely_chord(notelist)
+        if candidate.tonic != notes[0]:
+            # inversion?
+            candidate.set_inversion(note=notelist[0])
         return candidate
 
     ### to do: inversions?
@@ -288,7 +291,7 @@ class Chord:
 
 
         # figure out the proper/common name for its quality (m, dim7, etc.)
-        suffix = chord_names[tuple(self.unique_intervals)][0]
+        suffix = chord_names[tuple(self.fundamental_intervals)][0]
         self.suffix = suffix
 
         # figure out if we should prefer sharps or flats by the tonic:
@@ -336,6 +339,42 @@ class Chord:
                 self.extended = True
 
         self.octave_span = max([i.octave_span for i in self.intervals])
+
+    def set_inversion(self, root_note=None, root_interval=None):
+        ###TBI
+        ...
+
+        if root_note is not None:
+            if isinstance(root, Note):
+                self.root_note = root
+                self.root_interval = self.root_note - self.tonic
+                if self.root_interval < 0:
+                    self.root_interval = -self.root_interval
+            elif isinstance(root, int):
+                self.root_interval = Interval(root)
+                self.root_note = self.tonic + self.root_interval
+                if self.root_interval < 0:
+                    self.root_interval = -self.root_interval
+            elif isinstance(root, Interval):
+                self.root_interval = root
+                self.root_note = self.tonic + self.root_interval
+
+            if abs(self.root_interval) > 0:
+                self.inverted = True
+
+
+        elif root_note is None and root_interval is None:
+            raise ValueError('Chord.set_inversion method expects either root_note or root_interval to be provided, but both are None')
+
+    def relative_minor(self):
+        assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
+        rm_tonic = notes.relative_minors[self.tonic]
+        return Chord(rm_tonic, 'minor')
+
+    def relative_major(self):
+        assert not self.major, f'{self} is already major, and therefore has no relative major'
+        rm_tonic = notes.relative_majors[self.tonic]
+        return Chord(rm_tonic)
 
     def _set_quality(self):
         """Uses self.factor_intervals to determine self.quality attribute and related flags"""
@@ -448,15 +487,7 @@ class Chord:
     def __repr__(self):
         return str(self)
 
-    def relative_minor(self):
-        assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
-        rm_tonic = notes.relative_minors[self.tonic]
-        return Chord(rm_tonic, 'minor')
 
-    def relative_major(self):
-        assert not self.major, f'{self} is already major, and therefore has no relative major'
-        rm_tonic = notes.relative_majors[self.tonic]
-        return Chord(rm_tonic)
 
     def _set_sharp_preference(self, preference):
         """modify sharp preference in place"""
@@ -493,10 +524,8 @@ def detect_interval_factors(intervals):
         i = intervals[0]
         if i.degree == 5 or i.valid_fifth():
             factors[5] = IntervalDegree(i.value, 5)
-        elif i.degree == 4 or i.valid_degree(4):
-            factors[4] = IntervalDegree(i.value, 4)
         else:
-            print(f"Non-perfect dyad chord: {intervals} doesn't include a fifth")
+            log(f"Non-perfect dyad chord: {intervals} doesn't include a fifth")
             this_degree = i.degree if i.degree is not None else i.expected_degree
             factors[this_degree] = i
         # finished
@@ -508,14 +537,14 @@ def detect_interval_factors(intervals):
         if third.degree == 3 or third.valid_third():
             factors[3] = IntervalDegree(third.value, 3)
         else:
-            print(f"Irregular triad chord: {third} is not a valid third")
+            log(f"Irregular triad chord ({intervals}): {third} is not a valid third")
             this_degree = third.degree if third.degree is not None else third.expected_degree
             factors[this_degree] = IntervalDegree(third.value, this_degree)
 
         if fifth.degree == 5 or fifth.valid_fifth():
             factors[5] = IntervalDegree(fifth.value, 5)
         else:
-            print(f"Irregular triad chord: {fifth} is not a valid fifth")
+            log(f"Irregular triad chord ({intervals}): {fifth} is not a valid fifth")
             this_degree = fifth.degree if fifth.degree is not None else fifth.expected_degree
             factors[this_degree] = IntervalDegree(fifth.value, this_degree)
 
@@ -542,9 +571,7 @@ def detect_interval_factors(intervals):
 
     return factors
 
-common_chord_types = ['', 'm']
-uncommon_chord_types = [v[0] for v in list(chord_names.values())][2:-1]
-chord_types = common_chord_types + uncommon_chord_types
+
 
 def rate_chords(notelist):
     """given an iterable of Note or OctaveNote objects,
@@ -574,20 +601,38 @@ def rate_chords(notelist):
                 if note in candidate:
                     belongs += 1
             rating = belongs / len(unique_notes)
+            # rating is 1 if every note in the notelist appears in the candidate chord
+
             if rating == 1 and len(candidate) == len(unique_notes):
+                # one-to-one mapping, perfect match
                 full_matches.append(candidate)
-            elif rating == 1 and len(candidate) != len(unique_notes):
-                # good match, but chord has some extra things in it
-                # penalise rating based on the difference in length
-                # (intersection over union?)
-                if len(candidate) > len(unique_notes):
-                    rating /= len(candidate) / len(unique_notes)
-                else:
-                    rating /= len(unique_notes) / len(candidate)
             else:
-                # some mismatches, penalise rating severely:
-                rating /= 2
-            partial_matches[candidate] = round(rating, 2)
+                if rating == 1 and len(candidate) > len(unique_notes):
+                    # good match, but chord has some extra things in it
+                    # penalise rating based on the difference in length
+                    # (intersection over union?)
+                    if len(candidate) > len(unique_notes):
+                        specificity_penalty = len(unique_notes) / len(candidate)
+                        rating *= specificity_penalty
+
+                elif len(candidate) != len(unique_notes):
+                    precision_penalty = 1 / abs(len(candidate) - len(unique_notes))
+                    rating *= precision_penalty
+                    # if len(candidate) > len(unique_notes):
+                    #     # print('Candidate is longer than notelist')
+                    # elif len(unique_notes) > len(candidate):
+                    #     print('Notelist is longer than candidate')
+
+                # uncommon chord types are inherently less likely:
+                if candidate.suffix in uncommon_chord_suffixes:
+                    rating *= 0.99
+                elif candidate.suffix in rare_chord_suffixes:
+                    rating *= 0.98
+                elif candidate.suffix in very_rare_chord_suffixes:
+                    rating *= 0.97
+
+
+                partial_matches[candidate] = round(rating, 2)
 
     return full_matches, partial_matches
 
@@ -596,9 +641,9 @@ def detect_chords(notelist, threshold=0.7, max=5):
     with the very first in the list being a likely first guess"""
     chord_matches, chord_ratings = rate_chords(notelist)
     if len(chord_matches) > 0:
-        common_matches = [ch for ch in chord_matches if (ch.quality in 'major', 'minor') or (ch.fifth_chord)]
-        uncommon_matches = [ch for ch in chord_matches if ch not in common_matches]
-        return chord_matches + uncommon_matches
+        # common_matches = [ch for ch in chord_matches if (ch.quality in 'major', 'minor') or (ch.fifth_chord)]
+        # uncommon_matches = [ch for ch in chord_matches if ch not in common_matches]
+        return chord_matches
     else:
         names, ratings = list(chord_ratings.keys()), list(chord_ratings.values())
         ranked_chords = sorted(names, key=lambda n: chord_ratings[n], reverse=True)
@@ -615,157 +660,22 @@ def detect_chords(notelist, threshold=0.7, max=5):
         truncated_chords = ranked_chords[:len(truncated_ratings)]
         return {c: r for c, r in zip(truncated_chords, truncated_ratings)}
 
-def most_likely_chord(notelist):
-    result = detect_chords(notelist)
+def most_likely_chord(notelist, return_probability = False):
+    result = detect_chords(notelist, threshold=0)
     if isinstance(result, list):
-        return result[0]
+        # full match, most common chords first
+        probability = 1.00
+        c = result[0]
     else:
-        return list(result.keys())[0]
+        c = list(result.keys())[0]
+        probability = list(result.values())[0]
+    if return_probability:
+        return c, probability
+    else:
+        return c
 
 
 
-class Progression:
-    """A theoretical progression between unspecified chords,
-    initialised as e.g. Progression('I', 'IV', 'iii', 'V')"""
-    def __init__(self, degrees):
-        self.intervals = []
-
-        assert isinstance(degrees, (list, tuple)), "Expected a list or tuple of numeric degrees for Progression initialisation"
-
-        ### determine progression quality from degree of the first chord:
-        first_degree= degrees[0]
-        if isinstance(root, str):
-            if first_degree == first_degreeupper():
-                self.quality = 'major'
-            elif root == root.lower():
-                self.quality = 'minor'
-            else:
-                raise ValueError(f'unexpected string passed to Progression init: {root}')
-            first_degree_int = roman_numeral[first_degree.upper()]
-        elif isinstance(first_degree, int):
-            if root > 0:
-                self.quality = 'major'
-            elif root < 0:
-                self.quality = 'minor'
-            else:
-                raise ValueError('Progression cannot include 0th degrees (no such thing)')
-            first_degree_int = first_degree
-
-        first_interval = Interval.from_degree(first_degree_int, quality=self.quality)
-
-        self.intervals.append(first_interval)
-
-        ### TBI: this whole block below needs work
-
-        ### determine intervals from root
-        for deg in degrees[1:]:
-            if isinstance(deg, str):
-                deg_int = roman_numerals[deg.upper()]
-                deg_quality = 'minor' if deg == deg.lower() else 'major'
-            elif isinstance(deg, int):
-                deg_int = abs(deg)
-                deg_quality = 'minor' if deg < 0 else 'major'
-                if deg not in range(1,8):
-                    raise ValueError(f'invalid progression degree: {deg}')
-
-            # handle diminished scale-chords and overwrite deg quality for diatonic major-scale 7ths and minor-scale 2nds
-            if (self.quality == 'major' and deg_int == 7) or (self.quality == 'minor' and deg_int == 2):
-                if deg_quality == 'minor':
-                    deg_quality = 'diminished'
-
-            # elif isinstance(deg, int):
-            #     # we interpret positive numbers as major degrees
-            #     # and negative numbers as minor degrees
-            #     deg_int = deg
-            #     if self.quality == 'major' and deg_int == 7:
-            #         if deg.lower() == deg:
-            #             deg_quality = 'diminished'
-            #         elif deg.upper() == deg:
-            #             deg_quality = 'major'
-            #     elif self.quality == 'minor' and deg_int == 2:
-            #         if deg.lower() == deg:
-            #             deg_quality = 'diminished'
-            #         elif deg.upper() == deg:
-            #             deg_quality = 'major'
-
-            deg_interval = Interval.from_degree(deg_int, quality=deg_quality)
-            self.intervals.append(deg_interval)
-
-class ChordProgression(Progression):
-    """Progression subtype defined using specific chords, also acts as container class for Chord objects"""
-    def __init__(self, chords):
-        # parse chords arg:
-        self.chords = []
-        self.chord_count = {}
-        self.notes = []
-        self.note_count = {}
-
-        self.contains_duplicates = False
-
-        for item in chords:
-            if isinstance(item, Chord): # already a Chord object
-                c = item
-            elif isinstance(item, str): # string that we try to cast to Chord
-                c = Chord(item)
-            elif isinstance(item, (list, tuple)): # pair of parameters that we try to cast to Chord
-                c = Chord(*item)
-            else:
-                raise ValueError(f'Expected iterable to contain Chords, or items that can be cast as Chords, but got: {type(item)}')
-
-            if c not in self.chord_count.keys():
-                self.chords.append(c)
-                self.chord_count[c] = 1
-
-                self.notes.extend(c.notes)
-                for ch in c.notes:
-                    if ch not in self.note_count.keys():
-                        self.note_count[ch] = 1
-                    else:
-                        self.note_count[ch] += 1
-            else:
-                self.contains_duplicates = True
-                self.chords.append(c)
-                self.chord_count[c] += 1
-
-        self.note_set = set(self.notes)
-
-        #### tonic is just first chord's tonic for now:
-        #### progressions that start on a non-tonic are TBI
-        # self.tonic =
-
-        ### determine chord intervals for back-compatibility with Progression parent class:
-        # self.
-        self.intervals = []
-        # for chord in self.chords
-
-    def __contains__(self, item):
-        if isinstance(item, Chord):
-            # efficient lookup by checking hash table keys:
-            return item in self.chord_count.keys()
-        elif isinstance(item, Note):
-            return item in self.note_set
-
-    def __str__(self):
-        chord_set_str = ','.join(['♬ ' + c.name for c in self.chords])
-        return f'𝄆 {chord_set_str} 𝄇'
-
-    def __repr__(self):
-        return str(self)
-
-    def detect_key(self):
-        ... # TBI
-        pass
-
-
-
-#
-# class NoteSet:
-#     """a chord voicing as a (sorted) set of Notes"""
-#     def __init__(self, notes):
-#         # loop through notes arg and validate/instantiate:
-#         notes = [item if isinstance(item, Note) else Note(item) for item in notes]
-#
-#         self.notes = set(sorted(notes))
 
 
 if __name__ == '__main__':
