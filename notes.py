@@ -365,12 +365,15 @@ class Note:
 
     # comparison operators:
     def __eq__(self, other):
+        if isinstance(other, str) and self.is_valid_note_name(other):
+            # cast to Note if possible
+            other = Note(other)
         if isinstance(other, Note):
             return self.position == other.position
         elif isinstance(other, OctaveNote):
             return self == other.note
         else:
-            raise TypeError('Notes can only be compared to Notes and other Notes')
+            raise TypeError('Notes can only be compared to other Notes')
 
     def __hash__(self):
         return hash(str(self))
@@ -528,7 +531,7 @@ Gb = Note('Gb')
 G = Note('G')
 Ab = Note('Ab')
 
-# all notetic pitch classes:
+# all chromatic pitch classes:
 notes = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
 # their relative minors:
 relative_minors = {c : (c - 3) for c in notes}
@@ -536,6 +539,21 @@ relative_minors.update({c.sharp_name: (c-3).sharp_name for c in notes})
 relative_minors.update({c.flat_name: (c-3).flat_name for c in notes})
 
 relative_majors = {value:key for key,value in relative_minors.items()}
+
+# some notes (as chord/key tonics) correspond to a preference for sharps or flats:
+# (though I think this applies to diatonic keys only?)
+sharp_tonic_names = ['G', 'D', 'A', 'E', 'B']
+flat_tonic_names = ['F', 'Bb', 'Eb', 'Ab', 'Db']
+neutral_tonic_names = ['C', 'Gb'] # no sharp/flat preference, fall back on default
+
+sharp_major_tonics = [Note(t) for t in sharp_tonic_names]
+flat_major_tonics = [Note(t) for t in flat_tonic_names]
+neutral_major_tonics = [Note(t) for t in neutral_tonic_names]
+
+sharp_minor_tonics = [relative_minors[Note(t)] for t in sharp_tonic_names]
+flat_minor_tonics = [relative_minors[Note(t)] for t in flat_tonic_names]
+neutral_minor_tonics = [relative_minors[Note(t)] for t in neutral_tonic_names]
+
 
 # case by case tests:
 if __name__ == '__main__':

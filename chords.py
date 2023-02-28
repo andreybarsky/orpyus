@@ -7,31 +7,36 @@ from collections import defaultdict
 from util import log, test
 import pdb
 
+# TBI: should root_interval be changed to root_degree?
+
+
 # all accepted aliases for chord names - common suffix is FIRST, this is the one chosen by automatic chord parsing
 chord_names = defaultdict(lambda: [' (unknown chord)'],
-    {(Maj3, Per5): ['', 'major', 'maj', 'major triad', 'M', 'Ma'],
-    (Min3, Per5): ['m', 'minor', 'min', 'minor triad', '-'],
-    (Per5, ): ['5', '5th', 'fifth'], # does octave belong here??
+    {(Maj3, Per5): ['', 'major', 'maj', 'maj3', 'major triad', 'M', 'Ma'],
+    (Min3, Per5): ['m', 'minor', 'min', 'min3', 'minor triad', '-'],
+    (Per5, ): ['5', '5th', 'fifth', 'ind', '(no 3)', '(no3)', 'power chord', 'power', 'pow'],
 
     # weird triads
     (Dim3, Per5): ['sus2', 'suspended 2nd', 'suspended second', 's2'],
     (Aug3, Per5): ['sus4', 'suspended 4th', 'suspended fourth', 's4'],
-    (Maj3, Aug5): ['+', 'augmented triad', 'augmented fifth', 'augmented 5th', 'aug'],
-    (Min3, Dim5): ['dim', 'o', 'o', 'diminished', 'diminished triad', 'diminished fifth', 'diminished 5th'],
+    (Maj3, Aug5): ['+', 'aug', 'augmented triad', 'augmented fifth', 'augmented 5th', 'aug5'],    #  #5? ♯5?
+    (Min3, Dim5): ['dim', 'o', 'o', 'diminished', 'diminished triad', 'diminished fifth', 'diminished 5th', 'dim5', 'm♭5', 'mb5'],
 
     # sixths
     (Maj3, Per5, Maj6): ['6', 'maj6', 'M6', 'major sixth', 'major 6th'],
     (Min3, Per5, Maj6): ['m6', 'min6', 'minor sixth', 'minor 6th'],
+    # other sixths are probably just inversions of more common chords
 
     # sevenths
     (Maj3, Per5, Min7): ['7', 'dominant seventh', 'dominant 7th', 'dominant 7', 'dom7'],
     (Maj3, Per5, Maj7): ['maj7', 'major seventh', 'major 7th', 'major 7', 'M7', 'Δ7'],
     (Min3, Per5, Min7): ['m7', 'minor seventh', 'minor 7th', 'minor 7', 'min7', '-7'],
-    (Min3, Dim5, Min7): ['dim7', 'diminished seventh', 'diminished 7th', 'diminished 7', 'o7', 'o7', '7b5', '7♭5'],
+    (Min3, Dim5, Min7): ['hdim7', 'ø7', 'ø', 'm7(b5)', 'm7(♭5)', 'm7b5', 'm7♭5', 'half diminished seventh', 'half diminished 7th', 'half diminished 7', 'halfdim7'],
+    (Min3, Dim5, Dim7): ['dim7', 'diminished seventh', 'diminished 7th', 'diminished 7', '°', '°7', 'o', 'o7', 'o', 'o7', '7b5', '7♭5'],
     (Maj3, Aug5, Min7): ['aug7', 'augmented seventh', 'augmented 7th', 'augmented 7', '+7', '7#5', '7♯5'],
     (Min3, Per5, Maj7): ['mmaj7', '-Δ7', '-M7'], # but additional aliases, see below
 
-    # ninths (can we even detect these from the intervals encoded in a Chord object?
+    # ninths
     (Maj3, Per5, Maj9): ['add9', 'added ninth', 'added 9th', 'added 9', 'major add9'],
     (Min3, Per5, Maj9): ['madd9', 'minor added ninth', 'minor added 9th', 'minor added 9', 'm add9', 'minor add9'],
     (Maj3, Per5, Maj7, Maj9): ['maj9', 'major ninth', 'major 9th'],
@@ -58,31 +63,10 @@ for intervals, names in chord_names.items():
 # chords arranged vaguely in order of rarity, for auto chord detection/searching:
 common_chord_suffixes = ['', 'm', '5']
 uncommon_chord_suffixes = ['sus2', 'sus4', '7', 'maj7', 'm7']
-rare_chord_suffixes = ['6', 'm6', '9', 'm9', 'maj9', 'add9', 'madd9']
+rare_chord_suffixes = ['9', 'm9', 'maj9', 'add9', 'madd9', 'dim7', 'hdim7']
 very_rare_chord_suffixes = [v[0] for v in list(chord_names.values()) if v[0] not in (common_chord_suffixes + uncommon_chord_suffixes + rare_chord_suffixes)]
 chord_types = common_chord_suffixes + uncommon_chord_suffixes + rare_chord_suffixes + very_rare_chord_suffixes
 
-roman_numerals = {'I':   1,
-                  'II':  2,
-                  'III': 3,
-                  'IV':  4,
-                  'V':   5,
-                  'VI':  6,
-                  'VII': 7}
-
-# some tonics correspond to a preference for sharps or flats:
-# (applies to diatonic keys only?)
-sharp_tonic_names = ['G', 'D', 'A', 'E', 'B']
-flat_tonic_names = ['F', 'Bb', 'Eb', 'Ab', 'Db']
-neutral_tonic_names = ['C', 'Gb'] # no sharp/flat preference, fall back on default
-
-sharp_major_tonics = [Note(t) for t in sharp_tonic_names]
-flat_major_tonics = [Note(t) for t in flat_tonic_names]
-neutral_major_tonics = [Note(t) for t in neutral_tonic_names]
-
-sharp_minor_tonics = [notes.relative_minors[Note(t)] for t in sharp_tonic_names]
-flat_minor_tonics = [notes.relative_minors[Note(t)] for t in flat_tonic_names]
-neutral_minor_tonics = [notes.relative_minors[Note(t)] for t in neutral_tonic_names]
 
 
 def detect_sharp_preference(tonic, quality='major', default=True):
@@ -93,16 +77,16 @@ def detect_sharp_preference(tonic, quality='major', default=True):
     assert isinstance(tonic, Note)
 
     if quality in chord_names[(Maj3, Per5)]: # aliases for 'major':
-        if tonic in sharp_major_tonics:
+        if tonic in notes.sharp_major_tonics:
             return True
-        elif tonic in flat_major_tonics:
+        elif tonic in notes.flat_major_tonics:
             return False
         else:
             return default
     elif quality in chord_names[(Min3, Per5)]: # aliases for 'minor'
-        if tonic in sharp_minor_tonics:
+        if tonic in notes.sharp_minor_tonics:
             return True
-        elif tonic in flat_minor_tonics:
+        elif tonic in notes.flat_minor_tonics:
             return False
         else:
             return default
@@ -117,7 +101,7 @@ class Chord:
         candidate = most_likely_chord(notelist)
         if candidate.tonic != notes[0]:
             # inversion?
-            candidate.set_inversion(note=notelist[0])
+            candidate.set_inversion(root_note=notelist[0])
         return candidate
 
     ### to do: inversions?
@@ -238,57 +222,45 @@ class Chord:
 
             self.intervals = chord_intervals[quality]
 
-        # tonic and intervals have been assigned
-
-        # check for inversions, assign root note/interval if so:
-        if root is not None:
-            if isinstance(root, Note):
-                self.root_note = root
-                self.root_interval = self.root_note - self.tonic
-                if self.root_interval < 0:
-                    self.root_interval = -self.root_interval
-            elif isinstance(root, int):
-                self.root_interval = Interval(root)
-                self.root_note = self.tonic + self.root_interval
-                if self.root_interval < 0:
-                    self.root_interval = -self.root_interval
-            elif isinstance(root, Interval):
-                self.root_interval = root
-                self.root_note = self.tonic + self.root_interval
-
-            if abs(self.root_interval) > 0:
-                self.inverted = True
-        else:
-            self.root_note = self.tonic
-            self.root_interval = 0
+        ####### tonic and intervals have been assigned
 
         # make sure intervals are in order:
         self.intervals = sorted(self.intervals)
 
+        # extended chords contain a ninth or higher:
+        self.extended = False
+        for interval in self.intervals:
+            if isinstance(interval, ExtendedInterval):
+                self.extended = True
+
+        self.octave_span = max([i.octave_span for i in self.intervals])
+
+
         # formulate unique intervals to determine chord naming
-        self.unique_intervals = []
-        self.repeated_intervals = []
+        self.unique_intervals = []   # set of intervals that appear at least once in this chord
+        self.repeated_intervals = [] # intervals that appear multiple times in this chord
         for i, this_interval in enumerate(self.intervals):
             if this_interval not in self.unique_intervals and this_interval.mod != 0:
                 self.unique_intervals.append(this_interval)
 
             is_unique = True
+            # compare to other intervals in the chord to determine repetition:
             other_intervals = [other_interval for j, other_interval in enumerate(self.intervals) if j != i] + [Unison]
             for other_interval in other_intervals:
                 if this_interval.mod == other_interval.mod: # enharmonic equivalence
                     is_unique = False
             if not is_unique:
-                self.repeated_intervals.append(this_interval)
+                if this_interval not in self.repeated_intervals:
+                    self.repeated_intervals.append(this_interval)
 
         ### parse chord factors:
         self.factor_intervals = detect_interval_factors(self.unique_intervals)
-        self.fundamental_intervals = tuple(self.factor_intervals.values()) # the tuple used to determine chord name
+        self.fundamental_intervals = tuple(self.factor_intervals.values()) # the tuple used to determine chord type? maybe?
 
-        self.factor_notes = {f: (self.tonic + i.value) for f, i in self.factor_intervals.items() if i is not None}
-        self.fundamental_notes = tuple(self.factor_notes.values()) # the tuple used to determine chord name
+        self.factors = {f: (self.tonic + i.value) for f, i in self.factor_intervals.items() if i is not None}
+
+        self.fundamental_notes = tuple(self.factors.values()) # the tuple used to determine chord name
         self.notes = [self.tonic + i.value for i in self.intervals] # this one includes octaves and repeats and so on
-
-
 
         # figure out the proper/common name for its quality (m, dim7, etc.)
         suffix = chord_names[tuple(self.fundamental_intervals)][0]
@@ -310,61 +282,75 @@ class Chord:
         # chord qualities (major, minor, augmented, suspended, indeterminate):
         self._set_quality()
 
+        # check for inversions, assign root note/interval and re-set name if so:
+        if root is not None:
+            if isinstance(root, (str, Note)):
+                self.set_inversion(note=root) # this re-sets name if called
+            elif isinstance(root, (int, Interval)):
+                self.set_inversion(interval=root)
+            # if isinstance(root, Note):
+            #     self.root = root
+            #     self.root_interval = self.root_note - self.tonic
+            #     if self.root_interval < 0:
+            #         self.root_interval = -self.root_interval
+            # elif isinstance(root, int):
+            #     self.root_interval = Interval(root)
+            #     self.root_note = self.tonic + self.root_interval
+            #     if self.root_interval < 0:
+            #         self.root_interval = -self.root_interval
+            # elif isinstance(root, Interval):
+            #     self.root_interval = root
+            #     self.root_note = self.tonic + self.root_interval
+            #
+            # if abs(self.root_interval) > 0:
+            #     self.inverted = True
+        else:
+            self.root = self.tonic
+            self.root_interval = 0
 
-        # if Maj3 in self.intervals and Per5 in self.intervals:
-        #     self.quality = 'major'
-        # elif Min3 in self.intervals and Per5 in self.intervals:
-        #     self.quality = 'minor'
-        # elif Maj2 in self.intervals or Per4 in self.intervals:
-        #     self.quality = 'suspended'
-        # elif Dim5 in self.intervals and 'diminished' in [i.quality for i in self.intervals]:
-        #     self.quality = 'diminished'
-        # elif Aug5 in self.intervals and 'augmented' in [i.quality for i in self.intervals]:
-        #     self.quality = 'augmented'
-        # else:
-        #     self.quality = 'indeterminate'
 
-        # self.minor = (self.quality == 'minor')
-        # self.major = (self.quality == 'major')
-        # self.suspended = (self.quality == 'suspended')
-        # self.diminished = (self.quality == 'diminished')
-        # self.augmented = (self.quality == 'augmented')
-        # self.indeterminate = (self.quality == 'indeterminate')
-        # self.dominant = (Maj3 in self.intervals and Per5 in self.intervals and Min7 in self.intervals)
 
-        # extended chords contain a ninth or higher:
-        self.extended = False
-        for interval in self.intervals:
-            if isinstance(interval, ExtendedInterval):
-                self.extended = True
-
-        self.octave_span = max([i.octave_span for i in self.intervals])
-
-    def set_inversion(self, root_note=None, root_interval=None):
+    def set_inversion(self, note=None, interval=None):
         ###TBI
         ...
 
-        if root_note is not None:
-            if isinstance(root, Note):
-                self.root_note = root
-                self.root_interval = self.root_note - self.tonic
-                if self.root_interval < 0:
-                    self.root_interval = -self.root_interval
-            elif isinstance(root, int):
-                self.root_interval = Interval(root)
-                self.root_note = self.tonic + self.root_interval
-                if self.root_interval < 0:
-                    self.root_interval = -self.root_interval
-            elif isinstance(root, Interval):
-                self.root_interval = root
-                self.root_note = self.tonic + self.root_interval
+        if note is not None:
+            if isinstance(note, str):
+                # cast str to note if necessary
+                note = Note(note)
+            if isinstance(note, Note):
+                self.root = note
+                self.root_interval = self.root - self.tonic
+                # if self.root_interval < 0:
+                #     self.root_interval = -self.root_interval
+            elif isinstance(note, int):
+                # asked for root_note but got given an int, interpet it as an interval anyway
+                self.root_interval = Interval(note)
+                self.root = self.tonic + self.root_interval
+                # if self.root_interval < 0:
+                #     self.root_interval = -self.root_interval
+            assert self.root in self.notes, f"Desired root note {self.root} does not exist in chord notes: {self.notes}"
 
-            if abs(self.root_interval) > 0:
-                self.inverted = True
+        elif interval is not None:
+            if isinstance(interval, int):
+                # cast int to interval if needed:
+                interval = Interval(interval)
+            if isinstance(interval, Interval):
+                assert interval in self.intervals, f"Desired root interval {root_interval} does not exist in chord intervals: {self.intervals}"
+                self.root_interval = interval
+                self.root = self.tonic + self.root_interval
+            else:
+                raise TypeError(f'Expected an int or interval as root_interval arg for set_inversion, but got: {type(root_interval)}')
 
+        elif note is None and interval is None:
+            raise ValueError('Chord.set_inversion method expects either note or interval to be provided, but both are None')
 
-        elif root_note is None and root_interval is None:
-            raise ValueError('Chord.set_inversion method expects either root_note or root_interval to be provided, but both are None')
+        if abs(self.root_interval) > 0:
+            self.inverted = True
+
+        # re-set name:
+        root_str = f'/{self.root.name}' if self.root != self.tonic else ''
+        self.name = self.tonic.name + self.suffix + root_str
 
     def relative_minor(self):
         assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
@@ -482,12 +468,19 @@ class Chord:
         return hash(hash_str)
 
     def __str__(self):
-        return f'♬ {self.name} {self.notes}'
+        if self.inverted:
+            # figure out how to rearrange the notes in order
+            root_place = [i for i, n in enumerate(self.notes) if n == self.root][0]
+            # e.g. if Chord is Am/C, Chord.notes is ['A', 'C', 'E'], root is 'C',
+            # and root_place is 1 ... because Chord.notes[1] == 'C'
+            note_idxs = [(root_place + i) % len(self) for i in range(len(self))]
+            note_list = [self.notes[i] for i in note_idxs]
+        else:
+            note_list = self.notes
+        return f'♬ {self.name} {note_list}'
 
     def __repr__(self):
         return str(self)
-
-
 
     def _set_sharp_preference(self, preference):
         """modify sharp preference in place"""
@@ -497,15 +490,15 @@ class Chord:
         for c in self.notes:
             c._set_sharp_preference(preference)
 
-def StackedChord(tonic, intervals):
+
+
+def StackedChord(tonic, stack):
     """Initialise a chord by a series of intervals each relative to the previous interval.
     e.g. StackedChord('C', Min3, Maj3) returns C major"""
     log(f'Building Chord from stacked intervals: {intervals}')
-    intervals_from_tonic = [intervals[0]]
-    for i in intervals[1:]:
-        intervals_from_tonic.append(intervals_from_tonic[-1] + i)
-    c = Chord(tonic, intervals_from_tonic)
-    log(f'Relative to tonic, those are: {intervals_from_tonic}, which we call: {c.name}')
+    tonic_intervals = intervals_from_tonic(stack)
+    c = Chord(tonic, tonic_intervals)
+    log(f'Relative to tonic, those are: {tonic_intervals}, which we call: {c.name}')
     return c
 
 def detect_interval_factors(intervals):

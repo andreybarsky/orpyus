@@ -10,14 +10,14 @@ from intervals import *
 
 # all accepted aliases for scale qualities - default suffix is listed first
 key_names = defaultdict(lambda: ' (unknown key)',
-   {(Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', ' major', 'maj', 'M'],
-    (Maj2, Min3, Per4, Per5, Min6, Min7): ['m', ' minor', 'min', ' natural minor'],
+   {(Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', 'maj', 'M', ' major'],
+    (Maj2, Min3, Per4, Per5, Min6, Min7): ['m', 'min', ' natural minor', ' minor',],
 
     (Maj2, Maj3, Per4, Per5, Min6, Maj7): [' harmonic major', 'M harmonic', 'maj harmonic'],
     (Maj2, Min3, Per4, Per5, Min6, Maj7): [' harmonic minor', 'm harmonic'],
     (Maj2, Min3, Per4, Per5, Maj6, Maj7): [' melodic minor', 'm melodic'], # TBI? melodic minor descending uses the natural minor scale
 
-    (Maj2, Maj3, Per5, Maj6): [' pentatonic', ' major pentatonic'],
+    (Maj2, Maj3, Per5, Maj6): [' pentatonic', ' major pentatonic', 'maj pentatonic', ' pentatonic major'],
     (Min3, Per4, Per5, Min7): ['m pentatonic', ' minor pentatonic', ' pentatonic minor'],
 
     (Maj2, Per4, Per5, Maj6): [' blues major', ' blues major pentatonic', ' blues'],

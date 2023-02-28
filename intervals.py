@@ -280,7 +280,7 @@ class Interval:
 
     def __sub__(self, other):
         if isinstance(other, Interval):
-            new_val = self.value - other_value
+            new_val = self.value - other.value
             if abs(new_val) <= 12:
                 return Interval(new_val)
             else:
@@ -574,6 +574,21 @@ class ExtendedInterval(IntervalDegree):
 
     # def __neg__(self):
         # return ExtendedInterval(-self.value, self.degree)
+
+# from a list of intervals-from-tonic (e.g. a key specification), get the corresponding stacked intervals:
+def stacked_intervals(tonic_intervals):
+    stack = [tonic_intervals]
+    for i, interval in enumerate(tonic_intervals[1:]):
+        prev_interval = stack[-1]
+        next_interval = interval - prev_interval
+        stack.append(next_interval)
+    return stack
+# opposite operation: from a list of stacked intervals, get the intervals-from-tonic:
+def intervals_from_tonic(interval_stack):
+    tonic_intervals = [interval_stack[0]]
+    for i in interval_stack[1:]:
+        tonic_intervals.append(tonic_intervals[-1] + i)
+    return tonic_intervals
 
 # interval aliases:
 
