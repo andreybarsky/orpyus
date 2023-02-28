@@ -99,9 +99,9 @@ class Chord:
     @staticmethod
     def from_notes(notelist):
         candidate = most_likely_chord(notelist)
-        if candidate.tonic != notes[0]:
+        if candidate.tonic != notelist[0]:
             # inversion?
-            candidate.set_inversion(root_note=notelist[0])
+            candidate.set_inversion(note=notelist[0])
         return candidate
 
     ### to do: inversions?
@@ -235,7 +235,6 @@ class Chord:
 
         self.octave_span = max([i.octave_span for i in self.intervals])
 
-
         # formulate unique intervals to determine chord naming
         self.unique_intervals = []   # set of intervals that appear at least once in this chord
         self.repeated_intervals = [] # intervals that appear multiple times in this chord
@@ -260,6 +259,7 @@ class Chord:
         self.factors = {f: (self.tonic + i.value) for f, i in self.factor_intervals.items() if i is not None}
 
         self.fundamental_notes = tuple(self.factors.values()) # the tuple used to determine chord name
+
         self.notes = [self.tonic + i.value for i in self.intervals] # this one includes octaves and repeats and so on
 
         # figure out the proper/common name for its quality (m, dim7, etc.)
@@ -270,6 +270,11 @@ class Chord:
         self.prefer_sharps = detect_sharp_preference(self.tonic, quality=self.suffix, default=True if prefer_sharps is None else prefer_sharps)
         # set tonic note to use preferred sharp convention:
         self.tonic._set_sharp_preference(self.prefer_sharps)
+        # go back and set sharp preference inside note and factors, now that we've determined it
+        for n in self.notes:
+            n._set_sharp_preference(self.prefer_sharps)
+        for n in self.factors.values():
+            n._set_sharp_preference(self.prefer_sharps)
 
         # now we name the chord:
         self.name = self.tonic.name + suffix
@@ -288,22 +293,6 @@ class Chord:
                 self.set_inversion(note=root) # this re-sets name if called
             elif isinstance(root, (int, Interval)):
                 self.set_inversion(interval=root)
-            # if isinstance(root, Note):
-            #     self.root = root
-            #     self.root_interval = self.root_note - self.tonic
-            #     if self.root_interval < 0:
-            #         self.root_interval = -self.root_interval
-            # elif isinstance(root, int):
-            #     self.root_interval = Interval(root)
-            #     self.root_note = self.tonic + self.root_interval
-            #     if self.root_interval < 0:
-            #         self.root_interval = -self.root_interval
-            # elif isinstance(root, Interval):
-            #     self.root_interval = root
-            #     self.root_note = self.tonic + self.root_interval
-            #
-            # if abs(self.root_interval) > 0:
-            #     self.inverted = True
         else:
             self.root = self.tonic
             self.root_interval = 0
@@ -489,6 +478,46 @@ class Chord:
         self.name = self.tonic.name + self.suffix
         for c in self.notes:
             c._set_sharp_preference(preference)
+
+    def _get_flags(self):
+        """Returns a list of the boolean flags associated with this object"""
+        flags_names = {
+                       self.inverted: 'inverted',
+                       self.minor: 'minor',
+                       self.major: 'major',
+                       self.suspended: 'suspended',
+                       self.diminished: 'diminished',
+                       self.augmented: 'augmented',
+                       self.indeterminate: 'indeterminate',
+                       self.fifth_chord: 'fifth_chord',
+                       self.extended: 'extended',
+
+                       }
+        return [string for attr, string in flags_names.items() if attr]
+
+    def properties(self):
+        flags = ', '.join(self._get_flags())
+        return f"""
+        {str(self)}
+        Type:           {type(self)}
+        Name:           {self.name}
+        Intervals:      {self.intervals}
+         (unique):      {self.unique_intervals}
+        OctaveSpan:     {self.octave_span}
+        Notes:          {self.notes}
+         (fundamental): {self.fundamental_notes}
+        Factors:        {self.factors}
+        Tonic:          {self.tonic}
+          (root):       {self.root}
+        Suffix:         {self.suffix}
+        Quality:        {self.quality}
+        SharpPref:      {self.prefer_sharps}
+
+        Flags:          {flags}
+        ID:             {id(self)}"""
+
+    def summary(self):
+        print(self.properties())
 
 
 

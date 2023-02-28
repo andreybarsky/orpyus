@@ -33,3 +33,50 @@ class TestSuite:
             raise Exception('Test failed')
 
 test = TestSuite()
+
+def evaluate_membership(target, candidate):
+    """return a metric that can be used to determine how well <candidate> fits <target>,
+    so long as both have a meaningful __contains__ method to query their members,
+    and both contain the same types of objects (that have a meaningful __eq__ method)"""
+
+    t_in_c = 0 # how many of target's members are in candidate
+    c_in_t = 0 # how many of candidate's members are in target
+
+    for t_item in target:
+        if t_item in candidate:
+            t_in_c += 1         # t_in_ 
+    for c_item in candidate:
+        if c_item in target:
+            c_in_t += 1
+
+    # are c_in_t and t_in_c always the same? why?
+
+    # are these the right way round?
+    true_positives =
+
+    precision = c_in_t / len(candidate)
+    recall = t_in_c / len(target)
+
+    return precision, recall
+
+
+
+
+if __name__ == '__main__':
+    # some tests on membership evaluation
+    target = ['C', 'E', 'G', 'A']
+
+    # candidate is a subset of target:
+    print(evaluate_membership(target, ['C', 'E', 'G']))
+
+    # target is a subset of candidate:
+    print(evaluate_membership(target, ['C', 'E', 'G', 'A', 'Bb']))
+
+    # same length but a mismatch:
+    print(evaluate_membership(target, ['C', 'E', 'G', 'B']))
+
+    # perfect fit: (inverted)
+    print(evaluate_membership(target, ['A', 'C', 'E', 'G']))
+
+    # complete mess:
+    print(evaluate_membership(target, ['A', 'D#', 'Eb', 'Gb', 'B']))
