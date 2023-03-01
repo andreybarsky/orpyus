@@ -1,6 +1,6 @@
-import .notes as notes
-from .notes import OctaveNote
-from .chords import Chord, most_likely_chord
+import muse.notes as notes
+from muse.notes import OctaveNote
+from muse.chords import Chord, most_likely_chord
 import pdb
 
 class String(OctaveNote):

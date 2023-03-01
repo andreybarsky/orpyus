@@ -1,4 +1,4 @@
-from .notes import OctaveNote
+from muse.notes import OctaveNote
 
 ###
 import numpy as np

@@ -1,5 +1,5 @@
-from .intervals import *
-from .scales import Key, key_names
+from muse.intervals import *
+from muse.scales import Key, key_names
 
 mode_idx_names =     {1: 'ionian',
                   2: 'dorian',

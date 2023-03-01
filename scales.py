@@ -1,9 +1,9 @@
-import .notes as notes
-from .notes import Note
-from .chords import Chord, chord_names, detect_sharp_preference
-from .intervals import Interval, Min2, Maj2, Min3, Maj3, Per4, Per5, Min6, Maj6, Min7, Maj7
+import muse.notes as notes
+from muse.notes import Note
+from muse.chords import Chord, chord_names, detect_sharp_preference
+from muse.intervals import Interval, Min2, Maj2, Min3, Maj3, Per4, Per5, Min6, Maj6, Min7, Maj7
 
-from .util import log, test
+from muse.util import log, test
 from itertools import cycle
 from collections import defaultdict
 import pdb
@@ -201,6 +201,7 @@ class Key:
         # scales are 1-indexed which makes it hard to modso we correct here:
 
         root, third, fifth = self[degree], self[degree+2], self[degree+4]
+
         return KeyChord([root, third, fifth], key=self)
 
     def get_valid_chords(self):

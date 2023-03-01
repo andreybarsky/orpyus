@@ -1,136 +1,7 @@
-from .util import log, test
+from muse.util import log, test
 import pdb
 
-interval_degree_names = {
-                0: 'unison',
-                1: 'second', 2: 'second',
-                3: 'third', 4: 'third',
-                5: 'fourth',
-                6: 'fifth', 7: 'fifth',
-                8: 'sixth', 9: 'sixth',
-                10: 'seventh', 11: 'seventh',
-                12: 'octave',
-                13: 'ninth', 14: 'ninth',
-                15: 'tenth', 16: 'tenth',
-                17: 'eleventh'}
-
-degree_names = {1: 'unison',
-                2: 'second',
-                3: 'third',
-                4: 'fourth',
-                5: 'fifth',
-                6: 'sixth',
-                7: 'seventh',
-                8: 'octave',
-                9: 'ninth',
-                10: 'tenth',
-                11: 'eleventh'}
-
-### we could replace this dict with a procedural method that just parses value and quality?
-### update: we have, this is deprecated
-# interval_names = {
-#                 0: 'unison',
-#                 1: 'minor mecond',
-#                 2: 'major second',
-#                 3: 'minor third',
-#                 4: 'major third',
-#                 5: 'perfect fourth',
-#                 6: 'diminished fifth',
-#                 7: 'perfect fifth',
-#                 8: 'minor sixth',
-#                 9: 'sajor sixth',
-#                 10: 'minor seventh',
-#                 11: 'major seventh',
-#                 12: 'octave',
-#                 13: 'minor ninth',
-#                 14: 'major ninth',}
-
-default_interval_qualities = {
-                0: 'perfect',
-                1: 'minor',
-                2: 'major',
-                3: 'minor',
-                4: 'major',
-                5: 'perfect',
-                6: 'diminished',
-                7: 'perfect',
-                8: 'minor',
-                9: 'major',
-                10: 'minor',
-                11: 'major',
-                12: 'perfect',
-                }
-
-default_degree_qualities = {
-                1: 'perfect',
-                2: 'major',
-                3: 'major',
-                4: 'perfect',
-                5: 'perfect',
-                6: 'major',
-                7: 'major',
-                8: 'perfect'}
-
-# how many whole tones does each semitone interval correspond to (by default):
-default_interval_degrees = {
-                0: 1,
-                1:2, 2:2,
-                3:3, 4:3,
-                5:4,
-                6:5,  # ??? dim5 is more common than aug4 but both are weird
-                7:5,
-                8:6, 9:6,
-                10:7, 11:7,
-                12:8,
-                13:9, 14:9,
-                15:10, 16:10,
-                17: 11,
-                18: 12,
-                }
-
-# reverse mapping
-degree_major_intervals = {
-                1: 0, # unison
-                2: 2, # maj2
-                3: 4, # maj3
-                4: 5, # per4
-                5: 7, # per5
-                6: 9, # maj6
-                7: 11, # maj7
-                8: 12, # octave
-                9: 14, # maj9
-                10: 16, # maj10
-                11: 17, # per11
-                }
-
-### mapping scale degrees to valid semitone intervals for those degrees:
-degree_valid_intervals = {
-                 1: [0],
-                 2: [1,2], # min/maj 2nd
-                 3: [2,3,4,5], # dim/min/maj/aug 3rd
-                 4: [4,5,6], # dim/per/aug 4th
-                 5: [6,7,8], # dim/per/aug 5th
-                 6: [7,8,9,10], # dim/min/maj/aug 6th
-                 7: [9,10,11], # dim/min/maj 7th
-                 8: [12], # per8
-                 9: [13, 14], # min/maj 9th
-                 10: [14,15,16,17], # dim/min/maj/aug 10th
-                 11: [16,17,18], # dim/per/aug 11th
-                 }
-
-def is_perfect_degree(deg):
-    # unisons, fourths, and fifths are perfect
-    # as are their extended variants (octaves, 11ths, 12ths)
-    mod_deg = ((deg-1) % 7 ) + 1
-    if mod_deg in [1,4,5]:
-        return True
-    else:
-        return False
-
-# sort intervals by their mod values, rather than their raw values:
-def mod_sort(intervals):
-    return sorted(intervals, key=lambda x: x.mod)
-
+# bug: inversion of ExtendedIntervals doesn't seem to work
 
 class Interval:
 
@@ -191,9 +62,20 @@ class Interval:
             self.consonance = 0.5
         self.dissonant = not self.consonant
 
+    def _set_name(self):
+        """Intended to be used after value and degree have been assigned;
+        Sets self.name and self.interval_name to appropriate values given value and degree.
+        Inherited by DegreeInterval and ExtendedInterval."""
+
+        interval_name, qualifiers = self._get_interval_name()
+
+        qual_string = f' ({", ".join(qualifiers)})' if len(qualifiers) > 0 else ''
+
+        self.interval_name = interval_name
+        self.name = interval_name + qual_string
+
     def _get_octave_interval_name(self):
-        """Finds out what interval name should be in the case that self.mod is 0,
-        not inherited by subclasses"""
+        """Finds out what interval name should be in the case that self.mod is 0"""
         if self.octave_span == 0:
             interval_name = 'Unison'
         else:
@@ -208,7 +90,6 @@ class Interval:
         qualifiers = ['descending'] if self.descending else []
         return interval_name, qualifiers
 
-
     def _get_interval_name(self):
         """Called internally by set_name to figure out what to name this interval.
         Inherited by IntervalDegree or ExtendedInterval.
@@ -217,13 +98,19 @@ class Interval:
             but IntervalDegree sets self.quality differently, so this method still works there."""
 
         if self.mod != 0:
-            degree_name = degree_names[self.expected_degree] if self.degree is None else degree_names[self.degree]
+            degree = self.expected_degree if self.degree is None else self.degree
+            if degree in degree_names.keys():
+                degree_name = degree_names[degree]
+            else:
+                mod_degree = ((degree - 1) % 8) + 1
+                degree_name = degree_names[mod_degree]
+            # degree_name = degree_names[degree_to_name] if degree_to_name in degree_names.keys() else degree_names[((degree_to_name-1) % 12)+1]
             interval_name = f'{self.quality.capitalize()} {degree_name.capitalize()}'
 
             qualifiers = []
             if self.descending:
                 qualifiers.append('descending')
-            if self.compound:
+            if self.compound and not self.extended:
                 qualifiers.append('compound')
 
             return interval_name, qualifiers
@@ -249,19 +136,6 @@ class Interval:
                        }
         return [string for string, attr in flags_names.items() if attr]
 
-
-    def _set_name(self):
-        """Intended to be used after value and degree have been assigned;
-        Sets self.name and self.interval_name to appropriate values given value and degree.
-        Inherited by DegreeInterval and ExtendedInterval."""
-
-        interval_name, qualifiers = self._get_interval_name()
-
-        qual_string = f' ({", ".join(qualifiers)})' if len(qualifiers) > 0 else ''
-
-        self.interval_name = interval_name
-        self.name = interval_name + qual_string
-
     # interval constructor methods:
     def __add__(self, other):
         if isinstance(other, Interval):
@@ -271,7 +145,8 @@ class Interval:
             else:
                 return ExtendedInterval(new_val)
         elif isinstance(other, int):
-            return self.value + other
+            # cast to interval and call again recursively:
+            return self + Interval(other)
         else:
             raise TypeError('Intervals can only be added to integers or other Intervals')
 
@@ -286,9 +161,14 @@ class Interval:
             else:
                 return ExtendedInterval(new_val)
         elif isinstance(other, int):
-            return self.value - other
+            # cast to interval and call again recursively:
+            return self - Interval(other)
         else:
             raise TypeError('Intervals can only be subtracted from integers or other Intervals')
+
+    def __mod__(self, m):
+        """performs module on self.value and returns resulting interval"""
+        return Interval(self.value % m)
 
     def __neg__(self):
         """returns the inverted interval, which is distinct from the negative interval.
@@ -303,19 +183,20 @@ class Interval:
             return Interval(-self.value)
 
     def __eq__(self, other):
-        """Equality comparison for intervals - returns True if both have same number of signed semitones (but disregard degree and mod value)"""
+        """Enharmonic equivalence comparison for intervals - returns True if both have
+        same mod attr (but disregard degree and signed distance value)"""
         if isinstance(other, Interval):
-            return self.value == other.value
+            return self.value % 12 == other.value % 12
         elif isinstance(other, int):
-            return self.value == other
+            return self.value % 12 == other % 12
         else:
             raise TypeError('Intervals can only be compared to integers or other Intervals')
 
-    def __gt__(self, other):
+    def __ge__(self, other):
         if isinstance(other, Interval):
-            return self.value > other.value
+            return self.value >= other.value
         elif isinstance(other, int):
-            return self.value > other
+            return self.value >= other
         else:
             raise TypeError('Intervals can only be compared to integers or other Intervals')
 
@@ -334,6 +215,7 @@ class Interval:
         return other - self.value
 
     def __hash__(self):
+        """hash this interval in a way that preserves both its degree and value properties"""
         # unlike equality comparison, which compares only semitones,
         # we want the hash function to correctly distinguish between different chords,
         # e.g. to know that a (Aug3, Per5) chord is a sus4,
@@ -343,8 +225,14 @@ class Interval:
         string_to_hash = f'D{deg}V{self.value}'
         return hash(string_to_hash)
 
+    def __str__(self):
+        return f'<{self.value}:{self.name}>'
 
-    ### boolean validity checks for chord construction:
+    def __repr__(self):
+        return str(self)
+
+
+    #### boolean validity checks for chord construction:
     def valid_degree(self, deg):
         return self.mod in degree_valid_intervals[deg]
 
@@ -357,13 +245,7 @@ class Interval:
     def valid_seventh(self):
         return self.valid_degree(7)
 
-    def __str__(self):
-        return f'<{self.value}:{self.name}>'
-
-    def __repr__(self):
-        return str(self)
-
-    # summary function:
+    #### summary helper function:
     def properties(self):
         degree_str = f'{self.expected_degree}' if self.degree is None else self.degree
         degree_name_str = degree_names[self.expected_degree] if self.degree is None else degree_names[self.degree]
@@ -386,9 +268,168 @@ class Interval:
     def summary(self):
         print(self.properties())
 
+class NullInterval:
+    """has the attributes that an Interval has, but they are all None
+    (mostly used for defaultdict default values in chord factor detection)"""
+    def __init__(self):
+        self.value = None
+        self.mod = None
+        self.width = None
+        self.degree = None
+        self.quality = None
+
+class IntervalDegree(Interval):
+    """a distance between notes in semitones, that is also associated with a particular degree in a scale
+
+    the primary difference between this and the Interval class is in having
+    a self.degree attribute set (usually by init arg), which then determines
+    the self.quality attribute (which can be diminished or augmented, etc.)"""
+
+    def __init__(self, arg1=None, arg2=None, value=None, degree=None, quality=None, extended=False):
+        """initialises an IntervalDegree object from one of the following:
+        value, degree: integer denoting the semitone distance of this interval.
+               plus an optional second arg, another integer denoting the interval's scale degree or chord factor.
+               if degree is not given, assume it is the major/perfect degree corresponding to the value.
+
+        degree, quality: integer denoting the scale degree or chord factor of this interval,
+                plus an optional second arg, a string denoting the interval's quality
+                if quality is not given, assume it is 'major' or 'perfect' (depending on degree)
+
+        we assume that this method is called with arg1 or arg2 as positional args,
+        or with value/degree or degree/quality as keyword args.
+        """
+        self.extended = extended
+        # determine value, degree and quality from input args:
+        self.value, self.degree, self.quality = self._parse_input(arg1, arg2, value, degree, quality, extended=extended)
+
+        self.width = abs(self.value)
+
+        # whole-octave width, and interval width-within-octave (both strictly positive)
+        self.octave_span, self.mod = divmod(self.width, 12)
+
+        # must have this attr set for compatibility with parent class:
+        self.expected_degree = default_interval_degrees[self.mod] # degree is always in the range(1,8) for non-Extended intervals
+
+        self.compound = (self.width >= 12)
+
+        self._set_flags()
+        self._set_name()
+
+    #### main input/arg-parsing private method:
+
+    def _parse_input(self, arg1, arg2, value, degree, quality, extended=False):
+        """returns the correct value, degree, and quality, given either:
+        value and (optional) degree,
+          or
+        degree and (optional) quality,
+        whether provided positionally as arg1, or as explicit keywords.
+        """
+
+        if arg1 is not None:
+            # parse positional arg1, arg2 pair
+            # assert (value is None and degree is None and quality is None), "Received keyword arguments to IntervalDegree.__init__, but positional arguments have already been passed"
+
+            if arg2 is not None:
+                # determine whether arg1 is a value or a degree,
+                # depending on if arg2 is an integer (implying arg2 is degree and arg1 is value)
+                # or a string (implying arg2 is quality and arg1 is degree)
+                if isinstance(arg2, int):
+                    # arg2 is degree, so arg1 must be value
+                    value = arg1
+                    degree = arg2
+                    # determine quality:
+                    quality, degree = self._get_quality_and_degree(value, degree, extended=extended)
+                elif isinstance(arg2, str):
+                    # arg2 is quality, so arg1 must be degree
+                    quality = arg2
+                    degree = arg1
+                    # determine value:
+                    value, quality = self._get_value_and_quality(degree, quality)
+
+            elif arg2 is None:
+                # arg2 is not None, so we default to reading arg1 as an interval value
+                value = arg1
+                # check if we've been passed degree as keyword:
+                quality, degree = self._get_quality_and_degree(value, degree=degree, extended=extended)
+
+        else:
+            # use keyword arguments instead of positionals
+            assert (arg1 is None and arg2 is None), "Received positional arguments to IntervalDegree.__init__, but keyword arguments have already been passed"
+            if value is not None:
+                # value has been given, so rely on degree arg (if given) to determine quality:
+                assert quality is None, "Received value keyword arg to IntervalDegree.__init__, as well as quality keyword arg, which is incompatible"
+                quality, degree = self._get_quality_and_degree(value, degree, extended=extended)
+
+            elif degree is not None:
+                # initialise from degree without value,
+                # but use quality if it is given:
+                value, quality = self._get_value_and_quality(degree, quality)
+
+        return value, degree, quality
+
+    ## private input-parsing subroutines:
     @staticmethod
-    def from_degree(deg, quality=None):
-        """returns an Interval object for some desired degree and quality"""
+    def _get_quality_and_degree(value, degree, extended=False):
+        """determines correct degree given value and optional quality (default major/perfect)
+
+        this is the main distinguishing method of IntervalDegree class,
+        but it also works for ExtendedInterval."""
+
+        # differing behaviour for extended and non-extended chords:
+        mod_value = abs(value) % 12
+        if extended:
+            ext_value = abs(value)
+        else:
+            ext_value = mod_value
+
+        expected_degree = default_interval_degrees[ext_value] if ext_value in default_interval_degrees.keys() else default_interval_degrees[mod_value]
+
+        if degree is None:
+            # base case: fall back on major/perfect quality if degree is unspecified
+            degree = expected_degree
+            quality = default_interval_qualities[mod_value]
+            return quality, degree
+
+        else:
+            # main use case again: degree has been given,
+            # and we must auto-determine whether this is a dim or aug interval, etc.
+
+            # figure out the expected interval width for this degree
+            expected_major_interval = degree_major_intervals[degree]
+            # and calculate how far this interval is from the major/perfect interval value for that degree
+
+            diff = ext_value - expected_major_interval
+            # diff = quality_determining_value - expected_major_interval  # this line seems to break Aug9ths specifically, not sure why
+
+            if is_perfect_degree(degree):
+                diff_names = {  -2: 'double diminished',
+                                -1: 'diminished',
+                                 0: 'perfect',
+                                 1: 'augmented',
+                                 2: 'double augmented'}
+
+                log(f'Interval of mod-width {mod_value} corresponds to a perfect {expected_degree}th which has interval width: {expected_major_interval}')
+            else:
+                diff_names = {  -3: 'double diminished',
+                                -2: 'diminished',
+                                -1: 'minor',
+                                 0: 'major',
+                                 1: 'augmented',
+                                 2: 'double augmented'}
+                log(f'Interval has mod-width {mod_value}, asked to correspond to a {degree}th (where major has interval width:{expected_major_interval})')
+
+            if diff in diff_names.keys():
+                quality = diff_names[diff]
+                log(f'but is shifted by {diff} relative to {diff_names[0].lower()}, making it {quality}')
+                return quality, degree
+            else:
+                ### should never ever happen given other value-checks
+                raise ValueError(f'This error should never happen, but: Difference from expected major interval of {diff} is too large to be considered valid for this degree')
+                return 'invalid'
+
+    @staticmethod
+    def _get_value_and_quality(deg, quality=None):
+        """determines correct value given degree and optional quality (default major/perfect)"""
         major_value = degree_major_intervals[deg]
 
         if quality is None:
@@ -416,110 +457,13 @@ class Interval:
 
         modifier = quality_modifiers[quality]
         value = major_value + modifier
-        if deg < 8:
-            return IntervalDegree(value, degree=deg)
-        else:
-            return ExtendedInterval(value, degree=deg)
+        return value, quality
 
-class NullInterval:
-    """has the attributes that an Interval has, but they are all None
-    (useful for defaultdict default values in chord factor detection)"""
-    def __init__(self):
-        self.value = None
-        self.mod = None
-        self.width = None
-        self.degree = None
-        self.quality = None
+    def valid_degree(self, deg):
+        """IntervalDegree specific behaviour: is only considered valid for the degree it is defined to be"""
+        return deg == self.degree
 
-class IntervalDegree(Interval):
-    """a distance between notes, in semitones,
-    that is also associated with a particular degree in a scale,
-    which can be used to determine its quality.
-
-    Primary deviation from Interval class is having a self.degree attribute set (usually by init arg),
-    which then determines the object's self.quality attribute (that can be diminished or augmented, etc.)"""
-
-    def __init__(self, value, degree=None):
-        if isinstance(value, Interval):
-            # cast existing Interval object to IntervalDegree:
-            super().__init__(value.value)
-        elif isinstance(value, int):
-            super().__init__(value)
-        else:
-            raise TypeError(f'Expected integer or Interval as input arg to IntervalDegree init method, but got: {type(value)}')
-
-        ### IntervalDegree specific behaviour: auto detect quality
-        # if degree is None:
-        #     # if degree left unspecified, auto detect both degree and quality:
-        #     # (this is correctly inferred for all minor/major/perfect intervals, and assumes tritones to be dim5s)
-        #     self.degree = self.expected_degree
-        #     assert self.quality == default_interval_qualities[self.mod] # should have been set correctly by parent init method
-        #
-        # elif degree is not None:
-        #     # main use case of this class: explicitly specifying a degree that this interval belongs to
-        #     # (to distinguish between, for instance, a dim5 and an aug4, or an aug5 and a min6)
-        #     if not self.extended:
-        #         assert self.mod in degree_valid_intervals[degree], f"Interval of mod-width {self.mod} cannot be considered a {degree_names[degree]}"
-        #     self.degree = degree
-        self.degree = self.expected_degree if degree is None else degree
-        self.quality = self._get_quality()
-
-        # re-set name and flags to overwrite parent class behaviour:
-        self._set_flags()
-        self._set_name()
-
-
-    def _get_quality(self):
-        """Main distinguishing method of IntervalDegree class,
-        but works as well for ExtendedInterval:
-        computes and returns the quality of this interval (dim, min, perf, etc.)
-        based on its degree and value"""
-
-        # differing behaviour for extended and non-extended chords:
-        if self.extended:
-            quality_determining_value = self.value # true for ExtendedInterval
-        else:
-            quality_determining_value = self.mod  # true for IntervalDegree
-
-
-        if self.degree == self.expected_degree:
-            return self.quality # no need to change self.quality; it is already set correctly
-
-        elif self.degree != self.expected_degree:
-            # main use case again: we must auto-determine whether this is a dim or aug interval, etc.
-            # figure out the expected interval width for this degree
-            expected_major_interval = degree_major_intervals[self.degree]
-            # and calculate how far this interval is from the major/perfect interval value for that degree
-
-            diff = self.mod - expected_major_interval
-            # diff = quality_determining_value - expected_major_interval  # this line seems to break Aug9ths specifically, not sure why
-
-            if is_perfect_degree(self.degree):
-                diff_names = {  -2: 'double diminished',
-                                -1: 'diminished',
-                                 0: 'perfect',
-                                 1: 'augmented',
-                                 2: 'double augmented'}
-
-                log(f'Interval of mod-width {self.mod} corresponds to a perfect {self.expected_degree}th which has interval width: {expected_major_interval}')
-            else:
-                diff_names = {  -3: 'double diminished',
-                                -2: 'diminished',
-                                -1: 'minor',
-                                 0: 'major',
-                                 1: 'augmented',
-                                 2: 'double augmented'}
-                log(f'Interval has mod-width {self.mod}, asked to correspond to a {self.degree}th (where major has interval width:{expected_major_interval})')
-
-            if diff in diff_names.keys():
-                quality = diff_names[diff]
-                log(f'but is shifted by {diff} relative to {diff_names[0].lower()}, making it {quality}')
-                return quality
-            else:
-                ### should never ever happen given other value-checks
-                # raise ValueError(f'This error should never happen, but: Difference from expected major interval of {diff} is too large to be considered valid for this degree')
-                return 'invalid'
-
+    #### operators and magic methods that overwrite parent class:
     def __neg__(self):
         # overwrites parent class: preserves degree of the negated interval
         """returns the inverted interval, which is distinct from the negative interval.
@@ -543,17 +487,14 @@ class IntervalDegree(Interval):
         return f'«{self.value}:{self.name}»'
         # log(f'Initialised interval of width {self.value} and degree {self.degree} with name: {self.name}')
 
-    def valid_degree(self, deg):
-        """IntervalDegree specific behaviour: is only valid for the degree it is defined to be"""
-        return deg == self.degree
 
 
 class ExtendedInterval(IntervalDegree):
     """Intervals that are explicitly of degrees greater than 8,
     such as 9ths and 11ths for swanky jazz chords"""
-    def __init__(self, value, degree=None):
-        super().__init__(value, degree)
+    def __init__(self, arg1=None, arg2=None, value=None, degree=None, quality=None):
         self.extended = True
+        super().__init__(arg1, arg2, value, degree, quality, True)
 
         assert abs(self.value) > 12; "Intervals narrower than 13 semitones cannot be called 'Extended'"
 
@@ -562,24 +503,28 @@ class ExtendedInterval(IntervalDegree):
 
         ### ExtendedInterval specific behaviour: assign degree by value instead of mod
         self.expected_degree = default_interval_degrees[abs(self.value)] # degree can now be up to 11
-        if degree is None:
-            # if degree left unspecified, auto detect both degree and quality:
-            # (this is correctly inferred for all minor/major/perfect intervals, and assumes tritones to be dim5s)
-            self.degree = self.expected_degree
-            assert self.quality == default_interval_qualities[self.mod] # should have been set correctly by parent init method
-
-        elif degree is not None:
-            # main use case of this class: explicitly specifying a degree that this interval belongs to
-            # (to distinguish between, for instance, a dim5 and an aug4, or an aug5 and a min6)
-            # assert self.mod in degree_valid_intervals[degree], "Interval of mod-width {self.mod} cannot be considered a {degree_names[degree]}"
-            self.degree = degree
-            self.quality = self._get_quality()
+        self.compound = False
+        # if degree is None:
+        #     # if degree left unspecified, auto detect both degree and quality:
+        #     # (this is correctly inferred for all minor/major/perfect intervals, and assumes tritones to be dim5s)
+        #     self.degree = self.expected_degree
+        #     assert self.quality == default_interval_qualities[self.mod] # should have been set correctly by parent init method
+        #
+        # elif degree is not None:
+        #     # main use case of this class: explicitly specifying a degree that this interval belongs to
+        #     # (to distinguish between, for instance, a dim5 and an aug4, or an aug5 and a min6)
+        #     # assert self.mod in degree_valid_intervals[degree], "Interval of mod-width {self.mod} cannot be considered a {degree_names[degree]}"
+        #     self.degree = degree
+        #     self.quality = self._get_quality()
 
         self._set_flags()
         self._set_name()
 
+    def __str__(self):
+        return f'«<{self.value}:{self.name}>»'
+
     # def __neg__(self):
-        # return ExtendedInterval(-self.value, self.degree)
+    #     return ExtendedInterval(-self.value, self.degree)
 
 # from a list of intervals-from-tonic (e.g. a key specification), get the corresponding stacked intervals:
 def stacked_intervals(tonic_intervals):
@@ -595,6 +540,99 @@ def intervals_from_tonic(interval_stack):
     for i in interval_stack[1:]:
         tonic_intervals.append(tonic_intervals[-1] + i)
     return tonic_intervals
+
+# various useful mappings used in interval initialisation/parsing:
+
+degree_names = {1: 'unison',  2: 'second', 3: 'third',
+                4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh',
+                8: 'octave', 9: 'ninth', 10: 'tenth', 11: 'eleventh'}
+
+default_interval_qualities = {
+                0: 'perfect',
+                1: 'minor', 2: 'major',
+                3: 'minor', 4: 'major',
+                5: 'perfect',
+                6: 'diminished', 7: 'perfect',
+                8: 'minor', 9: 'major',
+                10: 'minor', 11: 'major',
+                12: 'perfect',
+                13: 'minor', 14: 'major',
+                15: 'minor', 16: 'major',
+                17: 'perfect',
+                18: 'minor'
+                }
+
+# how many whole tones does each semitone interval correspond to (by default):
+default_interval_degrees = {
+                0: 1,     # e.g. unison (0 semitones) )is degree 1
+                1:2, 2:2,   # seconds (1 or 2 semitones) are degree 2, etc.
+                3:3, 4:3,
+                5:4,
+                6:5,  # by convention: dim5 is more common than aug4
+                7:5,
+                8:6, 9:6,
+                10:7, 11:7,
+                12:8,
+                13:9, 14:9,
+                15:10, 16:10,
+                17: 11,
+                18: 12,
+                }
+
+# and the reverse mapping
+degree_major_intervals = {
+                1: 0, # unison
+                2: 2, # maj2
+                3: 4, # maj3
+                4: 5, # per4
+                5: 7, # per5
+                6: 9, # maj6
+                7: 11, # maj7
+                8: 12, # octave
+                9: 14, # maj9
+                10: 16, # maj10
+                11: 17, # per11
+                }
+
+# mapping intervals to the (default) names of their corresponding degrees:
+interval_degree_names = {i: degree_names[default_interval_degrees[i]] for i in range(1, 12)}
+
+# mapping degrees to whether their 'default' representation is major or perfect
+default_degree_qualities = {deg: default_interval_qualities[degree_major_intervals[deg]] for deg in range(1,9)}
+
+### mapping scale degrees to valid semitone intervals for those degrees:
+degree_valid_intervals = {
+                 1: [0],
+                 2: [1,2], # min/maj 2nd
+                 3: [2,3,4,5], # dim/min/maj/aug 3rd
+                 4: [4,5,6], # dim/per/aug 4th
+                 5: [6,7,8], # dim/per/aug 5th
+                 6: [7,8,9,10], # dim/min/maj/aug 6th
+                 7: [9,10,11], # dim/min/maj 7th
+                 8: [12], # per8
+                 9: [13, 14], # min/maj 9th
+                 10: [14,15,16,17], # dim/min/maj/aug 10th
+                 11: [16,17,18], # dim/per/aug 11th
+                 }
+
+#### utility functions:
+
+def is_perfect_degree(deg):
+    # unisons, fourths, and fifths are perfect
+    # as are their extended variants (octaves, 11ths, 12ths)
+    mod_deg = ((deg-1) % 7 ) + 1
+    if mod_deg in [1,4,5]:
+        return True
+    else:
+        return False
+
+# sort intervals by their mod values, rather than their raw values:
+def mod_sort(intervals):
+    # verify we've been given an iterable:
+    assert isinstance(intervals, (list, tuple)), "expected an iterable to mod_sort"
+    # verify that it contains only Interval objects:
+    assert False not in [isinstance(i, Interval) for i in intervals], "expected an iterable of Interval objects to mod_sort"
+    return sorted(intervals, key=lambda x: x.mod)
 
 # interval aliases:
 
@@ -629,15 +667,15 @@ Octave = Eightth = PerfectEightth = PerEightth = Perfect8th = Per8 = Per8th = P8
 
 MinorNinth = MinNinth = Minor9th = Minor9 = Min9 = Min9th = m9 = ExtendedInterval(13)
 MajorNinth = MajNinth = Major9th = Major9 = Maj9 = Maj9th = M9 = ExtendedInterval(14)
-# AugmentedNinth = AugNinth = Augmented9th = Aug9th = Aug9 = ExtendedInterval(15, degree=9)   # TBI bug to-be-fixed: Aug9 quality is wrongly detected as 'invalid'
+AugmentedNinth = AugNinth = Augmented9th = Aug9th = Aug9 = ExtendedInterval(15, degree=9)
 
-# DiminishedTenth = DimTenth = Diminished10th = Dim10th = Dim10 = ExtendedInterval(14, degree=10)
+DiminishedTenth = DimTenth = Diminished10th = Dim10th = Dim10 = ExtendedInterval(14, degree=10)
 MinorTenth = MinTenth = Minor10th = Minor10 = Min10 = Min10th = m10 = ExtendedInterval(15)
 MajorTenth = MajTenth = Major10th = Major10 = Maj10 = Maj10th = M10 = ExtendedInterval(16)
-# AugmentedTenth = AugTenth = Augmented10th = Aug10th = Aug10 = ExtendedInterval(17, degree=10)
+AugmentedTenth = AugTenth = Augmented10th = Aug10th = Aug10 = ExtendedInterval(17, degree=10)
 
-# DiminishedEleventh = DimEleventh = Diminished11th = Dim11th = Dim11 = ExtendedInterval(16, degree=11)
+DiminishedEleventh = DimEleventh = Diminished11th = Dim11th = Dim11 = ExtendedInterval(16, degree=11)
 PerfectEleventh = PerEleventh = Perfect11th = Perfect11 = Per11 = P11 = ExtendedInterval(17)
-# AugmentedEleventh = AugEleventh = Augmented11th = Aug11th = Aug11 = ExtendedInterval(18, degree=11)
+AugmentedEleventh = AugEleventh = Augmented11th = Aug11th = Aug11 = ExtendedInterval(18, degree=11)
 
 common_intervals = [P1, m2, M2, m3, M3, P4, Dim5, Per5, m6, M6, m7, M7, P8, m9, M9, m10, M10, P11]

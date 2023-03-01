@@ -1,5 +1,5 @@
-from .intervals import *
-from .chords import Chord
+from muse.intervals import *
+from muse.chords import Chord
 
 roman_numerals = {'I':   1,
                   'II':  2,

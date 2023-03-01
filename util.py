@@ -1,7 +1,7 @@
 VERBOSE = False
 
 class Log:
-    def __init__(self, VERBOSE=verbose):
+    def __init__(self, verbose=VERBOSE):
         self.verbose=verbose
 
     def __call__(self, msg):
@@ -33,28 +33,25 @@ class TestSuite:
 
 test = TestSuite()
 
-def evaluate_membership(target, candidate):
+def precision_recall(target, candidate):
     """return a metric that can be used to determine how well <candidate> fits <target>,
     so long as both have a meaningful __contains__ method to query their members,
     and both contain the same types of objects (that have a meaningful __eq__ method)"""
 
-    t_in_c = 0 # how many of target's members are in candidate
-    c_in_t = 0 # how many of candidate's members are in target
+    # in ML parlance: the candidate is the 'retrieved' set,
+    # and the target is the 'relevant' set
+    num_retrieved = len(candidate)
+    num_relevant = len(target)
 
-    for t_item in target:
-        if t_item in candidate:
-            t_in_c += 1         # t_in_
-    for c_item in candidate:
-        if c_item in target:
-            c_in_t += 1
+    relevant_retrieved = 0 # how many of target's members are in candidate (and vice-versa)
 
-    # are c_in_t and t_in_c always the same? why?
-    if t_in_c != c_in_t:
-        print('Found a case where t_in_c ({t_in_c}) does not equal c_in_t ({c_in_t}): \ntarget: {target} \ncandidate {candidate}')
+    # TBI: this naive implementation is O(n^2), could be improved if this turns out to be a bottleneck
+    for item in target:
+        if item in candidate:
+            relevant_retrieved += 1
 
-    # are these the right way round?
-    precision = c_in_t / len(candidate)  # i.e. validity
-    recall = t_in_c / len(target)        # i.e. completeness
+    precision = relevant_retrieved / num_retrieved    # i.e. validity
+    recall = relevant_retrieved / num_relevant        # i.e. completeness
 
     return precision, recall
 
