@@ -1,11 +1,11 @@
-from notes import OctaveNote
+from .notes import OctaveNote
 
 ###
 import numpy as np
 import sounddevice as sd
 import matplotlib.pyplot as plt
-import playsound
-from scipy.io.wavfile import write
+# import playsound
+# from scipy.io.wavfile import write
 
 
 def show(*arrs):

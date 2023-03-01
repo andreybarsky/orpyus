@@ -1,17 +1,17 @@
-import pdb
+import .notes as notes
+from .notes import Note
+from .chords import Chord, chord_names, detect_sharp_preference
+from .intervals import Interval, Min2, Maj2, Min3, Maj3, Per4, Per5, Min6, Maj6, Min7, Maj7
 
-import notes
-from notes import Note, Note
-from chords import Chord, chord_names, detect_sharp_preference
-from util import log, test
+from .util import log, test
 from itertools import cycle
 from collections import defaultdict
-from intervals import *
+import pdb
 
-# all accepted aliases for scale qualities - default suffix is listed first
+# all accepted aliases for scale qualities - default suffix is listed first, "proper" full name is listed last
 key_names = defaultdict(lambda: ' (unknown key)',
-   {(Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', 'maj', 'M', ' major'],
-    (Maj2, Min3, Per4, Per5, Min6, Min7): ['m', 'min', ' natural minor', ' minor',],
+   {(Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', 'maj', 'M', ' ionian', ' major'],
+    (Maj2, Min3, Per4, Per5, Min6, Min7): ['m', 'min', ' natural minor', ' aeolian', ' minor', ],
 
     (Maj2, Maj3, Per4, Per5, Min6, Maj7): [' harmonic major', 'M harmonic', 'maj harmonic'],
     (Maj2, Min3, Per4, Per5, Min6, Maj7): [' harmonic minor', 'm harmonic'],
@@ -23,7 +23,7 @@ key_names = defaultdict(lambda: ' (unknown key)',
     (Maj2, Per4, Per5, Maj6): [' blues major', ' blues major pentatonic', ' blues'],
     (Min3, Per4, Min6, Min7): [' blues minor', ' blues minor pentatonic', 'm blues'],
 
-    (Min2, Maj2, Min3, Per4, Dim5, Per5, Min6, Maj6, Min7, Maj7): [' chromatic'],
+    # (Min2, Maj2, Min3, Per4, Dim5, Per5, Min6, Maj6, Min7, Maj7): [' chromatic'], # not a key
     })
 
 ## dict mapping all accepted key quality names to lists of their intervals:
@@ -41,7 +41,7 @@ for intervals, names in key_names.items():
             key_intervals[key_name_alias[1:]] = intervals
 
         # build up whole-key-names (like 'C# minor')
-        for c in notes.notes:
+        for c in notes.chromatic_scale:
             # parse both flat and sharp note names:
             whole_name_strings = [f'{c.sharp_name}{key_name_alias}', f'{c.flat_name}{key_name_alias}']
             if len(key_name_alias) > 0 and key_name_alias[0] == ' ':
@@ -71,7 +71,7 @@ class KeyNote(Note):
 
         # inherit sharp preference from parent key:
         self.prefer_sharps = self.key.prefer_sharps
-        self.name = notes.specific_note_name(self.position, prefer_sharps=self.prefer_sharps)
+        self.name = notes.accidental_note_name(self.position, prefer_sharps=self.prefer_sharps)
 
     def __add__(self, other):
         # transposing a KeyNote stays within the same key:
@@ -126,32 +126,10 @@ class Key:
         or by passing a Note, Note, or string that can be cast to Note,
             (which we interpet as the key's tonic) and specifiying a quality
             like 'major', 'minor', 'harmonic', etc."""
-        ### parse name:
+        ### parse input:
+        self.tonic, self.intervals = self.parse_input(name, quality)
 
-        if quality is None: # assume major by default if quality is not given
-            quality = 'major'
 
-        # see if we can parse the first argument as a whole key name:
-        if isinstance(name, str) and name in whole_key_name_intervals.keys():
-            log(f'Initialising scale from whole key name: {name}')
-            self.tonic, self.intervals = whole_key_name_intervals[name]
-            # (we ignore the quality arg in this case)
-
-        else:
-            # get tonic from name argument:
-            if isinstance(name, Note):
-                log(f'Initialising scale from Note: {name}')
-                self.tonic = name
-            elif isinstance(name, Note):
-                log(f'Initialising scale from Note: {name}')
-                self.tonic = name.note
-            elif isinstance(name, str):
-                log(f'Initialising scale from string denoting tonic: {name}')
-                self.tonic = Note(name)
-            else:
-                raise TypeError(f'Expected to initialise Key with tonic argument of type Note, Note, or str, but got: {type(name)}')
-            # and get intervals from quality argument
-            self.intervals = key_intervals[quality]
 
         # get common suffix from inverted dict:
         self.suffix = key_names[self.intervals][0]
@@ -180,6 +158,7 @@ class Key:
         elif len(self) == 5:
             self.type = 'pentatonic'
         elif len(self) == 11:
+            ... # TBI: remove this, chromatic scales are not a key
             self.type = 'chromatic'
         else:
             self.type = f'{len(self)}-tonic' #  ???
@@ -187,6 +166,33 @@ class Key:
         # build up chords within scale:
         self.chords = [self.build_triad(i) for i in range(1, len(self)+1)]
         log('Initialised key: {self} ({self.scale})')
+
+
+    def parse_input(self, name, quality):
+        if quality is None: # assume major by default if quality is not given
+            quality = 'major'
+
+        # see if we can parse the first argument as a whole key name:
+        if isinstance(name, str) and name in whole_key_name_intervals.keys():
+            log(f'Initialising scale from whole key name: {name}')
+            tonic, intervals = whole_key_name_intervals[name]
+            # (we ignore the quality arg in this case)
+
+        else:
+            # get tonic from name argument:
+            if isinstance(name, Note):
+                log(f'Initialising scale from Note: {name}')
+                tonic = name
+                if isinstance(name, OctaveNote):
+                    log(f'OctaveNote was passed to Key for init but we ignore its octave attr, since Keys are abstract')
+            elif isinstance(name, str):
+                log(f'Initialising scale from string denoting tonic: {name}')
+                tonic = Note(name)
+            else:
+                raise TypeError(f'Expected to initialise Key with tonic argument of type Note, Note, or str, but got: {type(name)}')
+            # and get intervals from quality argument
+            intervals = key_intervals[quality]
+        return tonic, intervals
 
     def build_triad(self, degree: int):
         """Returns the triad chord built on the notes of this scale, with
@@ -329,12 +335,12 @@ class Key:
 
     def relative_minor(self):
         assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
-        rm_tonic = notes.relative_minors[self.tonic]
+        rm_tonic = chords.relative_minors[self.tonic]
         return Key(rm_tonic, 'minor')
 
     def relative_major(self):
         assert not self.major, f'{self} is already major, and therefore has no relative major'
-        rm_tonic = notes.relative_majors[self.tonic]
+        rm_tonic = chords.relative_majors[self.tonic]
         return Key(rm_tonic)
 
 
@@ -435,7 +441,7 @@ def most_likely_key(chordlist, return_probability=False):
 # construct circle of fifths:
 circle_of_fifths = {0: Key('C')}
 for i in range(1,12):
-    circle_of_fifths[i] = list(circle_of_fifths.values())[-1] + PerfectFifth
+    circle_of_fifths[i] = list(circle_of_fifths.values())[-1] + Per5
 co5s = circle_of_fifths
 
 circle_of_fifths_positions = {value:key for key,value in co5s.items()}

@@ -1,10 +1,10 @@
 
-import notes
-from notes import Note
-from intervals import *
+import .notes as notes
+from .notes import Note
+from .intervals import *
+from .util import log, test
 from collections import defaultdict
 
-from util import log, test
 import pdb
 
 # TBI: should root_interval be changed to root_degree?
@@ -60,6 +60,14 @@ for intervals, names in chord_names.items():
     for name in names:
         chord_intervals[name] = intervals
 
+# relative minors/majors of all chromatic notes:
+relative_minors = {c : (c - 3) for c in notes.chromatic_scale}
+relative_minors.update({c.sharp_name: (c-3).sharp_name for c in notes.chromatic_scale})
+relative_minors.update({c.flat_name: (c-3).flat_name for c in notes.chromatic_scale})
+
+relative_majors = {value:key for key,value in relative_minors.items()}
+
+
 # chords arranged vaguely in order of rarity, for auto chord detection/searching:
 common_chord_suffixes = ['', 'm', '5']
 uncommon_chord_suffixes = ['sus2', 'sus4', '7', 'maj7', 'm7']
@@ -67,9 +75,23 @@ rare_chord_suffixes = ['9', 'm9', 'maj9', 'add9', 'madd9', 'dim7', 'hdim7']
 very_rare_chord_suffixes = [v[0] for v in list(chord_names.values()) if v[0] not in (common_chord_suffixes + uncommon_chord_suffixes + rare_chord_suffixes)]
 chord_types = common_chord_suffixes + uncommon_chord_suffixes + rare_chord_suffixes + very_rare_chord_suffixes
 
+# some notes (as chord/key tonics) correspond to a preference for sharps or flats:
+# (though I think this applies to diatonic keys only?)
+sharp_tonic_names = ['G', 'D', 'A', 'E', 'B']
+flat_tonic_names = ['F', 'Bb', 'Eb', 'Ab', 'Db']
+neutral_tonic_names = ['C', 'Gb'] # no sharp/flat preference, fall back on default
+
+sharp_major_tonics = [Note(t) for t in sharp_tonic_names]
+flat_major_tonics = [Note(t) for t in flat_tonic_names]
+neutral_major_tonics = [Note(t) for t in neutral_tonic_names]
+
+sharp_minor_tonics = [relative_minors[Note(t)] for t in sharp_tonic_names]
+flat_minor_tonics = [relative_minors[Note(t)] for t in flat_tonic_names]
+neutral_minor_tonics = [relative_minors[Note(t)] for t in neutral_tonic_names]
 
 
-def detect_sharp_preference(tonic, quality='major', default=True):
+
+def detect_sharp_preference(tonic, quality='major', default=False):
     """detect if a chord should prefer sharp or flat labelling
     depending on its tonic and quality"""
     if isinstance(tonic, str):
@@ -77,16 +99,16 @@ def detect_sharp_preference(tonic, quality='major', default=True):
     assert isinstance(tonic, Note)
 
     if quality in chord_names[(Maj3, Per5)]: # aliases for 'major':
-        if tonic in notes.sharp_major_tonics:
+        if tonic in sharp_major_tonics:
             return True
-        elif tonic in notes.flat_major_tonics:
+        elif tonic in flat_major_tonics:
             return False
         else:
             return default
     elif quality in chord_names[(Min3, Per5)]: # aliases for 'minor'
-        if tonic in notes.sharp_minor_tonics:
+        if tonic in sharp_minor_tonics:
             return True
-        elif tonic in notes.flat_minor_tonics:
+        elif tonic in flat_minor_tonics:
             return False
         else:
             return default
@@ -194,7 +216,7 @@ class Chord:
 
             assert self.tonic.name in notes.valid_note_names, f'{self.tonic} is not a valid Chord tonic'
 
-            # detect inversions: (but also look out for min/maj chord names)
+            # detect inversions: (but also look out for min/maj chord names, because they can have a confounding slash in them)
             if '/' in name:
                 if len(name.split('/')) == 2 and 'min/maj' not in name and 'minor/major' not in name and 'm/m' not in name:
                     # inversion, not a minmaj
@@ -211,12 +233,13 @@ class Chord:
                     if len(root_name) == 1:
                         root = Note(root_name.upper())
                         # quality_idx = 1
-                    elif name[1] in ['#', '♯', 'b', '♭']:
+                    elif root_name[1] in ['#', '♯', 'b', '♭']:
                         root = Note(root_name[0].upper() + '#') if root_name[1] in ['#', '♯'] else Note(root_name[0].upper() + 'b')
                         # quality_idx = 2
                     else:
                         root = Note(root_name[0].upper())
                         # quality_idx = 1
+
 
             quality = name[quality_idx:].strip()
 
@@ -293,9 +316,12 @@ class Chord:
                 self.set_inversion(note=root) # this re-sets name if called
             elif isinstance(root, (int, Interval)):
                 self.set_inversion(interval=root)
+            if abs(self.root_interval) > 0:
+                self.inverted = True
         else:
             self.root = self.tonic
             self.root_interval = 0
+            self.inverted = False
 
 
 
@@ -482,18 +508,18 @@ class Chord:
     def _get_flags(self):
         """Returns a list of the boolean flags associated with this object"""
         flags_names = {
-                       self.inverted: 'inverted',
-                       self.minor: 'minor',
-                       self.major: 'major',
-                       self.suspended: 'suspended',
-                       self.diminished: 'diminished',
-                       self.augmented: 'augmented',
-                       self.indeterminate: 'indeterminate',
-                       self.fifth_chord: 'fifth_chord',
-                       self.extended: 'extended',
+                       'inverted': self.inverted,
+                       'minor': self.minor,
+                       'major': self.major,
+                       'suspended': self.suspended,
+                       'diminished': self.diminished,
+                       'augmented': self.augmented,
+                       'indeterminate': self.indeterminate,
+                       'fifth chord': self.fifth_chord,
+                       'extended': self.extended,
 
                        }
-        return [string for attr, string in flags_names.items() if attr]
+        return [string for string, attr in flags_names.items() if attr]
 
     def properties(self):
         flags = ', '.join(self._get_flags())
@@ -613,7 +639,7 @@ def rate_chords(notelist):
             unique_notes.append(Note(n))
     unique_notes = list(set(unique_notes))
 
-    for tonic in notes.notes:
+    for tonic in notes.chromatic_scale:
         for quality in chord_types:
             candidate = Chord(tonic, quality)
             belongs = 0
@@ -710,7 +736,7 @@ if __name__ == '__main__':
     test(Chord('Gbdom7'), Chord('Gb', 'dominant 7th'))
     Cn, En, Gn = notes.C, notes.E, notes.G
     test(Chord([Cn, En, Gn]), Chord(['C', 'E', 'G']))
-    test(Chord([Cn, En, Gn]), Cn.chord(4,7))
+    test(Chord([Cn, En, Gn]), Cn.chord([4,7]))
     test(Chord([Cn, En, Gn]), Cn.major())
     test(Chord('Cadd9'), Chord('C', [4, 7, 14]))
     test(Chord('Cm/maj7'), Chord('C', 'minor-major 7th'))

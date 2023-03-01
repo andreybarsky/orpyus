@@ -1,7 +1,7 @@
-from intervals import *
-from scales import Key, key_names
+from .intervals import *
+from .scales import Key, key_names
 
-mode_names =     {1: 'ionian',
+mode_idx_names =     {1: 'ionian',
                   2: 'dorian',
                   3: 'phrygian',
                   4: 'lydian',
@@ -33,5 +33,6 @@ for idx, key_spec in mode_intervals_from_tonic.items():
     if tuple(key_spec) in key_names.keys():
         print(f'{mode_names[idx]} is equivalent to:{key_names[tuple(key_spec)][-1]}')
 
+mode_names = {mode_idx_names[i]: mode_intervals_from_tonic[i] for i in range(1,8)}
 
 # print(mode_intervals_from_tonic[1])

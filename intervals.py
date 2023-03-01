@@ -1,4 +1,4 @@
-from util import log, test
+from .util import log, test
 import pdb
 
 interval_degree_names = {
@@ -233,21 +233,21 @@ class Interval:
     def _get_flags(self):
         """Returns a list of the boolean flags associated with this object"""
         flags_names = {
-                       self.unison: 'unison',
-                       self.minor: 'minor',
-                       self.major: 'major',
-                       self.perfect: 'perfect',
-                       self.diminished: 'diminished',
-                       self.augmented: 'augmented',
-                       self.ascending: 'ascending',
-                       self.descending:' descending',
-                       self.compound: 'compound',
-                       self.extended: 'extended',
-                       self.consonant: 'consonant',
-                       self.imperfect: 'imperfect',
-                       self.dissonant: 'dissonant',
+                       'unison': self.unison,
+                       'minor': self.minor,
+                       'major': self.major,
+                       'perfect': self.perfect,
+                       'diminished': self.diminished,
+                       'augmented': self.augmented,
+                       'ascending': self.ascending,
+                       'descending': self.descending,
+                       'compound': self.compound,
+                       'extended': self.extended,
+                       'consonant': self.consonant,
+                       'imperfect': self.imperfect,
+                       'dissonant': self.dissonant,
                        }
-        return [string for attr, string in flags_names.items() if attr]
+        return [string for string, attr in flags_names.items() if attr]
 
 
     def _set_name(self):
@@ -389,28 +389,34 @@ class Interval:
     @staticmethod
     def from_degree(deg, quality=None):
         """returns an Interval object for some desired degree and quality"""
-        major_value = degree_major_intervals(deg)
+        major_value = degree_major_intervals[deg]
 
         if quality is None:
             quality = 'perfect' if is_perfect_degree(deg) else 'major'
 
         if is_perfect_degree(deg):
-            name_variations = {'double diminished': -2,
-                               'diminished': -1,
-                               'perfect': 0,
-                               'augmented': 1,
-                               'double augmented': 2}
+            modifier_qualities = {  -2: ['double diminished', 'ddim', 'dd'],
+                                    -1: ['diminished', 'dim', 'd'],
+                                     0: ['perfect', 'perf', 'per', 'p'],
+                                     1: ['augmented', 'augm', 'aug', 'a', '+'],
+                                     2: ['double augmented', 'daug', 'da', '++']}
         else:
-            name_variations = {'double diminished': -3,
-                               'diminished': -2,
-                               'minor': -1,
-                               'major': 0,
-                               'augmented': 1,
-                               'double augmented': 2}
+            modifier_qualities = {  -3: ['double diminished', 'ddim', 'dd'],
+                                    -2: ['diminished', 'dim', 'd'],
+                                    -1: ['minor', 'min', 'm', '-'],
+                                     0: ['major', 'maj', 'M', ''],
+                                     1: ['augmented', 'augm', 'aug', 'a', '+'],
+                                     2: ['double augmented', 'daug', 'da', '++']}
 
-        modifier = name_variations[quality]
+        # inverse dict mapping all accepted chord quality names to lists of their intervals:
+        quality_modifiers = {}
+        for modifier, names in modifier_qualities.items():
+            for name in names:
+                quality_modifiers[name] = modifier
+
+        modifier = quality_modifiers[quality]
         value = major_value + modifier
-        if deg > 8:
+        if deg < 8:
             return IntervalDegree(value, degree=deg)
         else:
             return ExtendedInterval(value, degree=deg)
@@ -633,3 +639,5 @@ MajorTenth = MajTenth = Major10th = Major10 = Maj10 = Maj10th = M10 = ExtendedIn
 # DiminishedEleventh = DimEleventh = Diminished11th = Dim11th = Dim11 = ExtendedInterval(16, degree=11)
 PerfectEleventh = PerEleventh = Perfect11th = Perfect11 = Per11 = P11 = ExtendedInterval(17)
 # AugmentedEleventh = AugEleventh = Augmented11th = Aug11th = Aug11 = ExtendedInterval(18, degree=11)
+
+common_intervals = [P1, m2, M2, m3, M3, P4, Dim5, Per5, m6, M6, m7, M7, P8, m9, M9, m10, M10, P11]

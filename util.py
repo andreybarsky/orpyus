@@ -1,8 +1,7 @@
-
-verbose = False
+VERBOSE = False
 
 class Log:
-    def __init__(self, verbose=verbose):
+    def __init__(self, VERBOSE=verbose):
         self.verbose=verbose
 
     def __call__(self, msg):
@@ -44,18 +43,18 @@ def evaluate_membership(target, candidate):
 
     for t_item in target:
         if t_item in candidate:
-            t_in_c += 1         # t_in_ 
+            t_in_c += 1         # t_in_
     for c_item in candidate:
         if c_item in target:
             c_in_t += 1
 
     # are c_in_t and t_in_c always the same? why?
+    if t_in_c != c_in_t:
+        print('Found a case where t_in_c ({t_in_c}) does not equal c_in_t ({c_in_t}): \ntarget: {target} \ncandidate {candidate}')
 
     # are these the right way round?
-    true_positives =
-
-    precision = c_in_t / len(candidate)
-    recall = t_in_c / len(target)
+    precision = c_in_t / len(candidate)  # i.e. validity
+    recall = t_in_c / len(target)        # i.e. completeness
 
     return precision, recall
 

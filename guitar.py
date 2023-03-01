@@ -1,6 +1,6 @@
-import notes
-from notes import OctaveNote
-from chords import Chord, most_likely_chord
+import .notes as notes
+from .notes import OctaveNote
+from .chords import Chord, most_likely_chord
 import pdb
 
 class String(OctaveNote):
@@ -43,9 +43,11 @@ class Guitar:
             if first_string_fragment[-1] in ['b', '#']:
                 first_string_note = first_string_fragment
                 string_idx = 2
+                prefer_sharps = first_string_fragment[-1]  == '#' # use sharp or flat notation depending on what is used in input string
             else:
                 first_string_note = first_string_fragment[0]
                 string_idx = 1
+                prefer_sharps = True # but doesn't matter
             # first string is going to be in octave 1 or 2, find whichever is closest to E2:
             low_bass, high_bass = String(first_string_note + '1'), String(first_string_note + '2')
             low_dist, high_dist = abs(low_bass - default_bass), abs(high_bass - default_bass)
@@ -55,6 +57,7 @@ class Guitar:
             else:
                 first_string = high_bass
 
+            first_string._set_sharp_preference(prefer_sharps)
             self.open_strings = [first_string]
             prev_string = first_string
 
@@ -64,9 +67,11 @@ class Guitar:
                 if string_note_fragment[-1] in ['#', 'b']:
                     string_note = tuning[string_idx: string_idx+2]
                     string_idx += 2
+                    prefer_sharps = string_note_fragment[-1] == '#'
                 else:
                     string_note = tuning[string_idx]
                     string_idx += 1
+                    prefer_sharps = True # but doesn't matter
 
                 cur_octave = prev_string.octave
                 low_string, high_string = String(string_note + str(cur_octave)), String(string_note + str(cur_octave+1))
@@ -109,12 +114,13 @@ class Guitar:
                     pass
         return string_notes
 
+    def __contains__(self, item):
+        return item in self.open_strings
+
     def __call__(self, frets):
-        """gets the resulting notes from plucking the listed strings,
-        and returns the appropriate auto-detected Chord object"""
-        # TBI: turn this into a chord, but that requires parsing the tonic of chords where their first note is not the tonic
-        # requires some kind of notes.detect_chord method?
-        return most_likely_chord(self.__getitem__(frets))
+        """plucks each string according to the listed fret diagram, gets the
+        resulting notes, and returns the appropriate auto-detected Chord object"""
+        return most_likely_chord(self[frets])
 
     def __str__(self):
         tuning_letters = [string.chroma for string in self.open_strings]
