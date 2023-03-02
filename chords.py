@@ -422,7 +422,7 @@ class Chord:
             # otherwise: parsing the string as a chord tonic and a suffix has failed,
             # but we can try one more thing: parsing it as a string of note names
             else:
-                print(f'Reading {quality} as a chord quality failed, so instea we will try to read {name} as a series of notes')
+                log(f'Reading {quality} as a chord quality failed, so instea we will try to read {name} as a series of notes')
                 note_names = parse_out_note_names(name)
                 note_list = [Note(n) for n in note_names]
                 # and call recursively:
@@ -506,11 +506,16 @@ class Chord:
                 i = intervals[2]
                 if i.degree == 9 or i.valid_degree(9):
                     factors[9] = ExtendedInterval(i.value, 9)
-                # sevenths are more likely than sixths:
-                elif i.degree == 7 or i.valid_seventh():
+                # common sevenths are more likely than sixths:
+                elif i.degree == 7 or i.common_seventh():
                     factors[7] = IntervalDegree(i.value, 7)
+                # but major sixths are more likely than dim7s:
                 elif i.degree == 6 or i.valid_degree(6):
                     factors[6] = IntervalDegree(i.value, 6)
+                # ...which we catch here:
+                elif i.valid_seventh():
+                    factors[7] = IntervalDegree(i.value, 7)
+
             else:
                 # more than 4 notes, we can't make assumptions anymore
                 # so just loop through remaining intervals and use expected degrees:
@@ -738,36 +743,30 @@ class Chord:
         """return the chords that are closest to this one, in terms of major/minor relation
         and key distance."""
 
-
-
-
-
-
-
     def __len__(self):
         return len(self.unique_intervals) + 1
 
     def __contains__(self, item):
         return item in self.notes
 
-    # def __eq__(self, other):
-    #     """Compares enharmonic equivalence across Chords,
-    #     i.e. whether they have the same notes (but not necessarily in the same order)"""
-    #     # assert isinstance(other, Chord), 'Chords can only be compared to other Chords'
-    #     matching_notes = 0
-    #     for note in self.notes:
-    #         if note in other.notes:
-    #             matching_notes += 1
-    #     if matching_notes == len(self.notes) and len(self.notes) == len(other.notes):
-    #         return True
-    #     else:
-    #         return False
-
-    # alternative method:
     def __eq__(self, other):
         """Compares thoeretical equivalence across Chords,
         i.e. whether they have the same notes corresponding to the same factors"""
         return self.notes == other.notes
+
+    # enharmonic equality:
+    def __and__(self, other):
+        """Compares enharmonic equivalence across Chords,
+        i.e. whether they contain the exact same notes (but not necessarily in the same order)"""
+        assert isinstance(other, Chord), 'Chords can only be enharmonically compared to other Chords'
+        matching_notes = 0
+        for note in self.notes:
+            if note in other.notes:
+                matching_notes += 1
+        if matching_notes == len(self.notes) and len(self.notes) == len(other.notes):
+            return True
+        else:
+            return False
 
     def __add__(self, other):
         """Chord transposition, shift upwards by # semitones"""

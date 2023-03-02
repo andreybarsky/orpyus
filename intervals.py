@@ -184,6 +184,16 @@ class Interval:
             return Interval(-self.value)
 
     def __eq__(self, other):
+        """Value equivalence comparison for intervals - returns True if both have
+        same value (but disregard degree)"""
+        if isinstance(other, Interval):
+            return self.value == other.value
+        elif isinstance(other, int):
+            return self.value == other
+        else:
+            raise TypeError('Intervals can only be compared to integers or other Intervals')
+
+    def __and__(self, other):
         """Enharmonic equivalence comparison for intervals - returns True if both have
         same mod attr (but disregard degree and signed distance value)"""
         if isinstance(other, Interval):
@@ -242,6 +252,12 @@ class Interval:
 
     def valid_fifth(self):
         return self.valid_degree(5)
+
+    def common_seventh(self):
+        """special case: common 7-degree intervals (value 10 or 11) need to be
+        considered more common than 6ths, which are themselves more common than
+        the uncommon dim7 (value9). used by automatic chord detection."""
+        return self.mod in [10,11]
 
     def valid_seventh(self):
         return self.valid_degree(7)
