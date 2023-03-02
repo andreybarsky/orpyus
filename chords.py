@@ -1037,25 +1037,6 @@ def most_likely_chord(notelist, score=False, perfect_only=False):
         else:
             return None
 
-    # if len(result) > 0:
-    #     if isinstance(result, list):
-    #         # full match, most common chords first
-    #         probability = 1.00
-    #         c = result[0]
-    #     else:
-    #         c = list(result.keys())[0]
-    #         probability = list(result.values())[0]
-    #     if return_probability:
-    #         return c, probability
-    #     else:
-    #         return c
-    # else:
-    #     # nothing found
-    #     if return_probability:
-    #         return None, 0.0
-    #     else:
-    #         return None
-
 
 
 if __name__ == '__main__':

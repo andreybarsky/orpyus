@@ -2,6 +2,7 @@ import muse.notes as notes
 from muse.notes import Note
 from muse.chords import Chord, chord_names
 from muse.intervals import Interval, Min2, Maj2, Min3, Maj3, Per4, Per5, Min6, Maj6, Min7, Maj7
+from muse.modes import mode_names
 
 from muse.util import log, test
 from itertools import cycle
@@ -9,26 +10,49 @@ from collections import defaultdict
 import pdb
 
 # all accepted aliases for scale qualities - default suffix is listed first, "proper" full name is listed last
-key_names = defaultdict(lambda: ' (unknown key)',
-   {(Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', 'maj', 'M', ' ionian', ' major'],
-    (Maj2, Min3, Per4, Per5, Min6, Min7): ['m', 'min', ' natural minor', ' aeolian', ' minor', ],
+# (I think we don't need a defaultdict anymore? because Key will never be called as a series of intervals)
+key_names = { # defaultdict(lambda: ' (unknown key)',
+    (Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', 'maj', 'M', ' major'],
+    (Maj2, Min3, Per4, Per5, Min6, Min7): ['m', 'min', ' natural minor', ' minor'],
 
     (Maj2, Maj3, Per4, Per5, Min6, Maj7): [' harmonic major', 'M harmonic', 'maj harmonic'],
     (Maj2, Min3, Per4, Per5, Min6, Maj7): [' harmonic minor', 'm harmonic'],
-    (Maj2, Min3, Per4, Per5, Maj6, Maj7): [' melodic minor', 'm melodic'], # TBI? melodic minor descending uses the natural minor scale
+    (Maj2, Maj3, Per4, Per5, Min6, Min7): [' melodic major', 'M melodic', 'maj melodic'],
+    (Maj2, Min3, Per4, Per5, Maj6, Maj7): [' melodic minor', 'm melodic', ' jazz minor', ' athenian'], # note: ascending only
+    # "melodic minor" can refer to using the the natural minor scale when descending, but that is TBI
 
-    (Maj2, Maj3, Per5, Maj6): [' pentatonic', ' major pentatonic', 'maj pentatonic', ' pentatonic major'],
-    (Min3, Per4, Per5, Min7): ['m pentatonic', ' minor pentatonic', ' pentatonic minor'],
+    (Maj2, Maj3, Per5, Maj6): [' pentatonic', 'maj pentatonic', ' pentatonic major', ' major pentatonic'],
+    (Min3, Per4, Per5, Min7): ['m pentatonic', ' pentatonic minor', ' minor pentatonic'],
+    #
+    # (Maj2, Per4, Per5, Maj6): [' blues major', ' blues major pentatonic', ' blues'],
+    # (Min3, Per4, Min6, Min7): [' blues minor', ' blues minor pentatonic', 'm blues'],
 
-    (Maj2, Per4, Per5, Maj6): [' blues major', ' blues major pentatonic', ' blues'],
-    (Min3, Per4, Min6, Min7): [' blues minor', ' blues minor pentatonic', 'm blues'],
+    # (Min2, Maj2, Min3, Per4, Dim5, Per5, Min6, Maj6, Min7, Maj7): [' chromatic'], #### not a key!
+    } # )
 
-    # (Min2, Maj2, Min3, Per4, Dim5, Per5, Min6, Maj6, Min7, Maj7): [' chromatic'], # not a key
-    })
+# keys arranged vaguely in order of rarity, for auto key detection/searching:
+common_key_suffixes = ['', 'm']
+uncommon_key_suffixes = [' harmonic minor', ' melodic minor']
+rare_key_suffixes = [' harmonic major', ' melodic major']
+
+# from modes module, add the 'common' modes: (those of major/minor natural keys)
+common_mode_suffixes = [] # list of mode suffixes of natural keys
+for i, (mode_name, intervals) in enumerate(mode_names.items()):
+    mode_degree = i+1
+    num_suffixes = {1: 'st', 2: 'nd', 3: 'rd', 4: 'th', 5: 'th', 6: 'th', 7: 'th'}
+    mode_aliases = [f' {mode_name}', f'mode{mode_degree}', f'{mode_degree}{num_suffixes[mode_degree]} mode']
+    common_mode_suffixes.append(mode_aliases[0])
+    dict_key = tuple(intervals)
+    if dict_key in key_names:
+        # e.g. aeolian mode is just natural minor, so we extend that dict entry:
+        key_names[dict_key].extend(mode_aliases)
+    else:
+        # not already in dict, so add this mode to it
+        key_names[dict_key] = mode_aliases
 
 ## dict mapping all accepted key quality names to lists of their intervals:
 key_intervals = {}
-# dict mapping valid whole names of keys to a tuple: (tonic, intervals)
+# dict mapping valid whole names of each possible key (for every tonic) to a tuple: (tonic, intervals)
 whole_key_name_intervals = {}
 
 for intervals, names in key_names.items():
@@ -55,10 +79,10 @@ for intervals, names in key_names.items():
 flat_order = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
 sharp_order = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
 
-# keys arranged vaguely in order of rarity, for auto key detection/searching:
-common_key_suffixes = ['', 'm']
-uncommon_key_suffixes = [' harmonic minor', 'pentatonic', 'm pentatonic']
-rare_key_suffixes = [' harmonic major', ' melodic minor', ' blues major', ' blues minor']
+
+# # all others:
+# very_rare_key_suffixes = [v[0] for v in list(key_names.values()) if v[0] not in (common_key_suffixes + uncommon_key_suffixes + rare_key_suffixes)]
+
 
 class KeyNote(Note):
     def __init__(self, *args, key, **kwargs):
@@ -155,21 +179,21 @@ class Key:
         # and name self accordingly:
         self.name = f'{self.tonic.name}{self.suffix}'
 
-        # form notes in scale:
+        # form notes in diatonic scale:
         self.scale = [self.tonic]
         for i in self.intervals:
             new_note = self.tonic + i
             self.scale.append(new_note)
-        # what kind of scale are we?
-        if len(self) == 7:
-            self.type = 'diatonic'
-        elif len(self) == 5:
-            self.type = 'pentatonic'
-        elif len(self) == 11:
-            ... # TBI: remove this, chromatic scales are not a key
-            self.type = 'chromatic'
-        else:
-            self.type = f'{len(self)}-tonic' #  ???
+        # # what kind of scale are we?
+        # if len(self) == 7:
+        #     self.type = 'diatonic'
+        # elif len(self) == 5:
+        #     self.type = 'pentatonic'
+        # elif len(self) == 11:
+        #     ... # TBI: remove this, chromatic scales are not a key
+        #     self.type = 'chromatic'
+        # else:
+        #     self.type = f'{len(self)}-tonic' #  ???
 
         # build up chords within scale:
         self.chords = [self.build_triad(i) for i in range(1, len(self)+1)]
@@ -416,41 +440,202 @@ def rate_keys(chordlist):
 
     return full_matches, partial_matches
 
-def detect_keys(chordlist, max=5, threshold=0.7):
-    """return a list of the most likely keys that a notelist could belong to,
-    with the very first in the list being a likely first guess"""
-    key_matches, key_ratings = rate_keys(chordlist)
-    if len(key_matches) > 0:
-        return key_matches
-    else:
-        names, ratings = list(key_ratings.keys()), list(key_ratings.values())
-        ranked_keys = sorted(names, key=lambda n: key_ratings[n], reverse=True)
-        ranked_ratings = sorted(ratings, reverse=True)
 
-        ranked_keys = [c for i, c in enumerate(ranked_keys) if ranked_ratings[i] > threshold]
-        ranked_ratings = [r for i, r in enumerate(ranked_ratings) if r > threshold]
+# largely copy-pasted from chords.matching_chords:
 
-        # don't clip off keys with the same rating as those left in the list:
-        truncated_ratings = ranked_ratings[:max]
-        if (len(truncated_ratings) == max) and truncated_ratings[-1] == ranked_ratings[max]:
-            final_ratings = [r for i, r in enumerate(ranked_ratings[max:]) if r == truncated_ratings[-1]]
-            truncated_ratings.extend(final_ratings)
-        truncated_keys = ranked_keys[:len(truncated_ratings)]
-        return {c: r for c, r in zip(truncated_keys, truncated_ratings)}
+def matching_keys(chordlist, score=False):
+    """given an iterable of Chord objects,
+    determine the Keys that those chords could belong to.
 
-def most_likely_key(chordlist, return_probability=False):
-    result = detect_keys(chordlist, threshold=0)
-    if isinstance(result, list):
-        # full match, most common chords first
-        probability = 1.00
-        c = result[0]
+    returns an ordered dict with Keys as keys,
+    and (precision, recall) tuples as values for those keys"""
+
+    # parse the items in chordlist, casting to Chord if necessary, and find list of unique ones:
+    unique_chords = []
+    chord_weights = {}
+    for i, c in enumerate(chordlist):
+        if isinstance(c, Chord):
+            chord = Chord(c.tonic, c.suffix)
+        elif isinstance(c, string):
+            chord = Chord(c)
+
+        if chord not in unique_chords:
+            unique_chords.append(chord)
+            chord_weights[chord] = 1
+        else:
+            # increment weight of this chord for the final ranking:
+            chord_weights[chord] += 1
+
+        if i == 0:
+            # first chord in the progression also gets weighted higher:
+            chord_weights[chord] += 2
+
+    unique_chords = list(set(unique_chords))
+
+    perfect_matches = {}
+    precise_matches = {}
+    partial_matches = {}
+
+    for tonic in notes.chromatic_scale:
+        for quality in key_types:
+            candidate = Key(tonic, quality)
+
+            # get precision and recall which are the two most important metrics to sort by
+            precision, recall = precision_recall(unique_notes, candidate)
+            # but also use a third, subjective value by which to tiebreak
+            likelihood_score = 1.
+
+            ### we evaluate subjective likelihood value based on whatever I want:
+
+            # less likely if tonic is not the first note in the notelist
+            if candidate.tonic != notelist[0] and notelist[0] in candidate.notes:
+                likelihood_score -= .2
+                # initialise an inverted key that we pass as match if it fits perfectly
+                inversion = Key(candidate.tonic, candidate.suffix, root=notelist[0])
+            elif notelist[0] not in candidate.notes:
+                # less lkely if the the notelist and candidate don't share a tonic:
+                likelihood_score -= .1
+                inversion = None
+            else:
+                inversion = None
+
+            # non-major keys are slightly less likely:
+            if not candidate.major:
+                likelihood_score -= .1
+
+            # less likely for rarer key types
+            if candidate.suffix in uncommon_key_suffixes:
+                likelihood_score -= .2
+            elif candidate.suffix in rare_key_suffixes:
+                likelihood_score -= .3
+            elif candidate.suffix in very_rare_key_suffixes:
+                likelihood_score -= .5
+            elif candidate.suffix in legendary_key_suffixes:
+                likelihood_score -= .7
+
+            # which dict does this key candidate go to?
+            if precision == 1 and recall == 1:
+                target_dict = perfect_matches
+            elif recall == 1:
+                target_dict = partial_matches
+            elif precision == 1:
+                target_dict = precise_matches
+            else:
+                target_dict = None
+
+            # add candidate to chosen dict:
+            if target_dict is not None:
+                ### troubleshooting
+                if candidate in target_dict.keys():
+                    print(f"Trying to add {candidate} to target_dict but it's already there")
+                    for key in target_dict.keys():
+                        if hash(key) == hash(candidate):
+                            print(key)
+                            import pdb; pdb.set_trace()
+                ###
+
+                target_dict[candidate] = (round(precision,1), round(recall,1), round(likelihood_score,1))
+
+                if inversion is not None:
+                    # add this inversion as well as the non-inverted key, but make the inversion more likely
+                    ### troubleshooting
+                    if inversion in target_dict.keys():
+                        print(f" And trying to add {inversion} to target_dict but it's already there")
+                        for key in target_dict.keys():
+                            if hash(key) == hash(inversion):
+                                print(key)
+                                import pdb; pdb.set_trace()
+                    ### troubleshooting
+                    target_dict[inversion] = (round(precision,1), round(recall,1), round(likelihood_score + .2, 1))
+
+    # sort matches by their distinguishing values:
+    # i.e. perfect matches by likelihood:
+    perfect_match_list = sorted(perfect_matches.keys(), key=lambda x: perfect_matches[x][2], reverse=True)
+    # but  sort perfect recall items by precision (then by likelihood)
+    partial_match_list = sorted(partial_matches.keys(), key=lambda x: (partial_matches[x][0], partial_matches[x][2]), reverse=True)
+    # and sort perfect precision items by recall (then by likelihood)
+    precise_match_list = sorted(precise_matches.keys(), key=lambda x: (precise_matches[x][1], precise_matches[x][2]), reverse=True)
+
+    if score:
+        # return keys and their (prec, rec, likelihood) scores
+        perfect_matches = {name: perfect_matches[name] for name in perfect_match_list}
+        partial_matches = {name: partial_matches[name] for name in partial_match_list}
+        precise_matches = {name: precise_matches[name] for name in precise_match_list}
+
+        # return concatenation of 3 groups:
+        all_matches = perfect_matches
+        all_matches.update(partial_matches)
+        all_matches.update(precise_matches)
+        return all_matches
     else:
-        c = list(result.keys())[0]
-        probability = list(result.values())[0]
-    if return_probability:
-        return c, probability
+        # just return the keys themselves
+
+        return perfect_match_list + partial_match_list + precise_match_list
+
+def most_likely_key(notelist, score=False, perfect_only=False):
+    """makes a best guess at an unknown key from a list of Note objects
+    (or of objects that can be cast to Notes) and returns it.
+    if score=True, also returns a tuple of that key's (precision, recall, likelihood) values
+    if perfect_only=True, only returns a match if its precision and recall are both 1"""
+    # dict of matches and their (prec, rec) scores:
+    matches = matching_keys(notelist, score=True)
+
+    # match is the top match, or None if none were found
+    match = list(matches.keys())[0] if len(matches) > 0 else None
+    precision, recall, likelihood = matches[match]
+
+    if score:
+        if match is not None:
+            if (not perfect_only) or (precision==1 and recall == 1):
+                return match, (precision, recall, likelihood)
+        else:
+            return None, (0., 0., 0.)
     else:
-        return c
+        if (not perfect_only) or (precision==1 and recall == 1):
+            return match
+        else:
+            return None
+
+
+
+uncommon_mode_suffixes = [] # modes of melodic/harmonic minor keys
+rare_mode_suffixes = [] # modes of melodic/harmonic major keys
+
+# def detect_keys(chordlist, max=5, threshold=0.7):
+#     """return a list of the most likely keys that a notelist could belong to,
+#     with the very first in the list being a likely first guess"""
+#     key_matches, key_ratings = rate_keys(chordlist)
+#     if len(key_matches) > 0:
+#         return key_matches
+#     else:
+#         names, ratings = list(key_ratings.keys()), list(key_ratings.values())
+#         ranked_keys = sorted(names, key=lambda n: key_ratings[n], reverse=True)
+#         ranked_ratings = sorted(ratings, reverse=True)
+#
+#         ranked_keys = [c for i, c in enumerate(ranked_keys) if ranked_ratings[i] > threshold]
+#         ranked_ratings = [r for i, r in enumerate(ranked_ratings) if r > threshold]
+#
+#         # don't clip off keys with the same rating as those left in the list:
+#         truncated_ratings = ranked_ratings[:max]
+#         if (len(truncated_ratings) == max) and truncated_ratings[-1] == ranked_ratings[max]:
+#             final_ratings = [r for i, r in enumerate(ranked_ratings[max:]) if r == truncated_ratings[-1]]
+#             truncated_ratings.extend(final_ratings)
+#         truncated_keys = ranked_keys[:len(truncated_ratings)]
+#         return {c: r for c, r in zip(truncated_keys, truncated_ratings)}
+#
+# def most_likely_key(chordlist, return_probability=False):
+#     result = detect_keys(chordlist, threshold=0)
+#     if isinstance(result, list):
+#         # full match, most common chords first
+#         probability = 1.00
+#         c = result[0]
+#     else:
+#         c = list(result.keys())[0]
+#         probability = list(result.values())[0]
+#     if return_probability:
+#         return c, probability
+#     else:
+#         return c
 
 
 # construct circle of fifths:
