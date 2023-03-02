@@ -103,22 +103,22 @@ for intervals, names in chord_names.items():
         # append legendary chord list:
         legendary_chord_suffixes.append(altered_names[0])
 
-    # add4 chords
-    if len(intervals) == 2: # for triads only
-        if Aug3 not in intervals: # a sus4 can't be an add4
+    # add4/11 chords
+    if len(intervals) in [2,3]: # for triads only
+        # add4s:
+        if len(intervals) == 2 and Aug3 not in intervals: # a sus4 can't be an add4
             add4_intervals = tuple([intervals[0]] + [Per4] + list(intervals[1:]))
             altered_names = [f'{name}add4' if ' ' not in name else f'{name} add4' for name in names]
+            # but note that these are also equivalent to add11s
+            # (we reserve the add11 extended interval for chords with 6ths/7ths)
+            altered_names.extend([f'{name}add11' if ' ' not in name else f'{name} add11' for name in names])
             add4_chord_names[add4_intervals] = altered_names
-            #add4s aren't that legendary:
             very_rare_chord_suffixes.append(altered_names[0])
-
-    # add11 chords
-    if len(intervals) == 3: # only for tetrads
-        if intervals[-1] != Maj9: # and not for add9s:
+        # add11s
+        elif len(intervals) == 3 and intervals[-1] != Maj9: # add9s can't be add11s
              add11_intervals = tuple(list(intervals) + [Per11])
              altered_names = [f'{name}add11' if ' ' not in name else f'{name} add11' for name in names]
              add11_tetrad_names[add11_intervals] = altered_names
-             # append legendary chord list:
              legendary_chord_suffixes.append(altered_names[0])
 
 
