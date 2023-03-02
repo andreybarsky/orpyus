@@ -23,6 +23,7 @@ class Interval:
 
         self.compound = (self.width >= 12)
         self.extended = False # only False for Inteval class; made True by ExtendedInterval
+        self.factor_value = self.mod # these are always the same for Interval class, but different for ExtendedInterval
 
         self.degree = None # only true for Interval class; overwritten for IntervalDegree
 
@@ -306,6 +307,7 @@ class IntervalDegree(Interval):
 
         # whole-octave width, and interval width-within-octave (both strictly positive)
         self.octave_span, self.mod = divmod(self.width, 12)
+        self.factor_value = self.mod
 
         # must have this attr set for compatibility with parent class:
         self.expected_degree = default_interval_degrees[self.mod] # degree is always in the range(1,8) for non-Extended intervals
@@ -378,7 +380,7 @@ class IntervalDegree(Interval):
         # differing behaviour for extended and non-extended chords:
         mod_value = abs(value) % 12
         if extended:
-            ext_value = abs(value)
+            ext_value = abs(value) % 24
         else:
             ext_value = mod_value
 
@@ -490,32 +492,21 @@ class IntervalDegree(Interval):
 
 
 class ExtendedInterval(IntervalDegree):
-    """Intervals that are explicitly of degrees greater than 8,
+    """Intervals that are explicitly of degrees greater than 8, (but never more than 16)
     such as 9ths and 11ths for swanky jazz chords"""
     def __init__(self, arg1=None, arg2=None, value=None, degree=None, quality=None):
         self.extended = True
         super().__init__(arg1, arg2, value, degree, quality, True)
-
         assert abs(self.value) > 12; "Intervals narrower than 13 semitones cannot be called 'Extended'"
-
-        # Extended intervals are only compound if they're even bigger than they're meant to be:
 
 
         ### ExtendedInterval specific behaviour: assign degree by value instead of mod
         self.expected_degree = default_interval_degrees[abs(self.value)] # degree can now be up to 11
         self.compound = False
-        # if degree is None:
-        #     # if degree left unspecified, auto detect both degree and quality:
-        #     # (this is correctly inferred for all minor/major/perfect intervals, and assumes tritones to be dim5s)
-        #     self.degree = self.expected_degree
-        #     assert self.quality == default_interval_qualities[self.mod] # should have been set correctly by parent init method
-        #
-        # elif degree is not None:
-        #     # main use case of this class: explicitly specifying a degree that this interval belongs to
-        #     # (to distinguish between, for instance, a dim5 and an aug4, or an aug5 and a min6)
-        #     # assert self.mod in degree_valid_intervals[degree], "Interval of mod-width {self.mod} cannot be considered a {degree_names[degree]}"
-        #     self.degree = degree
-        #     self.quality = self._get_quality()
+
+        # the value used for uniqueness in chord factors is specifically not self.mod for ExtendedIntervals
+        self.factor_value = self.value
+
 
         self._set_flags()
         self._set_name()
