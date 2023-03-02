@@ -44,7 +44,8 @@ def rotate_scale(scale, num_steps):
     return rotated_scale
 
 if __name__ == '__main__':
-    from scales import Key, key_intervals
+    from muse.scales import Key, key_intervals
+    from muse.intervals import stacked_intervals
     major_intervals = key_intervals['major']
     minor_intervals = key_intervals['minor']
     ref_major = Key('C')
@@ -53,5 +54,9 @@ if __name__ == '__main__':
     for mode_degree in range(1, 8):
         major_rotated = rotate_scale(ref_major.scale, mode_degree-1)
         major_mode_tonic = major_rotated[0]
-        this_mode_intervals = [n - major_mode_tonic for n in major_rotated[1:]]
-        print(f'Mode {mode_degree} of {major_mode_tonic}: {this_mode_intervals}')
+        this_mode_intervals_from_tonic = [n - major_mode_tonic for n in major_rotated[1:]] + [P8] # add octave onto the end
+        this_mode_intervals = stacked_intervals(this_mode_intervals_from_tonic)
+
+        print(f'Mode {mode_degree} of major key: {this_mode_intervals}')
+        assert this_mode_intervals == mode_intervals[mode_degree], f"Does not equal: {mode_intervals[mode_degree]}"
+        print(f'Which is equal to the intervals of the {mode_degree}th mode: {mode_intervals[mode_degree]}')

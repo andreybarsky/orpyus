@@ -539,11 +539,13 @@ class ExtendedInterval(IntervalDegree):
 
 # from a list of intervals-from-tonic (e.g. a key specification), get the corresponding stacked intervals:
 def stacked_intervals(tonic_intervals):
-    stack = [tonic_intervals]
+    stack = [tonic_intervals[0]]
+    steps_traversed = 0
     for i, interval in enumerate(tonic_intervals[1:]):
-        prev_interval = stack[-1]
-        next_interval = interval - prev_interval
-        stack.append(next_interval)
+        prev_interval_value = stack[-1].value
+        next_interval_value = interval.value - prev_interval_value- steps_traversed
+        steps_traversed += prev_interval_value
+        stack.append(Interval(next_interval_value))
     return stack
 # opposite operation: from a list of stacked intervals, get the intervals-from-tonic:
 def intervals_from_tonic(interval_stack):
