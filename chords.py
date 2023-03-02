@@ -42,7 +42,7 @@ chord_names = defaultdict(lambda: [' (unknown chord)'],
     (Min3, Per5, Min7): ['m7', 'minor seventh', 'minor 7th', 'minor 7', 'min7', '-7'],
     (Min3, Dim5, Min7): ['hdim7', 'ø7', 'ø', 'm7(b5)', 'm7(♭5)', 'm7b5', 'm7♭5', 'half diminished seventh', 'half diminished 7th', 'half diminished 7', 'halfdim7'],
     (Min3, Dim5, Dim7): ['dim7', 'diminished seventh', 'diminished 7th', 'diminished 7', '°', '°7', 'o', 'o7', 'o', 'o7', '7b5', '7♭5', 'b7b5', 'b7♭5',],
-    (Maj3, Aug5, Min7): ['aug7', 'augmented seventh', 'augmented 7th', 'augmented 7', '+7', '7#5', '#7#5', '7♯5', '♯7♯5'],
+    (Maj3, Aug5, Min7): ['aug7', 'augmented seventh', 'augmented 7th', 'augmented 7', '+7', '7#5', '#7#5', '#5#7', '7♯5', '♯7♯5', '♯5♯7'],
     (Min3, Per5, Maj7): ['mmaj7', '-Δ7', '-M7'], # but additional aliases, see below
 
     # ninths
@@ -70,8 +70,8 @@ for mm7_name in ['minor-major seventh', 'minor-major 7th', 'minor-major7', 'min-
         chord_names[(Min3, Per5, Maj7)].append(mm7_name.replace('-', sub_char))
 
 # chords arranged vaguely in order of rarity, for auto chord detection/searching:
-common_chord_suffixes = ['', 'm', '5']
-uncommon_chord_suffixes = ['sus2', 'sus4', '7', 'maj7', 'm7']
+common_chord_suffixes = ['', 'm']
+uncommon_chord_suffixes = ['5', 'sus2', 'sus4', '7', 'maj7', 'm7']
 rare_chord_suffixes = ['9', 'm9', 'maj9', 'add9', 'madd9', 'dim7', 'hdim7']
 very_rare_chord_suffixes = [v[0] for v in list(chord_names.values()) if v[0] not in (common_chord_suffixes + uncommon_chord_suffixes + rare_chord_suffixes)]
 
@@ -144,29 +144,7 @@ neutral_minor_tonics = [relative_minors[Note(t)] for t in neutral_tonic_names]
 
 
 
-def detect_sharp_preference(tonic, quality='major', default=False):
-    """detect if a chord should prefer sharp or flat labelling
-    depending on its tonic and quality"""
-    if isinstance(tonic, str):
-        tonic = Note(str)
-    assert isinstance(tonic, Note)
 
-    if quality in chord_names[(Maj3, Per5)]: # aliases for 'major':
-        if tonic in sharp_major_tonics:
-            return True
-        elif tonic in flat_major_tonics:
-            return False
-        else:
-            return default
-    elif quality in chord_names[(Min3, Per5)]: # aliases for 'minor'
-        if tonic in sharp_minor_tonics:
-            return True
-        elif tonic in flat_minor_tonics:
-            return False
-        else:
-            return default
-    else:
-        return default
 
 
 class Chord:
@@ -240,9 +218,7 @@ class Chord:
             import pdb; pdb.set_trace()
         self.suffix = detected_suffix if detected_suffix is not None else ' (unknown chord)'
 
-        # figure out if we should prefer sharps or flats by the tonic:
-        prefer_sharps = detect_sharp_preference(self.tonic, quality=self.suffix, default=False if prefer_sharps is None else prefer_sharps)
-        self._set_sharp_preference(prefer_sharps)
+
 
         # now we name the chord:
         root_str = f'/{self.root.name}' if self.root != self.tonic else ''
@@ -254,6 +230,14 @@ class Chord:
         # set quality flags based on chord factors,
         # as well as a overriding quality: 'dominant' overrides 'major', etc.
         self._set_quality()
+
+        # figure out if we should prefer sharps or flats by the tonic:
+        prefer_sharps = self._detect_sharp_preference(default=False if prefer_sharps is None else prefer_sharps)
+        self._set_sharp_preference(prefer_sharps)
+
+        # set some additional interesting attributes:
+        self.consonance = self.get_consonance()
+        self.rarity = self.get_rarity()
 
         # # check for inversions, assign root note/interval and re-set name if so:
         # if root is not None:
@@ -337,17 +321,14 @@ class Chord:
             # otherwise: we use the detect_chords method to find the most likely
             # chord these notes correspond to (probably an inversion)
             else:
+                # get the most likely chord, provided it has perfect recall and precision
 
-                matches = matching_chords(chord_notes, score=True)
+                # matches = matching_chords(chord_notes, score=True)
+                match = most_likely_chord(chord_notes, perfect_only=True)
 
-                if len(matches) > 0:
-                    match = list(matches.keys())[0]
-                    score = matches[match]
-                else:
-                    score = (0,0,0)
-
-                # if the top ranked chord has perfect recall and precision, accept it:
-                if score[0] == 1. and score[1] == 1:
+                # if we got a result, accept it:
+                if match is not None:
+                    import pdb; pdb.set_trace()
                     print(f'  Best match: {match}')
                     # if its tonic doesn't match, then the notelist we've been given is an inversion
                     # and the matching chord's tonic is the true tonic of this chord
@@ -541,6 +522,33 @@ class Chord:
         else:
             return None
 
+    def _detect_sharp_preference(self, default=False): #tonic, quality='major', default=False):
+        """detect if a chord should prefer sharp or flat labelling
+        depending on its tonic and quality"""
+        # if isinstance(tonic, str):
+        #     tonic = Note(str)
+        # assert isinstance(tonic, Note)
+        # tonic_chord = Chord(tonic)
+
+        # if quality in chord_names[(Maj3, Per5)]: # aliases for 'major':
+        if self.major:
+            if self.tonic in sharp_major_tonics:
+                return True
+            elif self.tonic in flat_major_tonics:
+                return False
+            else:
+                return default
+        # elif quality in chord_names[(Min3, Per5)]: # aliases for 'minor'
+        elif self.minor:
+            if self.tonic in sharp_minor_tonics:
+                return True
+            elif self.tonic in flat_minor_tonics:
+                return False
+            else:
+                return default
+        else:
+            return default
+
     def _set_sharp_preference(self, prefer_sharps):
         """set the sharp preference of all notes inside this Chord,
         including the tonic, root, and constituent factors"""
@@ -550,6 +558,11 @@ class Chord:
             n._set_sharp_preference(prefer_sharps)
         for n in self.factors.values():
             n._set_sharp_preference(prefer_sharps)
+
+        # reset name of chord to reflect preference:
+        root_str = f'/{self.root.name}' if self.inverted else ''
+        self.name = self.tonic.name + self.suffix + root_str
+
 
     def _set_quality(self):
         """Uses self.factor_intervals to determine self.quality attribute and related flags"""
@@ -675,16 +688,17 @@ class Chord:
 
         for xfactor, xinterval in zip(factors, intervals):
             for yfactor, yinterval in zip(factors, intervals):
-                if xfactor != yfactor: # make each comparison only once, not twice symmetrically
+                if xfactor != yfactor: # do not compare factors to themselves
                     if yfactor > xfactor:
+                        # interval subtraction is directional: xinterval is the root
                         distance = yinterval - xinterval
                     else:
                         distance = xinterval - yinterval
-                    pairwise[(xfactor, yfactor)] = distance.consonance
+                    pairwise[(self.factors[xfactor], self.factors[yfactor])] = distance.consonance
 
         return pairwise
 
-    def consonance(self):
+    def get_consonance(self):
         """returns the weighted average consonance rating of this chord's intervals"""
         # establish the chord's overall consonance rating
         # by creating a matrix of the fundamental intervals in the chord
@@ -692,17 +706,32 @@ class Chord:
 
         pairwise = self.pairwise_consonance()
 
-        # weighted average, count intervals containing the tonic as double weighted:
+        # weighted average,
         count, total = 0, 0
         for pair, consonance in pairwise.items():
-            if 1 in pair:
+            if pair[0] == self.tonic:
+                # count intervals where the tonic is root as triple:
+                total += 3*consonance
+                count += 3
+            elif pair[1] == self.tonic:
+                # and intervals containing the tonic as double:
                 total += 2*consonance
                 count += 2
+                # total += consonance
+                # count += 1
             else:
                 total += consonance
                 count += 1
         # final result:
         return round(total / count, 2)
+
+    def get_rarity(self):
+        """returns the (somewhat subjective) rarity of this chord as an integer,
+        where 1=common, 2=uncommon, 3=rare, 4=very_rare, 5=legendary"""
+        rarity_lists = [None, common_chord_suffixes, uncommon_chord_suffixes, rare_chord_suffixes, very_rare_chord_suffixes, legendary_chord_suffixes]
+        for i in range(1, 6):
+            if self.suffix in rarity_lists[i]:
+                return i
 
     def relative_minor(self):
         # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
@@ -984,53 +1013,29 @@ def matching_chords(notelist, score=False):
 
         return perfect_match_list + partial_match_list + precise_match_list
 
-# def detect_chords(notelist, threshold=0.7, max=5):
-#     """return a list of the most likely chords that a notelist could belong to,
-#     with the very first in the list being a likely first guess"""
-#     chord_matches, chord_ratings = rate_chords(notelist)
-#     if len(chord_matches) > 0:
-#         # common_matches = [ch for ch in chord_matches if (ch.quality in 'major', 'minor') or (ch.fifth_chord)]
-#         # uncommon_matches = [ch for ch in chord_matches if ch not in common_matches]
-#         return chord_matches
-#     else:
-#         names, ratings = list(chord_ratings.keys()), list(chord_ratings.values())
-#         ranked_chords = sorted(names, key=lambda n: chord_ratings[n], reverse=True)
-#         ranked_ratings = sorted(ratings, reverse=True)
-#
-#         ranked_chords = [c for i, c in enumerate(ranked_chords) if ranked_ratings[i] >= threshold]
-#         ranked_ratings = [r for i, r in enumerate(ranked_ratings) if r >= threshold]
-#
-#         # don't clip off chords with the same rating as those left in the list:
-#         truncated_ratings = ranked_ratings[:max]
-#         if (len(truncated_ratings) == max) and truncated_ratings[-1] == ranked_ratings[max]:
-#             final_ratings = [r for i, r in enumerate(ranked_ratings[max:]) if r == truncated_ratings[-1]]
-#             truncated_ratings.extend(final_ratings)
-#         truncated_chords = ranked_chords[:len(truncated_ratings)]
-#         return {c: r for c, r in zip(truncated_chords, truncated_ratings)}
-
-# def matching_chords(notelist):
-#     """returns a list of the chords that are a perfect match for some desired notelist"""
-#     result = detect_chords(notelist, threshold=1)
-#     return result
-
-def most_likely_chord(notelist, score=False):
+def most_likely_chord(notelist, score=False, perfect_only=False):
     """makes a best guess at an unknown chord from a list of Note objects
     (or of objects that can be cast to Notes) and returns it.
-    if score=True, also returns a tuple of (precision, recall, likelihood) values"""
+    if score=True, also returns a tuple of that chord's (precision, recall, likelihood) values
+    if perfect_only=True, only returns a match if its precision and recall are both 1"""
     # dict of matches and their (prec, rec) scores:
     matches = matching_chords(notelist, score=True)
 
     # match is the top match, or None if none were found
     match = list(matches.keys())[0] if len(matches) > 0 else None
+    precision, recall, likelihood = matches[match]
 
     if score:
         if match is not None:
-            precision, recall, likelihood = matches[match]
-            return match, (precision, recall, likelihood)
+            if (not perfect_only) or (precision==1 and recall == 1):
+                return match, (precision, recall, likelihood)
         else:
             return None, (0., 0., 0.)
     else:
-        return match
+        if (not perfect_only) or (precision==1 and recall == 1):
+            return match
+        else:
+            return None
 
     # if len(result) > 0:
     #     if isinstance(result, list):

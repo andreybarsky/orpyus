@@ -60,7 +60,11 @@ class Interval:
         else:
             self.consonant = True
             self.imperfect = True
-            self.consonance = 0.5
+            # self.consonance = 0.5
+            ### we assign consonance rating as 1/d+1,
+            # where d is the distance from a perfect 5th (or 4th?)
+            # self.consonance = round(1 / min([abs(5 - self.mod), abs(7 - self.mod)]), 1)
+            self.consonance = round(1 / (1+(abs(5-self.mod))), 1)
         self.dissonant = not self.consonant
 
     def _set_name(self):

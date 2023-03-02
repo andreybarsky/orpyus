@@ -174,7 +174,8 @@ class Note:
 
     def __sub__(self, other):
         """if 'other' is an integer, returns a new Note that is shifted down by that many semitones.
-        if 'other' is another Note, return the (unsigned) interval distance between them, with other as the root."""
+        if 'other' is another Note, return the directional (but unsigned) interval distance between them,
+        with other as the root."""
 
         if isinstance(other, (int, Interval)): # construct Note
             new_pos = (self.position - other) % 12

@@ -1,6 +1,6 @@
 import muse.notes as notes
 from muse.notes import Note
-from muse.chords import Chord, chord_names, detect_sharp_preference
+from muse.chords import Chord, chord_names
 from muse.intervals import Interval, Min2, Maj2, Min3, Maj3, Per4, Per5, Min6, Maj6, Min7, Maj7
 
 from muse.util import log, test
@@ -90,15 +90,19 @@ class KeyNote(Note):
 
 class KeyChord(Chord):
     def __init__(self, *args, key, **kwargs):
-        super().__init__(*args, **kwargs)
 
+
+        # pointer to the key that this chord is a part of:
         if isinstance(key, Key):
             self.key = key
         elif isinstance(key, str):
             self.key = Key(key)
 
+        super().__init__(*args, **kwargs)
+
         # inherit sharp preference from parent key:
         self._set_sharp_preference(self.key.prefer_sharps)
+
 
     def __add__(self, other):
         # transposing a KeyChord stays within the same key:
@@ -138,8 +142,12 @@ class Key:
         self.minor = (self.suffix in ['m', 'm pentatonic', ' blues minor', ' harmonic minor'])
 
 
-        # figure out if we should prefer sharps or flats:
-        self.prefer_sharps = detect_sharp_preference(self.tonic, self.suffix, default=True if prefer_sharps is None else prefer_sharps)
+
+
+        # figure out if we should prefer sharps or flats
+        # by constructing chord over the tonic and querying it:
+        naive_tonic_chord = Chord(self.tonic, 'major' if self.major else 'minor')
+        self.prefer_sharps = naive_tonic_chord._detect_sharp_preference(default=False if prefer_sharps is None else prefer_sharps)
 
         # set tonic to use preferred sharp convention:
         self.tonic = KeyNote(self.tonic.name, key=self)
@@ -223,7 +231,13 @@ class Key:
                     else:
                         chord_hash[this_chord] += 1
 
-        return list(chord_hash.keys())
+        chord_list = list(chord_hash.keys())
+
+        # sort by rarity and then by consonance:
+        chord_list = sorted(chord_list, key=lambda c: (-c.rarity, c.consonance), reverse=True)
+        # return chord rarity, consonance tuple as stats:
+        chord_stats = [(c, round(1-(c.rarity-1)/4,1), c.consonance) for c in chord_list]
+        return chord_stats
 
     def __contains__(self, item):
         """is this Chord or Note part of this key?"""
