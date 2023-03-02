@@ -75,25 +75,19 @@ uncommon_chord_suffixes = ['5', 'sus2', 'sus4', '7', 'maj7', 'm7']
 rare_chord_suffixes = ['9', 'm9', 'maj9', 'add9', 'madd9', 'dim7', 'hdim7']
 very_rare_chord_suffixes = [v[0] for v in list(chord_names.values()) if v[0] not in (common_chord_suffixes + uncommon_chord_suffixes + rare_chord_suffixes)]
 
-# what's rarer than very rare?
-legendary_chord_suffixes = [] # filled later by procedurally generated weirdo chords
+##### procedurally generate weird altered chords:
+legendary_chord_suffixes = [] # the only thing rarer than 'very rare'
 
+# add sus2 and sus4 variants to all sixths, sevenths, and eighths
+sus_chord_names = {}
+# and add add4s to all triads and tetrads:
+add4_chord_names = {}
 # add add11s to all 6th/7th chords:
 add11_tetrad_names = {}
-for intervals, names in chord_names.items():
-    if len(intervals) == 3: # only for tetrads and higher
-        if intervals[-1] != Maj9: # and not for add9s:
-             add11_intervals = tuple(list(intervals) + [Per11])
-             altered_names = [f'{name}add11' if ' ' not in name else f'{name} add11' for name in names]
-             add11_tetrad_names[add11_intervals] = altered_names
-             # append legendary chord list:
-             legendary_chord_suffixes.append(altered_names[0])
 
-chord_names.update(add11_tetrad_names)
-
-# experimental: add sus variants to all sixths, sevenths, and eighths
-sus_tetrad_names = {}
 for intervals, names in chord_names.items():
+
+    # sus2/4 chords
     if len(intervals) >= 3: # only for tetrads and higher
         # replace maj3s with aug3s to make sus4s:
         if intervals[0] == Maj3:
@@ -105,11 +99,34 @@ for intervals, names in chord_names.items():
             sus_intervals = tuple([Dim3] + list(intervals[1:]))
             altered_names = [f'{name}sus2' if ' ' not in name else f'{name} sus2' for name in names]
         # add to altered chord dict:
-        sus_tetrad_names[sus_intervals] = altered_names
+        sus_chord_names[sus_intervals] = altered_names
         # append legendary chord list:
         legendary_chord_suffixes.append(altered_names[0])
 
-chord_names.update(sus_tetrad_names)
+    # add4 chords
+    if len(intervals) == 2: # for triads only
+        if Aug3 not in intervals: # a sus4 can't be an add4
+            add4_intervals = tuple([intervals[0]] + [Per4] + list(intervals[1:]))
+            altered_names = [f'{name}add4' if ' ' not in name else f'{name} add4' for name in names]
+            add4_chord_names[add4_intervals] = altered_names
+            #add4s aren't that legendary:
+            very_rare_chord_suffixes.append(altered_names[0])
+
+    # add11 chords
+    if len(intervals) == 3: # only for tetrads
+        if intervals[-1] != Maj9: # and not for add9s:
+             add11_intervals = tuple(list(intervals) + [Per11])
+             altered_names = [f'{name}add11' if ' ' not in name else f'{name} add11' for name in names]
+             add11_tetrad_names[add11_intervals] = altered_names
+             # append legendary chord list:
+             legendary_chord_suffixes.append(altered_names[0])
+
+
+chord_names.update(sus_chord_names)
+chord_names.update(add4_chord_names)
+chord_names.update(add11_tetrad_names)
+
+
 chord_types = common_chord_suffixes + uncommon_chord_suffixes + rare_chord_suffixes + very_rare_chord_suffixes + legendary_chord_suffixes
 
 # inverse dict mapping all accepted chord quality names to lists of their intervals:
@@ -124,9 +141,6 @@ relative_minors.update({c.sharp_name: (c-3).sharp_name for c in notes.chromatic_
 relative_minors.update({c.flat_name: (c-3).flat_name for c in notes.chromatic_scale})
 
 relative_majors = {value:key for key,value in relative_minors.items()}
-
-
-
 
 # some notes (as chord/key tonics) correspond to a preference for sharps or flats:
 # (though I think this applies to diatonic keys only?)
@@ -143,19 +157,7 @@ flat_minor_tonics = [relative_minors[Note(t)] for t in flat_tonic_names]
 neutral_minor_tonics = [relative_minors[Note(t)] for t in neutral_tonic_names]
 
 
-
-
-
-
 class Chord:
-
-    # @staticmethod
-    # def from_notes(notelist):
-    #     candidate = most_likely_chord(notelist)
-    #     if candidate.tonic != notelist[0]:
-    #         # inversion?
-    #         candidate.set_inversion(note=notelist[0])
-    #     return candidate
 
     def __init__(self, arg1, arg2=None, root=None, prefer_sharps=None):
         """a set of Notes, defined by some theoretical name like C#m7.
@@ -403,11 +405,14 @@ class Chord:
             # otherwise: parsing the string as a chord tonic and a suffix has failed,
             # but we can try one more thing: parsing it as a string of note names
             else:
-                log(f'Reading {quality} as a chord quality failed, so instea we will try to read {name} as a series of notes')
-                note_names = parse_out_note_names(name)
-                note_list = [Note(n) for n in note_names]
-                # and call recursively:
-                return self._parse_input(note_list, None, root=note_list[0])
+                log(f'Reading {quality} as a chord quality failed, so instead we will try to read {name} as a series of notes')
+                try:
+                    note_names = parse_out_note_names(name)
+                    note_list = [Note(n) for n in note_names]
+                    # and call recursively:
+                    return self._parse_input(note_list, None, root=note_list[0])
+                except:
+                    raise ValueError(f'Could not understand {quality} as a chord quality or {name} as a series of notes')
 
 
         return tonic, intervals, root
@@ -476,8 +481,16 @@ class Chord:
 
             if fifth.degree == 5 or fifth.valid_fifth():
                 factors[5] = IntervalDegree(fifth.value, 5)
+            elif fifth.degree == 4 or fifth.valid_degree(4):
+                # special case: add4 occurs before a per5 (but we don't allow this to be a 7th, so the chord ends here)
+                factors[4] = IntervalDegree(fifth.value, 4)
+                log(f'Detected an odd case: add4 chord, with intervals: \n{intervals}')
+                assert num_notes == 4, "chords longer than tetrads should have be 11ths, not add4"
+                fifth = intervals[2]
+                assert fifth.valid_fifth(), "detected an add4 chord without a perfect 5th"
+                factors[5] = IntervalDegree(fifth.value, 5)
             else:
-                print(f"Irregular triad chord ({intervals}): {fifth} is not a valid fifth")
+                print(f"Irregular triad chord ({intervals}): {fifth} is not a valid fifth/fourth")
                 this_degree = fifth.degree if fifth.degree is not None else fifth.expected_degree
                 factors[this_degree] = IntervalDegree(fifth.value, this_degree)
 
@@ -821,6 +834,7 @@ class Chord:
         """if this is an inverted chord, return the notes in their inverted order (from root),
         otherwise return them in the usual order (from tonic)"""
         if self.inverted:
+            assert self.root in self.notes, f"Inversion error: specified root {self.root} not in {self.notes}"
             root_place = [i for i, n in enumerate(self.notes) if n == self.root][0]
             # so we rearrange the notes from ordering [0,1,2] to e.g. [1,2,0]:
             note_idxs = [(root_place + i) % len(self) for i in range(len(self))]

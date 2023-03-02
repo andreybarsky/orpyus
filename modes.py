@@ -46,17 +46,52 @@ def rotate_scale(scale, num_steps):
 if __name__ == '__main__':
     from muse.scales import Key, key_intervals
     from muse.intervals import stacked_intervals
-    major_intervals = key_intervals['major']
-    minor_intervals = key_intervals['minor']
-    ref_major = Key('C')
-    ref_minor = Key('Cm')
 
-    for mode_degree in range(1, 8):
-        major_rotated = rotate_scale(ref_major.scale, mode_degree-1)
-        major_mode_tonic = major_rotated[0]
-        this_mode_intervals_from_tonic = [n - major_mode_tonic for n in major_rotated[1:]] + [P8] # add octave onto the end
-        this_mode_intervals = stacked_intervals(this_mode_intervals_from_tonic)
+    # ref_major = Key('C')
+    # ref_minor = Key('Cm')
+    # ref_melmaj = Key('C melodic major')
+    # ref_melmin = Key('C melodic major')
+    # ref_harmaj = Key('C harmonic major')
+    # ref_harmin = Key('C harmonic minor')
+    # ref_keys = [ref_major, ref_minor, ref_harmaj, ref_harmin, ref_melmaj, ref_melmin]
 
-        print(f'Mode {mode_degree} of major key: {this_mode_intervals}')
-        assert this_mode_intervals == mode_intervals[mode_degree], f"Does not equal: {mode_intervals[mode_degree]}"
-        print(f'Which is equal to the intervals of the {mode_degree}th mode: {mode_intervals[mode_degree]}')
+
+    # major_intervals = key_intervals['major']
+    # minor_intervals = key_intervals['minor']
+    # hmaj_intervals = key_intervals['harmonic major']
+    # hmin_intervals = key_intervals['harmonic minor']
+    # mmaj_intervals = key_intervals['melodic major']
+    # mmin_intervals = key_intervals['melodic minor']
+
+    key_qualities = ['major', 'minor', 'harmonic major', 'harmonic minor', 'melodic major', 'melodic minor']
+
+    for quality in key_qualities:
+        intervals_from_tonic = key_intervals[quality]
+    # for intervals_from_tonic in [major_intervals, minor_intervals, hmaj_intervals, hmin_intervals, mmaj_intervals, mmin_intervals]:
+
+        for mode_degree in range(1, 8):
+            # if mode_degree != 1: # 1st mode does not change
+            relative_intervals = stacked_intervals(list(intervals_from_tonic) + [P8])
+            rotated_relative_intervals = rotate_scale(relative_intervals, mode_degree-1)
+            mode_intervals_from_tonic = [rotated_relative_intervals[i] + sum(rotated_relative_intervals[:i]) for i in range(7)]
+            mode_interval_short_names = [f'{i.quality[:3]}{i.expected_degree}' for i in mode_intervals_from_tonic]
+            mode_interval_short_names[-1] = 'per8'
+            print(f'mode *{mode_degree}* of {quality} key: {mode_interval_short_names}')
+        print()
+
+        #
+        #     if quality == 'major':
+        #         assert rotated_relative_intervals == mode_intervals[mode_degree], f"{rotated_relative_intervals}\nDoes not equal: \n{mode_intervals[mode_degree]}"
+        #         print(f'Which is equal to the intervals of the {mode_degree}th mode: {mode_intervals[mode_degree]}')
+        #
+        #
+        # print('\n===========\n')
+
+    # for ref_key in ref_keys:
+    #     for mode_degree in range(1, 8):
+    #         scale_rotated = rotate_scale(ref_key.scale, mode_degree-1)
+    #         this_mode_tonic = scale_rotated[0]
+    #         this_mode_intervals_from_tonic = [n - this_mode_tonic for n in scale_rotated[1:]] + [P8] # add octave onto the end
+    #         this_mode_intervals = stacked_intervals(this_mode_intervals_from_tonic)
+
+    # alternate method:
