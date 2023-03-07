@@ -33,6 +33,18 @@ class TestSuite:
 
 test = TestSuite()
 
+# generically useful functions used across modules:
+def rotate_list(lst, num_steps):
+    """Accepts a list, and returns the wrapped-around list
+    that begins num_steps up from the beginning of the original.
+    used for inversions, i.e. the 2nd inversion of [0,1,2] is [1,2,0],
+    and for modes, which are rotations of scales. """
+
+    rotated_start_place = num_steps
+    rotated_idxs = [(rotated_start_place + i) % 7 for i in range(7)]
+    rotated_lst= [lst[i] for i in rotated_idxs]
+    return rotated_lst
+
 def precision_recall(target, candidate):
     """return a metric that can be used to determine how well <candidate> fits <target>,
     so long as both have a meaningful __contains__ method to query their members,

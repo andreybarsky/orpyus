@@ -230,15 +230,18 @@ class Interval:
         return other - self.value
 
     def __hash__(self):
-        """hash this interval in a way that preserves both its degree and value properties"""
+        """intervals only hash their values, not their degrees"""
+        # """hash this interval in a way that preserves both its degree and value properties"""
+
+        ####   ignore the below!!!
         # unlike equality comparison, which compares only semitones,
         # we want the hash function to correctly distinguish between different chords,
         # e.g. to know that a (Aug3, Per5) chord is a sus4,
         # but a mystery chord with explicitly-defined (Per4, Per5) degrees is something else.
         # so we include degree as well as value for hashing purposes
-        deg = self.expected_degree if self.degree is None else self.degree
-        string_to_hash = f'D{deg}V{self.value}'
-        return hash(string_to_hash)
+        # deg = self.expected_degree if self.degree is None else self.degree
+        # string_to_hash = f'intervalof{self.value}'
+        return hash(self.value)
 
     def __str__(self):
         return f'<{self.value}:{self.name}>'
@@ -251,22 +254,27 @@ class Interval:
     def valid_degree(self, deg):
         return self.mod in degree_valid_intervals[deg]
 
+    @property
     def valid_third(self):
         return self.valid_degree(3)
 
+    @property
     def valid_fifth(self):
         return self.valid_degree(5)
 
+    @property
     def common_seventh(self):
         """special case: common 7-degree intervals (value 10 or 11) need to be
         considered more common than 6ths, which are themselves more common than
         the uncommon dim7 (value9). used by automatic chord detection."""
         return self.mod in [10,11]
 
+    @property
     def valid_seventh(self):
         return self.valid_degree(7)
 
     #### summary helper function:
+    @property
     def properties(self):
         degree_str = f'{self.expected_degree}' if self.degree is None else self.degree
         degree_name_str = degree_names[self.expected_degree] if self.degree is None else degree_names[self.degree]
@@ -287,7 +295,7 @@ class Interval:
         ID:         {id(self)}"""
 
     def summary(self):
-        print(self.properties())
+        print(self.properties)
 
 class NullInterval:
     """has the attributes that an Interval has, but they are all None

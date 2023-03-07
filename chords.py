@@ -77,16 +77,13 @@ very_rare_chord_suffixes = [v[0] for v in list(chord_names.values()) if v[0] not
 
 ##### procedurally generate weird altered chords:
 legendary_chord_suffixes = [] # the only thing rarer than 'very rare'
-
 # add sus2 and sus4 variants to all sixths, sevenths, and eighths
 sus_chord_names = {}
 # and add add4s to all triads and tetrads:
 add4_chord_names = {}
 # add add11s to all 6th/7th chords:
 add11_tetrad_names = {}
-
 for intervals, names in chord_names.items():
-
     # sus2/4 chords
     if len(intervals) >= 3: # only for tetrads and higher
         # replace maj3s with aug3s to make sus4s:
@@ -102,7 +99,6 @@ for intervals, names in chord_names.items():
         sus_chord_names[sus_intervals] = altered_names
         # append legendary chord list:
         legendary_chord_suffixes.append(altered_names[0])
-
     # add4/11 chords
     if len(intervals) in [2,3]: # for triads only
         # add4s:
@@ -120,13 +116,9 @@ for intervals, names in chord_names.items():
              altered_names = [f'{name}add11' if ' ' not in name else f'{name} add11' for name in names]
              add11_tetrad_names[add11_intervals] = altered_names
              legendary_chord_suffixes.append(altered_names[0])
-
-
 chord_names.update(sus_chord_names)
 chord_names.update(add4_chord_names)
 chord_names.update(add11_tetrad_names)
-
-
 chord_types = common_chord_suffixes + uncommon_chord_suffixes + rare_chord_suffixes + very_rare_chord_suffixes + legendary_chord_suffixes
 
 # inverse dict mapping all accepted chord quality names to lists of their intervals:
@@ -136,14 +128,13 @@ for intervals, names in chord_names.items():
         chord_intervals[name] = intervals
 
 # relative minors/majors of all chromatic notes:
-relative_minors = {c : (c - 3) for c in notes.chromatic_scale}
+relative_minors = {c.name : (c - 3).name for c in notes.chromatic_scale}
 relative_minors.update({c.sharp_name: (c-3).sharp_name for c in notes.chromatic_scale})
 relative_minors.update({c.flat_name: (c-3).flat_name for c in notes.chromatic_scale})
 
 relative_majors = {value:key for key,value in relative_minors.items()}
 
-# some notes (as chord/key tonics) correspond to a preference for sharps or flats:
-# (though I think this applies to diatonic keys only?)
+# some chord/key tonics correspond to a preference for sharps or flats:
 sharp_tonic_names = ['G', 'D', 'A', 'E', 'B']
 flat_tonic_names = ['F', 'Bb', 'Eb', 'Ab', 'Db']
 neutral_tonic_names = ['C', 'Gb'] # no sharp/flat preference, fall back on default
@@ -152,13 +143,12 @@ sharp_major_tonics = [Note(t) for t in sharp_tonic_names]
 flat_major_tonics = [Note(t) for t in flat_tonic_names]
 neutral_major_tonics = [Note(t) for t in neutral_tonic_names]
 
-sharp_minor_tonics = [relative_minors[Note(t)] for t in sharp_tonic_names]
-flat_minor_tonics = [relative_minors[Note(t)] for t in flat_tonic_names]
-neutral_minor_tonics = [relative_minors[Note(t)] for t in neutral_tonic_names]
+sharp_minor_tonics = [Note(relative_minors[t]) for t in sharp_tonic_names]
+flat_minor_tonics = [Note(relative_minors[t]) for t in flat_tonic_names]
+neutral_minor_tonics = [Note(relative_minors[t]) for t in neutral_tonic_names]
 
 
 class Chord:
-
     def __init__(self, arg1, arg2=None, root=None, prefer_sharps=None):
         """a set of Notes, defined by some theoretical name like C#m7.
         arg1 can be one of:
@@ -237,9 +227,9 @@ class Chord:
         prefer_sharps = self._detect_sharp_preference(default=False if prefer_sharps is None else prefer_sharps)
         self._set_sharp_preference(prefer_sharps)
 
-        # set some additional interesting attributes:
-        self.consonance = self.get_consonance()
-        self.rarity = self.get_rarity()
+        # set some additional interesting attributes: ### (these are properties now)
+        # self.consonance = self.get_consonance()
+        # self.rarity = self.get_rarity()
 
         # # check for inversions, assign root note/interval and re-set name if so:
         # if root is not None:
@@ -330,7 +320,6 @@ class Chord:
 
                 # if we got a result, accept it:
                 if match is not None:
-                    import pdb; pdb.set_trace()
                     print(f'  Best match: {match}')
                     # if its tonic doesn't match, then the notelist we've been given is an inversion
                     # and the matching chord's tonic is the true tonic of this chord
@@ -414,7 +403,8 @@ class Chord:
                 except:
                     raise ValueError(f'Could not understand {quality} as a chord quality or {name} as a series of notes')
 
-
+        # make sure to cast root to Note instead of OctaveNote:
+        root = Note(root.chroma)
         return tonic, intervals, root
 
     #### init / arg-parsing subroutines:
@@ -460,7 +450,7 @@ class Chord:
         if num_notes == 2:
             # this is a dyad
             i = intervals[0]
-            if i.degree == 5 or i.valid_fifth():
+            if i.degree == 5 or i.valid_fifth:
                 factors[5] = IntervalDegree(i.value, 5)
             else:
                 log(f"Non-perfect dyad chord: {intervals} doesn't include a fifth")
@@ -472,14 +462,14 @@ class Chord:
         elif num_notes >= 3:
             # this is a triad, assume there is a third and a fifth:
             third, fifth = intervals[0], intervals[1]
-            if third.degree == 3 or third.valid_third():
+            if third.degree == 3 or third.valid_third:
                 factors[3] = IntervalDegree(third.value, 3)
             else:
                 print(f"Irregular triad chord ({intervals}): {third} is not a valid third")
                 this_degree = third.degree if third.degree is not None else third.expected_degree
                 factors[this_degree] = IntervalDegree(third.value, this_degree)
 
-            if fifth.degree == 5 or fifth.valid_fifth():
+            if fifth.degree == 5 or fifth.valid_fifth:
                 factors[5] = IntervalDegree(fifth.value, 5)
             elif fifth.degree == 4 or fifth.valid_degree(4):
                 # special case: add4 occurs before a per5 (but we don't allow this to be a 7th, so the chord ends here)
@@ -487,7 +477,7 @@ class Chord:
                 log(f'Detected an odd case: add4 chord, with intervals: \n{intervals}')
                 assert num_notes == 4, "chords longer than tetrads should have be 11ths, not add4"
                 fifth = intervals[2]
-                assert fifth.valid_fifth(), "detected an add4 chord without a perfect 5th"
+                assert fifth.valid_fifth, "detected an add4 chord without a perfect 5th"
                 factors[5] = IntervalDegree(fifth.value, 5)
             else:
                 print(f"Irregular triad chord ({intervals}): {fifth} is not a valid fifth/fourth")
@@ -501,13 +491,13 @@ class Chord:
                 if i.degree == 9 or i.valid_degree(9):
                     factors[9] = ExtendedInterval(i.value, 9)
                 # common sevenths are more likely than sixths:
-                elif i.degree == 7 or i.common_seventh():
+                elif i.degree == 7 or i.common_seventh:
                     factors[7] = IntervalDegree(i.value, 7)
                 # but major sixths are more likely than dim7s:
                 elif i.degree == 6 or i.valid_degree(6):
                     factors[6] = IntervalDegree(i.value, 6)
                 # ...which we catch here:
-                elif i.valid_seventh():
+                elif i.valid_seventh:
                     factors[7] = IntervalDegree(i.value, 7)
 
             else:
@@ -684,10 +674,12 @@ class Chord:
             root_str = f'/{self.root.name}'
             self.name = self.tonic.name + self.suffix + root_str
 
+    @property
     def sharp_notes(self):
         """returns notes inside self, all with sharp preference"""
         return [Note(n.chroma, prefer_sharps=True) for n in self.notes]
 
+    @property
     def flat_notes(self):
         """returns notes inside self, all with flat preference"""
         return [Note(n.chroma, prefer_sharps=False) for n in self.notes]
@@ -711,7 +703,8 @@ class Chord:
 
         return pairwise
 
-    def get_consonance(self):
+    @property
+    def consonance(self):
         """returns the weighted average consonance rating of this chord's intervals"""
         # establish the chord's overall consonance rating
         # by creating a matrix of the fundamental intervals in the chord
@@ -738,7 +731,8 @@ class Chord:
         # final result:
         return round(total / count, 2)
 
-    def get_rarity(self):
+    @property
+    def rarity(self):
         """returns the (somewhat subjective) rarity of this chord as an integer,
         where 1=common, 2=uncommon, 3=rare, 4=very_rare, 5=legendary"""
         rarity_lists = [None, common_chord_suffixes, uncommon_chord_suffixes, rare_chord_suffixes, very_rare_chord_suffixes, legendary_chord_suffixes]
@@ -746,18 +740,21 @@ class Chord:
             if self.suffix in rarity_lists[i]:
                 return i
 
+    @property
     def relative_minor(self):
         # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
         assert self.major, f'{self} is not major, and therefore has no relative minor'
-        rm_tonic = notes.relative_minors[self.tonic]
+        rm_tonic = relative_minors[self.tonic.name]
         return Chord(rm_tonic, 'minor')
 
+    @property
     def relative_major(self):
         # assert not self.major, f'{self} is already major, and therefore has no relative major'
         assert self.minor, f'{self} is not minor, and therefore has no relative major'
-        rm_tonic = notes.relative_majors[self.tonic]
+        rm_tonic = relative_majors[self.tonic.name]
         return Chord(rm_tonic)
 
+    @property
     def relative(self):
         if self.major:
             return self.relative_minor()
@@ -827,9 +824,10 @@ class Chord:
     def __hash__(self):
         """chord hash method is entirely dependent on the positions
         (and not values) of its notes, and encodes inversions differently to tonics"""
-        hash_str = '/'.join([str(n.position) for n in self.inverted_notes()])
+        hash_str = '/'.join([str(n.position) for n in self.inverted_notes])
         return hash(hash_str)
 
+    @property
     def inverted_notes(self):
         """if this is an inverted chord, return the notes in their inverted order (from root),
         otherwise return them in the usual order (from tonic)"""
@@ -844,7 +842,7 @@ class Chord:
         return note_list
 
     def __str__(self):
-        note_list = self.inverted_notes()
+        note_list = self.inverted_notes
         return f'♬ {self.name} {note_list}'
 
     def __repr__(self):
@@ -868,6 +866,7 @@ class Chord:
                        }
         return [string for string, attr in flags_names.items() if attr]
 
+    @property
     def properties(self):
         flags = ', '.join(self._get_flags())
         return f"""
@@ -890,10 +889,10 @@ class Chord:
         ID:             {id(self)}"""
 
     def summary(self):
-        print(self.properties())
+        print(self.properties)
 
 
-
+# chord constructor from tonic and stacked intervals:
 def StackedChord(tonic, stack):
     """Initialise a chord by a series of intervals each relative to the previous interval.
     e.g. StackedChord('C', Min3, Maj3) returns C major"""
@@ -904,18 +903,25 @@ def StackedChord(tonic, stack):
     return c
 
 
-
-
-
-def matching_chords(notelist, score=False):
+# automatic chord detection routine:
+def matching_chords(notelist, score=False, allow_inversions=False):
     """given an iterable of Note or OctaveNote objects,
     determine the chords that those notes could belong to.
 
     returns an ordered dict with chords as keys,
-    and (precision, recall) tuples as values for those chords"""
+    and (recall, precision) tuples as values for those chords.
+
+    chords are returned in the order: perfect matches, partial matches, precise matches,
+    where perfect matches have recall and precision = 1, partial matches have recall=1, and precise matches have precision=1
+    (note that, for chord matching, recall is a more desirable characteristic than precision, despite the name)
+    """
 
     # parse notelist's items, casting to Note if necessary, and find list of unique ones:
     unique_notes = []
+
+    if isinstance(notelist, str):
+        notelist = parse_out_note_names(notelist)
+
     for n in notelist:
         if isinstance(n, Note):
             note = Note(position=n.position)
@@ -938,7 +944,7 @@ def matching_chords(notelist, score=False):
             # get precision and recall which are the two most important metrics to sort by
             precision, recall = precision_recall(unique_notes, candidate)
             # but also use a third, subjective value by which to tiebreak
-            likelihood_score = 1.
+            likelihood_score = 1.0
 
             ### we evaluate subjective likelihood value based on whatever I want:
 
@@ -989,9 +995,9 @@ def matching_chords(notelist, score=False):
                             import pdb; pdb.set_trace()
                 ###
 
-                target_dict[candidate] = (round(precision,1), round(recall,1), round(likelihood_score,1))
+                target_dict[candidate] = (round(recall,1), round(precision,1), round(likelihood_score,1))
 
-                if inversion is not None:
+                if allow_inversions and (inversion is not None):
                     # add this inversion as well as the non-inverted chord, but make the inversion more likely
                     ### troubleshooting
                     if inversion in target_dict.keys():
@@ -1001,15 +1007,15 @@ def matching_chords(notelist, score=False):
                                 print(key)
                                 import pdb; pdb.set_trace()
                     ### troubleshooting
-                    target_dict[inversion] = (round(precision,1), round(recall,1), round(likelihood_score + .2, 1))
+                    target_dict[inversion] = (round(recall,1), round(precision,1), round(likelihood_score + .2, 1))
 
     # sort matches by their distinguishing values:
-    # i.e. perfect matches by likelihood:
+    # i.e. sort perfect matches by likelihood:
     perfect_match_list = sorted(perfect_matches.keys(), key=lambda x: perfect_matches[x][2], reverse=True)
-    # but  sort perfect recall items by precision (then by likelihood)
-    partial_match_list = sorted(partial_matches.keys(), key=lambda x: (partial_matches[x][0], partial_matches[x][2]), reverse=True)
+    # but sort perfect recall items by precision (then by likelihood)
+    partial_match_list = sorted(partial_matches.keys(), key=lambda x: (partial_matches[x][1], partial_matches[x][2]), reverse=True)
     # and sort perfect precision items by recall (then by likelihood)
-    precise_match_list = sorted(precise_matches.keys(), key=lambda x: (precise_matches[x][1], precise_matches[x][2]), reverse=True)
+    precise_match_list = sorted(precise_matches.keys(), key=lambda x: (precise_matches[x][0], precise_matches[x][2]), reverse=True)
 
     if score:
         # return chords and their (prec, rec, likelihood) scores
@@ -1027,22 +1033,22 @@ def matching_chords(notelist, score=False):
 
         return perfect_match_list + partial_match_list + precise_match_list
 
-def most_likely_chord(notelist, score=False, perfect_only=False):
+def most_likely_chord(notelist, score=False, perfect_only=False, allow_inversions=True):
     """makes a best guess at an unknown chord from a list of Note objects
     (or of objects that can be cast to Notes) and returns it.
     if score=True, also returns a tuple of that chord's (precision, recall, likelihood) values
     if perfect_only=True, only returns a match if its precision and recall are both 1"""
     # dict of matches and their (prec, rec) scores:
-    matches = matching_chords(notelist, score=True)
+    matches = matching_chords(notelist, score=True, allow_inversions=allow_inversions)
 
     # match is the top match, or None if none were found
     match = list(matches.keys())[0] if len(matches) > 0 else None
-    precision, recall, likelihood = matches[match]
+    recall, precision, likelihood = matches[match]
 
     if score:
         if match is not None:
             if (not perfect_only) or (precision==1 and recall == 1):
-                return match, (precision, recall, likelihood)
+                return match, (recall, precision, likelihood)
         else:
             return None, (0., 0., 0.)
     else:

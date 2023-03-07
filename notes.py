@@ -28,73 +28,6 @@ def accidental_note_name(pos, prefer_sharps=False):
     name = note_names['flat'][pos] if not prefer_sharps else note_names['sharp'][pos]
     return name
 
-#
-# #### string-specific parsing functions
-# #### (all moved to parsing.py)
-#
-# def is_valid_note_name(name: str):
-#     """returns True if string can be cast to a Note,
-#     and False if it cannot (in which case it must be something else, like a Note)"""
-#     if not isinstance(name, str):
-#         return False
-#     # force to upper case, in case we've been given e.g. lowercase 'c', still valid
-#     if len(name) == 1:
-#         return name.upper() in valid_note_names
-#     elif len(name) == 2: # force to upper+lower case, in case we've been given e.g. 'eb', still valid
-#         name2 = name[0].upper() + name[1].lower()
-#         return name2 in valid_note_names
-#     else:
-#         return False
-#
-# def parse_out_notes(note_string):
-#     """for some string of valid note letters, of undetermined length,
-#     such as e.g.: 'CAC#ADbGbE', parse out the individual notes and return
-#     a list of corresponding Note objects"""
-#
-#     first_note_fragment = note_string[:2]
-#     if is_accidental(first_note_fragment[-1]):
-#         letter, accidental = first_note_fragment
-#         first_note = Note(letter + parse_accidental(accidental))
-#         next_idx = 2
-#     else:
-#         first_note = Note(first_note_fragment[0])
-#         next_idx = 1
-#
-#     assert is_valid_note_name(first_note), f'{first_note} is not a valid note name'
-#     note_list = [first_note]
-#
-#     while next_idx < len(note_string):
-#         next_note_fragment = note_string[next_idx : next_idx+2]
-#         if is_accidental(next_note_fragment[-1]):
-#             letter, accidental = next_note_fragment
-#             next_note = Note(letter + parse_accidental(accidental))
-#             next_idx += 2
-#         else:
-#             next_note = Note(next_note_fragment[0])
-#             next_idx += 1
-#         note_list.append(next_note)
-#     return note_list
-#
-# # string checking/cleaning for accidental unicode characters:
-# def is_sharp(char):
-#     return (char in ['#', '♯'])
-# def is_flat(char):
-#     return (char in ['b', '♭'])
-# def is_accidental(char):
-#     return (char in ['#', 'b', '♯', '♭'])
-# def parse_accidental(acc):
-#     """reads what might be unicode accidentals and casts to '#' or 'b' if required"""
-#     assert len(acc) == 1
-#     if acc == '♭':
-#         return 'b'
-#     elif acc == '♯':
-#         return '#'
-#     elif acc in ['#', 'b']:
-#         return acc
-#     else:
-#         return None
-#         # raise ValueError(f'{acc} is not an accidental')
-
 
 class Note:
     """a note quality not associated with a specific note inside an octave, such as C or D#"""
@@ -219,18 +152,18 @@ class Note:
             raise TypeError('Notes can only be compared to other Notes')
 
     def __hash__(self):
-        """unlike __eq__ which compares enharmonic equivalence,
-        the __hash__ method DOES take note value into account"""
+        """note and octavenote hash-equivalence is based on position alone, not value"""
         return hash(str(self))
 
     def __str__(self):
-        # specific_name = accidental_note_name(self.position, prefer_sharps=self.prefer_sharps)
+        # e.g. is of form: '♩C#'
         return f'♩{self.name}'
 
     def __repr__(self):
         return str(self)
 
     #### useful public methods:
+    @property
     def properties(self):
         """Describe all the useful properties this Note has"""
 
@@ -244,7 +177,7 @@ class Note:
 
     def summary(self):
         """Prints all the properties of this Note object"""
-        print(self.properties())
+        print(self.properties)
 
     ## chord constructors:
     def chord(self, arg='major'):
@@ -266,10 +199,10 @@ class Note:
         #     intervals = [i if isinstance(i, Interval) else Interval(i) for i in arg]
         #     return chords.Chord(self.name, intervals)
 
-    # quick accessor for chord method defined above:
-    def __call__(self, arg='major'):
-        """returns a Chord based on this Note as tonic"""
-        return self.chord(arg)
+    # # quick accessor for chord method defined above:
+    # def __call__(self, arg='major'):
+    #     """returns a Chord based on this Note as tonic"""
+    #     return self.chord(arg)
 
 
 
@@ -391,6 +324,7 @@ class OctaveNote(Note):
     #### useful public methods:
 
     ## Note parent class constructor
+    @property
     def note(self):
         """returns the parent class Note object
         associated with this OctaveNote"""

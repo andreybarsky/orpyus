@@ -86,9 +86,9 @@ def play_wave(wave, amplitude=1):
     sd.play(wave*amplitude, sampling_freq)
 
 # file writing soluton:
-def play_wave(wave, amplitude=0.9):
-    write('output.wav', sampling_freq, wave*amplitude)
-    playsound('output.wav')
+# def play_wave(wave, amplitude=0.9):
+    # write('output.wav', sampling_freq, wave*amplitude)
+    # playsound('output.wav')
 
 
 c4 = sine_wave(261.63, 2)

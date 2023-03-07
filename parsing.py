@@ -2,10 +2,12 @@
 
 # note name lookups
 note_names = ['C', 'C# / Db', 'D', 'D# / Eb', 'E', 'F', 'F# / Gb', 'G', 'G# / Ab', 'A', 'A# / Bb', 'B', ]
-is_blacknote = [False, True, False, True, False, False, True, False, True, False, True, False]
+natural_note_names = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
+# is_blacknote = [False, True, False, True, False, False, True, False, True, False, True, False]
 
 note_names_flat = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
 note_names_sharp = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
 
 # detect unicode notes too:
 note_names_flat_unicode = [n.replace('b', '♭') for n in note_names_flat]
@@ -21,6 +23,8 @@ note_names = {'generic':         note_names,
               'sharp_unicode':   note_names_sharp_unicode,
               'natural_unicode': note_names_natural_unicode,
               'valid':           valid_note_names}
+
+num_suffixes = {1: 'st', 2: 'nd', 3: 'rd', 4: 'th', 5: 'th', 6: 'th', 7: 'th'}
 
 
 #### note name parsing functions:

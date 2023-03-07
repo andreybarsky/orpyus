@@ -76,7 +76,7 @@ class Guitar:
                 cur_octave = prev_string.octave
                 low_string, high_string = String(string_note + str(cur_octave)), String(string_note + str(cur_octave+1))
                 low_dist, high_dist = (low_string - prev_string), (high_string - prev_string)
-                if low_dist > 0:
+                if low_dist.value > 0:
                     self.open_strings.append(low_string)
                 else:
                     self.open_strings.append(high_string)

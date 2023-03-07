@@ -1,88 +1,19 @@
 import muse.notes as notes
-from muse.notes import Note
-from muse.chords import Chord, chord_names
-from muse.intervals import Interval, Min2, Maj2, Min3, Maj3, Per4, Per5, Min6, Maj6, Min7, Maj7
-from muse.modes import mode_names
+from muse.notes import Note, OctaveNote
+from muse.chords import Chord, chord_names, matching_chords, most_likely_chord, relative_minors, relative_majors
+from muse.intervals import Interval, IntervalDegree, Min2, Maj2, Min3, Maj3, Per4, Per5, Min6, Maj6, Min7, Maj7
+from muse.modes import interval_key_names, key_name_intervals, whole_key_name_intervals, mode_lookup, interval_mode_names, non_scale_interval_mode_names
+import muse.parsing as parsing
 
-from muse.util import log, test
+from muse.util import log, test, precision_recall
 from itertools import cycle
 from collections import defaultdict
 import pdb
 
-# all accepted aliases for scale qualities - default suffix is listed first, "proper" full name is listed last
-# (I think we don't need a defaultdict anymore? because Key will never be called as a series of intervals)
-key_names = { # defaultdict(lambda: ' (unknown key)',
-    (Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', 'maj', 'M', ' major'],
-    (Maj2, Min3, Per4, Per5, Min6, Min7): ['m', 'min', ' natural minor', ' minor'],
-
-    (Maj2, Maj3, Per4, Per5, Min6, Maj7): [' harmonic major', 'M harmonic', 'maj harmonic'],
-    (Maj2, Min3, Per4, Per5, Min6, Maj7): [' harmonic minor', 'm harmonic'],
-    (Maj2, Maj3, Per4, Per5, Min6, Min7): [' melodic major', 'M melodic', 'maj melodic'],
-    (Maj2, Min3, Per4, Per5, Maj6, Maj7): [' melodic minor', 'm melodic', ' jazz minor', ' athenian'], # note: ascending only
-    # "melodic minor" can refer to using the the natural minor scale when descending, but that is TBI
-
-    (Maj2, Maj3, Per5, Maj6): [' pentatonic', 'maj pentatonic', ' pentatonic major', ' major pentatonic'],
-    (Min3, Per4, Per5, Min7): ['m pentatonic', ' pentatonic minor', ' minor pentatonic'],
-    #
-    # (Maj2, Per4, Per5, Maj6): [' blues major', ' blues major pentatonic', ' blues'],
-    # (Min3, Per4, Min6, Min7): [' blues minor', ' blues minor pentatonic', 'm blues'],
-
-    # (Min2, Maj2, Min3, Per4, Dim5, Per5, Min6, Maj6, Min7, Maj7): [' chromatic'], #### not a key!
-    } # )
-
-# keys arranged vaguely in order of rarity, for auto key detection/searching:
-common_key_suffixes = ['', 'm']
-uncommon_key_suffixes = [' harmonic minor', ' melodic minor']
-rare_key_suffixes = [' harmonic major', ' melodic major']
-
-# from modes module, add the 'common' modes: (those of major/minor natural keys)
-common_mode_suffixes = [] # list of mode suffixes of natural keys
-for i, (mode_name, intervals) in enumerate(mode_names.items()):
-    mode_degree = i+1
-    num_suffixes = {1: 'st', 2: 'nd', 3: 'rd', 4: 'th', 5: 'th', 6: 'th', 7: 'th'}
-    mode_aliases = [f' {mode_name}', f'mode{mode_degree}', f'{mode_degree}{num_suffixes[mode_degree]} mode']
-    common_mode_suffixes.append(mode_aliases[0])
-    dict_key = tuple(intervals)
-    if dict_key in key_names:
-        # e.g. aeolian mode is just natural minor, so we extend that dict entry:
-        key_names[dict_key].extend(mode_aliases)
-    else:
-        # not already in dict, so add this mode to it
-        key_names[dict_key] = mode_aliases
-
-## dict mapping all accepted key quality names to lists of their intervals:
-key_intervals = {}
-# dict mapping valid whole names of each possible key (for every tonic) to a tuple: (tonic, intervals)
-whole_key_name_intervals = {}
-
-for intervals, names in key_names.items():
-    for key_name_alias in names:
-        key_intervals[key_name_alias] = intervals
-        # strip leading spaces for determining quality from string argument:
-        # e.g. allow both ' minor' and 'minor',
-        # so that we can parse both Key('C minor') and Key('C', 'minor')
-        if len(key_name_alias) > 0 and key_name_alias[0] == ' ':
-            key_intervals[key_name_alias[1:]] = intervals
-
-        # build up whole-key-names (like 'C# minor')
-        for c in notes.chromatic_scale:
-            # parse both flat and sharp note names:
-            whole_name_strings = [f'{c.sharp_name}{key_name_alias}', f'{c.flat_name}{key_name_alias}']
-            if len(key_name_alias) > 0 and key_name_alias[0] == ' ':
-                whole_name_strings.append(f'{c.sharp_name}{key_name_alias[1:]}')
-                whole_name_strings.append(f'{c.flat_name}{key_name_alias[1:]}')
-
-            for whole_key_name in whole_name_strings:
-                whole_key_name_intervals[whole_key_name] = (c, intervals)
 
 # notes in order of which are flattened/sharpened in a key signature:
 flat_order = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
 sharp_order = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
-
-
-# # all others:
-# very_rare_key_suffixes = [v[0] for v in list(key_names.values()) if v[0] not in (common_key_suffixes + uncommon_key_suffixes + rare_key_suffixes)]
-
 
 class KeyNote(Note):
     def __init__(self, *args, key, **kwargs):
@@ -147,26 +78,47 @@ class KeyChord(Chord):
             return super().__sub__(other)
 
 class Key:
-    # TBI: modes??
+
     # TBI: key signature, sharp/flat detection
-    def __init__(self, name, quality=None, prefer_sharps=None):
-        """Initialise a Key from a name like 'D major' or 'C#m',
-        or by passing a Note, Note, or string that can be cast to Note,
-            (which we interpet as the key's tonic) and specifiying a quality
-            like 'major', 'minor', 'harmonic', etc."""
+    def __init__(self, arg1, quality=None, mode=None, prefer_sharps=None):
+        """Initialise a Key by one of three input cases:
+        1) arg1 is the full name of a key, like 'D major' or 'C#m',
+            which can include modes like 'D dorian'
+            or even exotic harmonic/melodic modes like 'D phrygian dominant'
+
+        2) arg1 is the tonic of a key, either as a Note or a string denoting a Note:
+            e.g. 'C' or 'D#',
+            and either a 'quality' or 'mode' arg in addition.
+        'quality' is parsed first, and must be one one of:
+            a) a string denoting a scale type, like 'major' or 'minor' or 'harmonic minor'
+            b) a string denoting a mode like 'dorian' or 'phrygian dominant'
+            c) an iterable of intervals from tonic, such as: [Min2, Min3, Per4, Per5, Maj6, Min7],
+                in which case we try to infer the scale's name/quality/mode from that
+                (and call it an 'unknown scale' if that fails)
+
+        if 'quality' is None, or refers to a base scale (one that is not a mode),
+        we accept the 'mode' arg which should be an integer between 1 and 7 inclusive,
+        specifying the degree of the mode of the desired modal scale.
+
+        e.g.: Key('C', 'harmonic minor', mode=3)
+        to get the 3rd mode of C harmonic minor"""
+
         ### parse input:
-        self.tonic, self.intervals = self.parse_input(name, quality)
+        self.tonic, self.suffix, self.intervals, self.mode_id = self._parse_input(arg1, quality, mode)
 
+        # # get common suffix from first alias in key_names dict,
+        # self.suffix = interval_key_names[self.intervals][0]
 
-
-        # get common suffix from inverted dict:
-        self.suffix = key_names[self.intervals][0]
-        # and infer quality:
-        self.major = (self.suffix in ['', ' pentatonic', ' blues major'])
-        self.minor = (self.suffix in ['m', 'm pentatonic', ' blues minor', ' harmonic minor'])
-
-
-
+        # and infer quality flags from it:
+        self.melodic = 'melodic' in self.suffix
+        self.harmonic = 'harmonic' in self.suffix
+        self.natural = (not self.melodic) and (not self.harmonic)
+        if self.natural:
+            self.major = (self.suffix == '') # (self.suffix in ['', ' pentatonic', ' blues major'])
+            self.minor = (self.suffix == 'm')  #(self.suffix in ['m', 'm pentatonic', ' blues minor', ' harmonic minor'])
+        else:
+            self.major = (self.suffix[:3] == 'maj')
+            self.minor = (self.suffix[:1] == 'm ')
 
         # figure out if we should prefer sharps or flats
         # by constructing chord over the tonic and querying it:
@@ -184,23 +136,91 @@ class Key:
         for i in self.intervals:
             new_note = self.tonic + i
             self.scale.append(new_note)
-        # # what kind of scale are we?
-        # if len(self) == 7:
-        #     self.type = 'diatonic'
-        # elif len(self) == 5:
-        #     self.type = 'pentatonic'
-        # elif len(self) == 11:
-        #     ... # TBI: remove this, chromatic scales are not a key
-        #     self.type = 'chromatic'
-        # else:
-        #     self.type = f'{len(self)}-tonic' #  ???
 
-        # build up chords within scale:
-        self.chords = [self.build_triad(i) for i in range(1, len(self)+1)]
         log('Initialised key: {self} ({self.scale})')
 
+    ### TBI: key signature construction
+    ###################################
+    @staticmethod
+    def _detect_key_signature(scale):
 
-    def parse_input(self, name, quality):
+        # haven't figured this out yet
+        natural_tonic = self.tonic.name[0]
+
+        # construct key signature:
+        scale_note_positions = [notes.note_positions[s.name] for s in self.scale]
+        sharp_scale = [parsing.note_names_sharp[s] for s in scale_note_positions]
+        flat_scale = [parsing.note_names_flat[s] for s in scale_note_positions]
+        for n in parsing.natural_note_names:
+            if n not in sharp_scale:
+                pass
+        self.num_naturals = sum([s in parsing.natural_note_names for s in self.scale])
+        self.num_sharps = ...
+    ###################################
+
+    @property
+    def pentatonic(self):
+        if self.major: # and self.natural?
+            pent_scale = [self[s] for s in [1,2,3,5,6]]
+        elif self.minor: # and self.natural?
+            pent_scale = [self[s] for s in [1,3,4,5,7]]
+        return pent_scale
+
+    ### TBI: blues pentatonic scales?
+    # (Maj2, Per4, Per5, Maj6): [' blues major', ' blues major pentatonic', ' blues'],
+    # (Min3, Per4, Min6, Min7): [' blues minor', ' blues minor pentatonic', 'm blues'],
+
+    @staticmethod
+    def _parse_input(arg1, quality, mode):
+        """Initialise a Key by one of two input cases:
+        1) arg1 is the tonic of a key, either as a Note or a string denoting a Note:
+            e.g. 'C' or 'D#',
+            and either a 'quality' or 'mode' arg in addition.
+        'quality' is parsed first, and must be one one of:
+            a) a string denoting a scale type, like 'major' or 'minor' or 'harmonic minor'
+            b) a string denoting a mode like 'dorian' or 'phrygian dominant'
+            c) an iterable of intervals from tonic, such as: [Min2, Min3, Per4, Per5, Maj6, Min7],
+                in which case we try to infer the scale's name/quality/mode from that
+                (and call it an 'unknown scale' if that fails)
+
+        if 'quality' is None, or refers to a base scale (one that is not a mode),
+        we accept the 'mode' arg which should be an integer between 1 and 7 inclusive,
+        specifying the degree of the mode of the desired modal scale.
+
+        e.g.: Key('C', 'harmonic minor', mode=3)
+        to get the 3rd mode of C harmonic minor
+
+        2) arg1 is the full name of a key, like 'D major' or 'C#m',
+            which can include modes like 'D dorian'
+            or even exotic harmonic/melodic modes like 'D phrygian dominant'
+
+
+        """
+
+        #### this method must return: tonic, suffix, intervals, and mode_id
+
+        ### case 1: arg1 is a tonic note, so we record it:
+        if isinstance(arg1, Note) or isinstance(arg1, str) and parsing.is_valid_note_name(arg1):
+            tonic = arg1 if isinstance(arg1, Note) else Note(arg1)
+
+            # and then determine what we've been given for quality and mode:
+            if isinstance(quality, str):
+                # we have been passed quality, which can be a scale quality like 'major' or 'harmonic minor'
+                # so first we check whether it is in our list of scale names:
+                if quality in key_name_intervals.keys():
+                    # get the appropriate scale intervals:
+                    intervals = key_name_intervals[quality]
+                    # and find the common scale suffix:
+                    suffix = interval_key_names[intervals]
+                elif quality in mode_name_intervals.keys():
+                    intervals = 
+
+
+        if isinstance(name, str):
+            # catch a specific exemption:
+            if 'harmonic' in name or 'melodic' in name:
+                raise ValueError("Keys of quality 'melodic' or 'harmonic' must have major or minor specified explicitly")
+
         if quality is None: # assume major by default if quality is not given
             quality = 'major'
 
@@ -211,6 +231,7 @@ class Key:
             # (we ignore the quality arg in this case)
 
         else:
+
             # get tonic from name argument:
             if isinstance(name, Note):
                 log(f'Initialising scale from Note: {name}')
@@ -223,7 +244,7 @@ class Key:
             else:
                 raise TypeError(f'Expected to initialise Key with tonic argument of type Note, Note, or str, but got: {type(name)}')
             # and get intervals from quality argument
-            intervals = key_intervals[quality]
+            intervals = key_name_intervals[quality]
         return tonic, intervals
 
     def build_triad(self, degree: int):
@@ -233,27 +254,40 @@ class Key:
         # scales are 1-indexed which makes it hard to modso we correct here:
 
         root, third, fifth = self[degree], self[degree+2], self[degree+4]
+        # tonic is known so we can get chord quality from intervals:
+        intervals = (IntervalDegree((third-root).value, degree=3), IntervalDegree((fifth-root).value, degree=5))
+        if intervals in chord_names.keys():
+            return Chord(root, chord_names[intervals][0])
+        else:
+            log(f'Building triad, trying to find an unnamed chord with intervals: {intervals}')
+            match = most_likely_chord([root, third, fifth], perfect_only=True, allow_inversions=False)
+            print(match.name)
 
         return KeyChord([root, third, fifth], key=self)
 
-    def get_valid_chords(self):
+    @property
+    def chords(self):
+        return [self.build_triad(i) for i in range(1, len(self)+1)]
+
+    @property
+    def valid_chords(self):
         # loop through all possible chords and return the ones that are valid in this key:
         chord_hash = {}
 
         for intervals, names in chord_names.items():
             for note in self.scale:
-                this_chord = KeyChord(note, intervals, key=self)
+                candidate_chord = KeyChord(note, intervals, key=self)
                 # is it valid? assume it is and disquality it if not
                 valid = True
-                for note in this_chord.notes:
+                for note in candidate_chord.notes:
                     if note not in self.scale:
                         valid = False
                 # add to our hash if it is:
                 if valid:
-                    if this_chord not in chord_hash:
-                        chord_hash[this_chord] = 1
+                    if candidate_chord not in chord_hash:
+                        chord_hash[candidate_chord] = 1
                     else:
-                        chord_hash[this_chord] += 1
+                        chord_hash[candidate_chord] += 1
 
         chord_list = list(chord_hash.keys())
 
@@ -265,15 +299,15 @@ class Key:
 
     def __contains__(self, item):
         """is this Chord or Note part of this key?"""
-        if self.type == 'chromatic':
-            return True # chromatic scale contains everything
-        elif isinstance(item, Note):
+        if isinstance(item, Note):
             return item in self.scale
         elif isinstance(item, Chord):
             return item in self.chords
 
     def __getitem__(self, i):
         """Index scale notes by degree (where tonic=1)"""
+        # output = []
+        # for i in idxs:
         if i == 0:
             raise ValueError('Scales are 1-indexed, with the tonic corresponding to [1]')
 
@@ -282,6 +316,11 @@ class Key:
             i = ((i - 1) % len(self)) + 1
 
         return self.scale[i-1]
+        #     output.append(self.scale[i-1])
+        # if len(output) == 1:
+        #     return output[0] # if indexed by only a single value, return only a single value
+        # else:
+        #     return output # else return a list of equal length to indexes
 
     def __call__(self, i):
         """Index scale chords by degree (where tonic=1)"""
@@ -342,10 +381,9 @@ class Key:
             return Key(f'{new_tonic.name}{self.suffix}')
         elif isinstance(other, Key):
             # distance from other key along Co5s
-            assert self.type == other.type == 'diatonic'
 
-            self_reference_key = self if self.major else self.relative_major()
-            other_reference_key = other if other.major else other.relative_major()
+            self_reference_key = self if self.major else self.relative_major
+            other_reference_key = other if other.major else other.relative_major
 
             self_pos = co5s_positions[self_reference_key]
             other_pos = co5s_positions[other_reference_key]
@@ -362,88 +400,93 @@ class Key:
     def clockwise(self, value=1):
         """fetch the next key from clockwise around the circle of fifths,
         or if value>1, go clockwise that many steps"""
-        reference_key = self if self.major else self.relative_major()
+        reference_key = self if self.major else self.relative_major
         new_co5s_pos = (co5s_positions[reference_key] + value) % 12
         # instantiate new key object: (just in case???)
         new_key = co5s[new_co5s_pos]
-        new_key = new_key if self.major else new_key.relative_minor()
+        new_key = new_key if self.major else new_key.relative_minor
+        import pdb; pdb.set_trace()
         return Key(new_key.tonic, new_key.suffix)
 
     def counterclockwise(self, value=1):
         return self.clockwise(-value)
 
+    @property
     def relative_minor(self):
         assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
-        rm_tonic = chords.relative_minors[self.tonic]
-        return Key(rm_tonic, 'minor')
+        rm_tonic_name = relative_minors[self.tonic.name]
+        return Key(rm_tonic_name, 'minor')
 
+    @property
     def relative_major(self):
         assert not self.major, f'{self} is already major, and therefore has no relative major'
-        rm_tonic = chords.relative_majors[self.tonic]
-        return Key(rm_tonic)
+        rm_tonic_name = relative_majors[self.tonic.name]
+        return Key(rm_tonic_name)
 
 
-def rate_keys(chordlist):
-    """given an iterable of Chord objects,
-    determine the keys that those chords could belong to"""
-
-    ### check for common chords first:
-    full_matches = []
-    partial_matches = {}
-
-    unique_chords = []
-    for c in chordlist:
-        if isinstance(c, Chord):
-            unique_chords.append(c)
-        elif isinstance(c, str):
-            unique_chords.append(Chord(c))
-
-    unique_chords = list(set(unique_chords))
-
-    for tonic in notes.notes:
-        for quality in common_key_suffixes + uncommon_key_suffixes + rare_key_suffixes:
-            candidate = Key(tonic, quality)
-            belongs = 0
-            for chord in unique_chords:
-                if chord in candidate.chords:
-                    belongs += 1
-            rating = belongs / len(unique_chords)
-            # rating is 1 if every note in the notelist appears in the candidate chord
-
-            if rating == 1 and len(candidate) == len(unique_chords):
-                # one-to-one mapping, perfect match
-                full_matches.append(candidate)
-            else:
-                if rating == 1 and len(candidate) > len(unique_chords):
-                    # good match, but chord has some extra things in it
-                    # penalise rating based on the difference in length
-                    # (intersection over union?)
-                    if len(candidate) > len(unique_chords):
-                        specificity_penalty = len(unique_chords) / len(candidate)
-                        rating *= specificity_penalty
-
-                elif len(candidate) != len(unique_chords):
-                    precision_penalty = 1 / abs(len(candidate) - len(unique_chords))
-                    rating *= precision_penalty
-                    # if len(candidate) > len(unique_notes):
-                    #     # print('Candidate is longer than notelist')
-                    # elif len(unique_notes) > len(candidate):
-                    #     print('Notelist is longer than candidate')
-
-                # uncommon chord types are inherently less likely:
-                if candidate.suffix in uncommon_key_suffixes:
-                    rating *= 0.99
-                elif candidate.suffix in rare_key_suffixes:
-                    rating *= 0.98
-
-                partial_matches[candidate] = round(rating, 2)
-
-    return full_matches, partial_matches
+# def rate_keys(chordlist):
+#     """given an iterable of Chord objects,
+#     determine the keys that those chords could belong to"""
+#
+#     ### check for common chords first:
+#     full_matches = []
+#     partial_matches = {}
+#
+#     unique_chords = []
+#     for c in chordlist:
+#         if isinstance(c, Chord):
+#             unique_chords.append(c)
+#         elif isinstance(c, str):
+#             unique_chords.append(Chord(c))
+#
+#     unique_chords = list(set(unique_chords))
+#
+#     for tonic in notes.notes:
+#         for quality in common_key_suffixes + uncommon_key_suffixes + rare_key_suffixes:
+#             candidate = Key(tonic, quality)
+#             belongs = 0
+#             for chord in unique_chords:
+#                 if chord in candidate.chords:
+#                     belongs += 1
+#             rating = belongs / len(unique_chords)
+#             # rating is 1 if every note in the notelist appears in the candidate chord
+#
+#             if rating == 1 and len(candidate) == len(unique_chords):
+#                 # one-to-one mapping, perfect match
+#                 full_matches.append(candidate)
+#             else:
+#                 if rating == 1 and len(candidate) > len(unique_chords):
+#                     # good match, but chord has some extra things in it
+#                     # penalise rating based on the difference in length
+#                     # (intersection over union?)
+#                     if len(candidate) > len(unique_chords):
+#                         specificity_penalty = len(unique_chords) / len(candidate)
+#                         rating *= specificity_penalty
+#
+#                 elif len(candidate) != len(unique_chords):
+#                     precision_penalty = 1 / abs(len(candidate) - len(unique_chords))
+#                     rating *= precision_penalty
+#                     # if len(candidate) > len(unique_notes):
+#                     #     # print('Candidate is longer than notelist')
+#                     # elif len(unique_notes) > len(candidate):
+#                     #     print('Notelist is longer than candidate')
+#
+#                 # uncommon chord types are inherently less likely:
+#                 if candidate.suffix in uncommon_key_suffixes:
+#                     rating *= 0.99
+#                 elif candidate.suffix in rare_key_suffixes:
+#                     rating *= 0.98
+#
+#                 partial_matches[candidate] = round(rating, 2)
+#
+#     return full_matches, partial_matches
 
 
 # largely copy-pasted from chords.matching_chords:
 
-def matching_keys(chordlist, score=False):
+#################### TBI (or completed)
+...
+def matching_keys(chordlist, by='note', score=False):
     """given an iterable of Chord objects,
     determine the Keys that those chords could belong to.
 
@@ -451,53 +494,68 @@ def matching_keys(chordlist, score=False):
     and (precision, recall) tuples as values for those keys"""
 
     # parse the items in chordlist, casting to Chord if necessary, and find list of unique ones:
-    unique_chords = []
-    chord_weights = {}
+    # unique_chords = []
+    # chord_weights = {}
+
+    if by=='note':
+        unique_notes = []
+        note_weights = {}
+
+    elif by=='chord':
+        unique_chords = []
+        chord_weights = {}
+    else:
+        raise Exception("matching_keys function must be by='note' or by='chord'")
+
+
     for i, c in enumerate(chordlist):
         if isinstance(c, Chord):
             chord = Chord(c.tonic, c.suffix)
-        elif isinstance(c, string):
+        elif isinstance(c, str):
             chord = Chord(c)
 
-        if chord not in unique_chords:
-            unique_chords.append(chord)
-            chord_weights[chord] = 1
-        else:
-            # increment weight of this chord for the final ranking:
-            chord_weights[chord] += 1
+        if by=='note':
+            for n in chord.notes:
+                if n not in note_weights.keys():
+                    note_weights[n] = 1
+                else:
+                    note_weights[n] += 1
+                if i == 0:
+                    # notes in the first chord in the progression get weighted higher:
+                    note_weights[n] += 2
 
-        if i == 0:
-            # first chord in the progression also gets weighted higher:
-            chord_weights[chord] += 2
+        elif by=='chord':
+            if chord not in chord_weights.keys():
+                chord_weights[chord] = 1
+            else:
+                # increment weight of this chord for the final ranking:
+                chord_weights[chord] += 1
+            if i == 0:
+                # first chord in the progression also gets weighted higher:
+                chord_weights[chord] += 2
 
-    unique_chords = list(set(unique_chords))
+
 
     perfect_matches = {}
     precise_matches = {}
     partial_matches = {}
 
+    unique_target_items = list(chord_weights.keys()) if by=='chord' else list(note_weights.keys())
+
+
+    # loop through all possible keys, instantiate them, and compare their members:
     for tonic in notes.chromatic_scale:
         for quality in key_types:
-            candidate = Key(tonic, quality)
+
+            candidate = Key(f'{tonic.name}{quality}')
+            candidate_modes = candidate.modes()
 
             # get precision and recall which are the two most important metrics to sort by
-            precision, recall = precision_recall(unique_notes, candidate)
+            precision, recall = precision_recall(unique_chords, candidate)
             # but also use a third, subjective value by which to tiebreak
             likelihood_score = 1.
 
             ### we evaluate subjective likelihood value based on whatever I want:
-
-            # less likely if tonic is not the first note in the notelist
-            if candidate.tonic != notelist[0] and notelist[0] in candidate.notes:
-                likelihood_score -= .2
-                # initialise an inverted key that we pass as match if it fits perfectly
-                inversion = Key(candidate.tonic, candidate.suffix, root=notelist[0])
-            elif notelist[0] not in candidate.notes:
-                # less lkely if the the notelist and candidate don't share a tonic:
-                likelihood_score -= .1
-                inversion = None
-            else:
-                inversion = None
 
             # non-major keys are slightly less likely:
             if not candidate.major:
@@ -505,13 +563,9 @@ def matching_keys(chordlist, score=False):
 
             # less likely for rarer key types
             if candidate.suffix in uncommon_key_suffixes:
-                likelihood_score -= .2
-            elif candidate.suffix in rare_key_suffixes:
                 likelihood_score -= .3
-            elif candidate.suffix in very_rare_key_suffixes:
-                likelihood_score -= .5
-            elif candidate.suffix in legendary_key_suffixes:
-                likelihood_score -= .7
+            elif candidate.suffix in rare_key_suffixes:
+                likelihood_score -= .6
 
             # which dict does this key candidate go to?
             if precision == 1 and recall == 1:
@@ -536,17 +590,18 @@ def matching_keys(chordlist, score=False):
 
                 target_dict[candidate] = (round(precision,1), round(recall,1), round(likelihood_score,1))
 
-                if inversion is not None:
-                    # add this inversion as well as the non-inverted key, but make the inversion more likely
-                    ### troubleshooting
-                    if inversion in target_dict.keys():
-                        print(f" And trying to add {inversion} to target_dict but it's already there")
-                        for key in target_dict.keys():
-                            if hash(key) == hash(inversion):
-                                print(key)
-                                import pdb; pdb.set_trace()
-                    ### troubleshooting
-                    target_dict[inversion] = (round(precision,1), round(recall,1), round(likelihood_score + .2, 1))
+                #### instead of inversions: modes?
+                # if inversion is not None:
+                #     # add this inversion as well as the non-inverted key, but make the inversion more likely
+                #     ### troubleshooting
+                #     if inversion in target_dict.keys():
+                #         print(f" And trying to add {inversion} to target_dict but it's already there")
+                #         for key in target_dict.keys():
+                #             if hash(key) == hash(inversion):
+                #                 print(key)
+                #                 import pdb; pdb.set_trace()
+                #     ### troubleshooting
+                #     target_dict[inversion] = (round(precision,1), round(recall,1), round(likelihood_score + .2, 1))
 
     # sort matches by their distinguishing values:
     # i.e. perfect matches by likelihood:
