@@ -1,6 +1,8 @@
 import muse.notes as notes
-from muse.notes import OctaveNote
+from muse.notes import OctaveNote, NoteList
 from muse.chords import Chord, most_likely_chord
+from muse.parsing import parse_out_note_names
+from muse.util import test
 import pdb
 
 class String(OctaveNote):
@@ -30,57 +32,63 @@ class Guitar:
 
         self.num_strings = strings
 
-        # loop through each note in tunings, assuming each successive string is higher than the last:
-        tuning = tuning.strip()
-
         if tuning in tunings.keys():
             self.open_strings = tunings[tuning]
+
 
         else:
             default_bass = String('E2')
 
-            first_string_fragment = tuning[:2]
-            if first_string_fragment[-1] in ['b', '#']:
-                first_string_note = first_string_fragment
-                string_idx = 2
-                prefer_sharps = first_string_fragment[-1]  == '#' # use sharp or flat notation depending on what is used in input string
-            else:
-                first_string_note = first_string_fragment[0]
-                string_idx = 1
-                prefer_sharps = True # but doesn't matter
-            # first string is going to be in octave 1 or 2, find whichever is closest to E2:
-            low_bass, high_bass = String(first_string_note + '1'), String(first_string_note + '2')
-            low_dist, high_dist = abs(low_bass - default_bass), abs(high_bass - default_bass)
+            # cleanup:
+            tuning = tuning.strip()
+            # separate out individual note chromas from the input string:
+            tuning_chromas = NoteList(parse_out_note_names(tuning))
+            #
+            open_strings = tuning_chromas.force_octave(start_octave=2)
+            self.open_strings = [String(s) for s in open_strings]
 
-            if low_dist < high_dist:
-                first_string = low_bass
-            else:
-                first_string = high_bass
-
-            first_string._set_sharp_preference(prefer_sharps)
-            self.open_strings = [first_string]
-            prev_string = first_string
-
-            while len(self.open_strings) < self.num_strings:
-                string_note_fragment = tuning[string_idx : string_idx+2]
-                # string_letter = tuning[string_idx]
-                if string_note_fragment[-1] in ['#', 'b']:
-                    string_note = tuning[string_idx: string_idx+2]
-                    string_idx += 2
-                    prefer_sharps = string_note_fragment[-1] == '#'
-                else:
-                    string_note = tuning[string_idx]
-                    string_idx += 1
-                    prefer_sharps = True # but doesn't matter
-
-                cur_octave = prev_string.octave
-                low_string, high_string = String(string_note + str(cur_octave)), String(string_note + str(cur_octave+1))
-                low_dist, high_dist = (low_string - prev_string), (high_string - prev_string)
-                if low_dist.value > 0:
-                    self.open_strings.append(low_string)
-                else:
-                    self.open_strings.append(high_string)
-                prev_string = self.open_strings[-1]
+            # first_string_fragment = tuning[:2]
+            # if first_string_fragment[-1] in ['b', '#']:
+            #     first_string_note = first_string_fragment
+            #     string_idx = 2
+            #     prefer_sharps = first_string_fragment[-1]  == '#' # use sharp or flat notation depending on what is used in input string
+            # else:
+            #     first_string_note = first_string_fragment[0]
+            #     string_idx = 1
+            #     prefer_sharps = True # but doesn't matter
+            # # first string is going to be in octave 1 or 2, find whichever is closest to E2:
+            # low_bass, high_bass = String(first_string_note + '1'), String(first_string_note + '2')
+            # low_dist, high_dist = abs(low_bass - default_bass), abs(high_bass - default_bass)
+            #
+            # if low_dist < high_dist:
+            #     first_string = low_bass
+            # else:
+            #     first_string = high_bass
+            #
+            # first_string._set_sharp_preference(prefer_sharps)
+            # self.open_strings = [first_string]
+            # prev_string = first_string
+            #
+            # while len(self.open_strings) < self.num_strings:
+            #     string_note_fragment = tuning[string_idx : string_idx+2]
+            #     # string_letter = tuning[string_idx]
+            #     if string_note_fragment[-1] in ['#', 'b']:
+            #         string_note = tuning[string_idx: string_idx+2]
+            #         string_idx += 2
+            #         prefer_sharps = string_note_fragment[-1] == '#'
+            #     else:
+            #         string_note = tuning[string_idx]
+            #         string_idx += 1
+            #         prefer_sharps = True # but doesn't matter
+            #
+            #     cur_octave = prev_string.octave
+            #     low_string, high_string = String(string_note + str(cur_octave)), String(string_note + str(cur_octave+1))
+            #     low_dist, high_dist = (low_string - prev_string), (high_string - prev_string)
+            #     if low_dist.value > 0:
+            #         self.open_strings.append(low_string)
+            #     else:
+            #         self.open_strings.append(high_string)
+            #     prev_string = self.open_strings[-1]
 
     def distance_from_standard(self):
         """how many semitones up/down must the strings of a standard guitar be tuned to get this tuning?"""
@@ -89,14 +97,31 @@ class Guitar:
             distances.append(s - tunings['standard'][i])
         return distances
 
-    def fret(self, frets):
-        return __getitem__(self, frets)
+    def pick(self, frets, pattern=None, *args, **kwargs):
+        """plays the fretted notes as audio, arpeggiated into a melody.
+        accepts optional 'pattern' arg as list of string indices,
+        indicating a picking pattern that changes the order of notes"""
+        notes = self[frets]
+        if pattern is not None:
+            notes = NoteList([notes[p] for p in pattern])
+        notes.play(*args, arpeggio=True, interval=0.3, duration=3, **kwargs)
 
-    def chord(self, frets):
-        return __call__(self, frets)
+    def strum(self, frets, *args, **kwargs):
+        """plays the fretted notes as audio, arpeggiated close together"""
+        notes = self[frets]
+        # notes.play(*args, arpeggio=False, **kwargs)
+        notes.play(*args, arpeggio=True, interval=0.05, duration=3, **kwargs)
+
+    def chord(self, frets, *args, **kwargs):
+        """plays the fretted notes as audio, summed into a chord"""
+        notes = self[frets]
+        # notes.play(*args, arpeggio=False, **kwargs)
+        notes.play(*args, arpeggio=False, duration=3, **kwargs)
 
     def __getitem__(self, frets):
-        """accepts a string or iterable of fret indices, returns a list of the resulting notes"""
+        """plucks each string according to the listed fret diagram, gets the
+        resulting notes, and returns them as a NoteList together with the
+        appropriate auto-detected Chord object"""
         string_notes = []
         if isinstance(frets, (list, tuple)):
             for s, fret in enumerate(frets):
@@ -112,14 +137,14 @@ class Guitar:
                     string_notes.append(self.open_strings[s](int(fret)))
                 else:
                     pass
-        return string_notes
+        notes = NoteList(string_notes)
+        return notes
 
     def __contains__(self, item):
         return item in self.open_strings
 
     def __call__(self, frets):
-        """plucks each string according to the listed fret diagram, gets the
-        resulting notes, and returns the appropriate auto-detected Chord object"""
+        """returns the most likely chord detected for this set of frets"""
         return most_likely_chord(self[frets])
 
     def __str__(self):
@@ -134,3 +159,9 @@ class Guitar:
 standard = Guitar()
 dadgad = Guitar('DADGAD')
 dadgbe = dropD = Guitar('DADGBE')
+
+if __name__ == '__main__':
+
+    test(standard['022100'], NoteList('EBEAbBE').force_octave(2))
+    test(standard('022100'), Chord('E'))
+    test(dadgad('000000'), Chord('Dsus4'))

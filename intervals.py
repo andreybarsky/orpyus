@@ -176,9 +176,12 @@ class Interval:
         return Interval(self.value % m)
 
     def __neg__(self):
+        return Interval(-self.value)
+
+    def __invert__(self):
         """returns the inverted interval, which is distinct from the negative interval.
         negative of Interval(7) (perfect fifth) is Interval(-7) (perfect fifth descending),
-        but the inverse of Interval(7) is Interval(-5) (perfect fourth descending)"""
+        but the inverse, ~Interval(7) is equal to Interval(-5) (perfect fourth descending)"""
         return Interval(-(12-self.value))
 
     def __abs__(self):
@@ -357,7 +360,8 @@ class IntervalDegree(Interval):
 
         if arg1 is not None:
             # parse positional arg1, arg2 pair
-            # assert (value is None and degree is None and quality is None), "Received keyword arguments to IntervalDegree.__init__, but positional arguments have already been passed"
+            # assert (value is None and degree is None and quality is None), """Received keyword arguments to IntervalDegree.__init__,
+            # but positional arguments have already been passed"""
 
             if arg2 is not None:
                 # determine whether arg1 is a value or a degree,
@@ -700,3 +704,13 @@ PerfectEleventh = PerEleventh = Perfect11th = Perfect11 = Per11 = P11 = Extended
 AugmentedEleventh = AugEleventh = Augmented11th = Aug11th = Aug11 = ExtendedInterval(18, degree=11)
 
 common_intervals = [P1, m2, M2, m3, M3, P4, Dim5, Per5, m6, M6, m7, M7, P8, m9, M9, m10, M10, P11]
+
+if __name__ == '__main__':
+    test(Interval(4) - Interval(2), Interval(2))
+    test(Interval(4) + 10, Interval(14))
+    test(Maj3, Interval(4))
+    test(Maj3 + Min3, Per5)
+    test(Per5-Min3, Maj3)
+    test(Interval(7).consonance, 1)
+    test(Interval(6).consonance, 0)
+    test(~Interval(7), Interval(-5))

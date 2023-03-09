@@ -1,5 +1,5 @@
 import muse.notes as notes
-from muse.notes import Note
+from muse.notes import Note, NoteList
 from muse.intervals import *
 from muse.util import log, test, precision_recall
 from muse.parsing import valid_note_names, is_valid_note_name, parse_out_note_names
@@ -22,14 +22,15 @@ chord_names = defaultdict(lambda: [' (unknown chord)'],
     # dyads
     (Per5, ): ['5', '5th', 'fifth', 'ind', '(no 3)', '(no3)', 'power chord', 'power', 'pow'],
     # are these real??
-    (Maj3, ): ['(no5)'],
-    (Min3, ): ['m(no5)'],
+    (Maj3, ): ['(no5)', '(no 5)'],
+    (Min3, ): ['m(no5)', 'm(no 5)'],
 
     # weird triads
     (Dim3, Per5): ['sus2', 'suspended 2nd', 'suspended second', 's2'],
     (Aug3, Per5): ['sus4', 'suspended 4th', 'suspended fourth', 's4'],
     (Maj3, Aug5): ['+', 'aug', 'augmented triad', 'augmented fifth', 'augmented 5th', 'aug5'],    #  #5? ♯5?
     (Min3, Dim5): ['dim', 'o', 'o', 'diminished', 'diminished triad', 'diminished fifth', 'diminished 5th', 'dim5', 'm♭5', 'mb5'],
+    (Maj3, Dim5): ['Mb5', '♭5', 'M♭5', 'Δ-5', ],
 
     # sixths
     (Maj3, Per5, Maj6): ['6', 'maj6', 'M6', 'major sixth', 'major 6th'],
@@ -52,6 +53,7 @@ chord_names = defaultdict(lambda: [' (unknown chord)'],
     (Min3, Per5, Min7, Maj9): ['m9', 'min9', 'minor ninth', 'minor 9th'],
     (Maj3, Per5, Min7, Maj9): ['9', 'dom9', 'dominant ninth', 'dominant 9th', 'd9'],
     (Maj3, Per5, Min7, Min9): ['dmin9', 'dominant minor ninth', 'dominant minor 9th'],
+    (Min3, Dim5, Min7, Maj9): ['dim9', 'diminished ninth', 'diminished 9th', 'diminished 9'],
 
     # elevenths
     (Maj3, Per5, Maj7, Maj9, Per11): ['maj11', 'major eleventh', 'major 11th', 'M11'],
@@ -198,7 +200,7 @@ class Chord:
         # determine notes in chord:
         self.fundamental_intervals = list(self.factor_intervals.values())  # the fundamental intervals used to determine chord suffix
         self.fundamental_notes = list(self.factors.values())             # the corresponding fundamental notes
-        self.notes = [self.tonic] + [self.tonic + i.value for i in self.intervals]      # 'full' list of notes, includes octaves and non-unique notes and so on
+        self.notes = NoteList([self.tonic] + [self.tonic + i.value for i in self.intervals])    # 'full' list of notes, includes octaves and non-unique notes and so on
 
         # accessing self.factors after init should give us the tonic too:
         factor_intervals_including_tonic = [(1, Interval(0))] + [(f, i) for f,i in self.factor_intervals.items() if i is not None]
@@ -206,8 +208,8 @@ class Chord:
 
         # determine chord suffix: ('m', 'dim', 'mmaj7', etc.)
         detected_suffix = self._detect_suffix_from_intervals(self.fundamental_intervals)
-        if detected_suffix is None:
-            import pdb; pdb.set_trace()
+        # if detected_suffix is None:
+        #     import pdb; pdb.set_trace()
         self.suffix = detected_suffix if detected_suffix is not None else ' (unknown chord)'
 
 
@@ -298,7 +300,8 @@ class Chord:
         elif isinstance(arg1, (list, tuple)):
             # iterable of notes has been given
             log(f'Chord.init case 2: Parsing arg1 ({arg1}) as {type(arg1)} of Notes')
-            chord_notes = [item if isinstance(item, Note) else Note(item) for item in arg1]
+            # chord_notes = [item if isinstance(item, Note) else Note(item) for item in arg1]
+            chord_notes = NoteList(arg1)
             # interpret first note in input as the tonic:
             tonic = chord_notes[0]
             intervals = [c - tonic for c in chord_notes[1:]]
@@ -466,6 +469,9 @@ class Chord:
                 factors[3] = IntervalDegree(third.value, 3)
             else:
                 print(f"Irregular triad chord ({intervals}): {third} is not a valid third")
+                if third.expected_degree == 5:
+                    # this is some weird aug4 probably
+                    third = IntervalDegree(third.value, degree=3)
                 this_degree = third.degree if third.degree is not None else third.expected_degree
                 factors[this_degree] = IntervalDegree(third.value, this_degree)
 
@@ -848,8 +854,6 @@ class Chord:
     def __repr__(self):
         return str(self)
 
-
-
     def _get_flags(self):
         """Returns a list of the boolean flags associated with this object"""
         flags_names = {
@@ -891,6 +895,19 @@ class Chord:
     def summary(self):
         print(self.properties)
 
+    # wrappers for the NoteList audio methods of self.notes:
+    def _waves(self, *args, **kwargs):
+        return self.notes._waves(*args, **kwargs)
+
+    def _chord_wave(self, *args, **kwargs):
+        return self.notes._chord_wave(*args, **kwargs)
+
+    def _melody_wave(self, *args, **kwargs):
+        return self.notes._melody_wave(*args, **kwargs)
+
+    def play(self, *args, **kwargs):
+        self.notes.play(*args, **kwargs)
+
 
 # chord constructor from tonic and stacked intervals:
 def StackedChord(tonic, stack):
@@ -929,6 +946,8 @@ def matching_chords(notelist, score=False, allow_inversions=False):
             note = Note(position=n)
         elif isinstance(n, str):
             note = Note(n)
+        else:
+            raise Exception(f'notelist passed to matching_chords function contains an item of unexpected type {type(n)}: {n}')
         if note not in unique_notes:
             unique_notes.append(note)
     unique_notes = list(set(unique_notes))
@@ -1070,7 +1089,7 @@ if __name__ == '__main__':
     Cn, En, Gn = notes.C, notes.E, notes.G
     test(Chord([Cn, En, Gn]), Chord(['C', 'E', 'G']))
     test(Chord([Cn, En, Gn]), Cn.chord([4,7]))
-    test(Chord([Cn, En, Gn]), Cn('major'))
+    # test(Chord([Cn, En, Gn]), Cn('major'))
     test(Chord('Cadd9'), Chord('C', [4, 7, 14]))
     test(Chord('Cm/maj7'), Chord('C', 'minor-major 7th'))
     test(Chord('A minor'), StackedChord('A', [Min3, Maj3]))

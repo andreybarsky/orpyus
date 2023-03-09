@@ -1,5 +1,5 @@
 from muse.intervals import *
-# from muse.scales import interval_key_names, key_name_intervals
+# from muse.scales import interval_scale_names, key_name_intervals
 from muse.util import rotate_list
 from muse.parsing import num_suffixes
 import muse.notes as notes
@@ -8,9 +8,9 @@ import muse.notes as notes
 
 # dict mapping standard key intervals to all accepted aliases for scale qualities
 # default suffix is listed first, "proper" full name is listed last
-interval_key_names = {
-    (Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', 'maj', 'M', ' major', ' natural major'],
-    (Maj2, Min3, Per4, Per5, Min6, Min7): ['m', 'min', ' minor', ' natural minor'],
+interval_scale_names = {
+    (Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', 'maj', 'M', 'major', ' natural major'],
+    (Maj2, Min3, Per4, Per5, Min6, Min7): ['m', 'min', 'minor', ' natural minor'],
 
     (Maj2, Maj3, Per4, Per5, Min6, Maj7): ['maj harmonic', 'M harmonic', ' harmonic major',],
     (Maj2, Min3, Per4, Per5, Min6, Maj7): ['m harmonic', ' harmonic minor'],
@@ -43,7 +43,7 @@ key_name_intervals = {}
 # dict mapping valid whole names of each possible key (for every tonic) to a tuple: (tonic, intervals)
 whole_key_name_intervals = {}
 
-for intervals, names in interval_key_names.items():
+for intervals, names in interval_scale_names.items():
     for key_name_alias in names:
         key_name_intervals[key_name_alias] = intervals
         # strip leading spaces for determining quality from string argument:
@@ -51,7 +51,7 @@ for intervals, names in interval_key_names.items():
         # so that we can parse both Key('C minor') and Key('C', 'minor')
         if len(key_name_alias) > 0 and key_name_alias[0] == ' ':
             key_name_intervals[key_name_alias[1:]] = intervals
-            interval_key_names[intervals].extend([key_name_alias[1:]])
+            interval_scale_names[intervals].extend([key_name_alias[1:]])
 
         # build up whole-key-names (like 'C# minor')
         for c in notes.chromatic_scale:
@@ -69,7 +69,7 @@ for intervals, names in interval_key_names.items():
 common_key_suffixes = ['', 'm']
 uncommon_key_suffixes = ['m harmonic', 'm melodic']
 rare_key_suffixes = ['maj harmonic', 'maj melodic']
-# very_rare_key_suffixes = [v[0] for v in list(interval_key_names.values()) if v[0] not in (common_key_suffixes + uncommon_key_suffixes + rare_key_suffixes)]
+# very_rare_key_suffixes = [v[0] for v in list(interval_scale_names.values()) if v[0] not in (common_key_suffixes + uncommon_key_suffixes + rare_key_suffixes)]
 
 
 
@@ -131,29 +131,29 @@ for base in mode_bases:
             mode_lookup[full_name] = mode_hashkey
 
         mode_intervals_from_tonic = get_mode_intervals(intervals_from_tonic, degree)
-        mode_interval_short_names = [f'{i.quality[:3]}{i.degree}' for i in mode_intervals_from_tonic]
-        mode_interval_short_names = ', '.join(mode_interval_short_names)
-        log(f'mode *{degree}* of {base} key: {mode_interval_short_names}')
+        mode_interval_from_tonic_short_names = [f'{i.quality[:3]}{i.degree}' for i in mode_intervals_from_tonic]
+        mode_interval_from_tonic_short_names = ', '.join(mode_interval_from_tonic_short_names)
+        print(f'mode *{degree}* of {base} key: {mode_interval_from_tonic__short_names}')
 
         this_mode_names = mode_idx_names[base][degree]
         this_mode_names.extend([f'{m} scale' for m in this_mode_names])
 
         interval_key = tuple(mode_intervals_from_tonic)
 
-        log(f'  also known as: {", ".join(this_mode_names)}')
+        print(f'  also known as: {", ".join(this_mode_names)}')
 
         interval_mode_names[interval_key] = this_mode_names
 
-        if interval_key in interval_key_names.keys():
-            log(f'--also enharmonic to:{interval_key_names[interval_key][-1]} scale')
+        if interval_key in interval_scale_names.keys():
+            print(f'--also enharmonic to:{interval_scale_names[interval_key][-1]} scale')
             # add non-mode scale names to mode_lookup too: e.g. mode_lookup['natural minor'] returns ('major', 6)
-            for name in interval_key_names[interval_key]:
+            for name in interval_scale_names[interval_key]:
                 mode_lookup[name] = mode_hashkey
         else: # record the modes that are not enharmonic to base scales in a separate dict
             non_scale_interval_mode_names[interval_key] = this_mode_names
 
 
-    log('=========\n')
+    print('=========\n')
 
 # reverse dict that maps all mode names to their intervals:
 mode_name_intervals = {}
@@ -179,8 +179,8 @@ for intervals, names in interval_mode_names.items():
 #         interval_key = tuple(mode_intervals_from_tonic)
 #
 #         log(f'  also known as: {", ".join(this_mode_names)}')
-#         if interval_key in interval_key_names.keys():
-#             log(f'--also enharmonic to:{interval_key_names[interval_key][-1]} scale')
+#         if interval_key in interval_scale_names.keys():
+#             log(f'--also enharmonic to:{interval_scale_names[interval_key][-1]} scale')
 #         else: # only record the modes that are not enharmonic to base cales
 #             interval_mode_names[interval_key] = this_mode_names
 #         #### used this block to catch rotations of melodic major modes:

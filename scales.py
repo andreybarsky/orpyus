@@ -2,7 +2,7 @@ import muse.notes as notes
 from muse.notes import Note, OctaveNote
 from muse.chords import Chord, chord_names, matching_chords, most_likely_chord, relative_minors, relative_majors
 from muse.intervals import Interval, IntervalDegree, Min2, Maj2, Min3, Maj3, Per4, Per5, Min6, Maj6, Min7, Maj7
-from muse.modes import interval_key_names, key_name_intervals, whole_key_name_intervals, mode_lookup, interval_mode_names, non_scale_interval_mode_names
+from muse.modes import interval_scale_names, key_name_intervals, whole_key_name_intervals, mode_lookup, interval_mode_names, non_scale_interval_mode_names
 import muse.parsing as parsing
 
 from muse.util import log, test, precision_recall
@@ -107,7 +107,7 @@ class Key:
         self.tonic, self.suffix, self.intervals, self.mode_id = self._parse_input(arg1, quality, mode)
 
         # # get common suffix from first alias in key_names dict,
-        # self.suffix = interval_key_names[self.intervals][0]
+        # self.suffix = interval_scale_names[self.intervals][0]
 
         # and infer quality flags from it:
         self.melodic = 'melodic' in self.suffix
@@ -132,7 +132,7 @@ class Key:
         self.name = f'{self.tonic.name}{self.suffix}'
 
         # form notes in diatonic scale:
-        self.scale = [self.tonic]
+        self.scale = NoteList([self.tonic])
         for i in self.intervals:
             new_note = self.tonic + i
             self.scale.append(new_note)
@@ -176,53 +176,119 @@ class Key:
         1) arg1 is the tonic of a key, either as a Note or a string denoting a Note:
             e.g. 'C' or 'D#',
             and either a 'quality' or 'mode' arg in addition.
-        'quality' is parsed first, and must be one one of:
-            a) a string denoting a scale type, like 'major' or 'minor' or 'harmonic minor'
-            b) a string denoting a mode like 'dorian' or 'phrygian dominant'
-            c) an iterable of intervals from tonic, such as: [Min2, Min3, Per4, Per5, Maj6, Min7],
-                in which case we try to infer the scale's name/quality/mode from that
-                (and call it an 'unknown scale' if that fails)
 
-        if 'quality' is None, or refers to a base scale (one that is not a mode),
-        we accept the 'mode' arg which should be an integer between 1 and 7 inclusive,
-        specifying the degree of the mode of the desired modal scale.
+            'quality' is parsed first, and must be one one of:
+                a) a string denoting a scale quality, like 'major' or 'minor' or 'harmonic minor'
+                b) a string denoting a mode, like 'dorian' or 'aeolian' or 'phrygian dominant'
+                c) an iterable of intervals from tonic, such as: [Min2, Min3, Per4, Per5, Maj6, Min7],
+                    in which case we try to infer the scale's name/quality/mode from that
+                    (and call it an 'unknown scale' if that fails)
 
-        e.g.: Key('C', 'harmonic minor', mode=3)
-        to get the 3rd mode of C harmonic minor
+            if 'quality' is None, or refers to a base scale (one that is not a mode),
+                we accept the 'mode' arg which should be an integer between 1 and 7 inclusive,
+                specifying the degree of the mode of the desired modal scale.
+
+                e.g.: Key('C', 'harmonic minor', mode=3)
+                to get the 3rd mode of C harmonic minor
 
         2) arg1 is the full name of a key, like 'D major' or 'C#m',
             which can include modes like 'D dorian'
             or even exotic harmonic/melodic modes like 'D phrygian dominant'
-
-
         """
 
         #### this method must return: tonic, suffix, intervals, and mode_id
 
-        ### case 1: arg1 is a tonic note, so we record it:
-        if isinstance(arg1, Note) or isinstance(arg1, str) and parsing.is_valid_note_name(arg1):
+        assert isinstance(arg1, Note) or isinstance(arg1, str), "arg1 to Key init method must be a tonic or a string that starts with a tonic"
+        ### case 1: arg1 is a tonic note
+        if isinstance(arg1, Note) or parsing.is_valid_note_name(arg1):
+            print(f'Scale instantiation case 1: we have been passed a tonic note ({arg1})')
+            # cast as Note object:
             tonic = arg1 if isinstance(arg1, Note) else Note(arg1)
 
-            # and then determine what we've been given for quality and mode:
-            if isinstance(quality, str):
-                # we have been passed quality, which can be a scale quality like 'major' or 'harmonic minor'
-                # so first we check whether it is in our list of scale names:
-                if quality in key_name_intervals.keys():
-                    # get the appropriate scale intervals:
-                    intervals = key_name_intervals[quality]
-                    # and find the common scale suffix:
-                    suffix = interval_key_names[intervals]
-                elif quality in mode_name_intervals.keys():
-                    intervals = 
+            if isinstance(quality, string):
+                ### case 1a or 1b
+                print(f'  Case 1a/b: Quality arg is a string that we take to denote key quality/mode: {quality}')
+                pass # outer if-block handles this caes next
+
+            elif isinstance(quality, (list, tuple)):
+                ### case 1c: list of intervals passed after tonic; this block will return early
+                print(f'  Case 1c: Quality arg passed as iterable of intervals: {quality}')
+                # clean list of intervals:
+                if intervals_from_tonic[0].value == 0:
+                    intervals_from_tonic = intervals_from_tonic[1:]
+                    print(f'  (removed unison from start)')
+                if intervals_from_tonic[-1].value % 12 == 0:
+                    intervals_from_tonic = intervals_from_tonic[:-1]
+                    print(f'  (removed octave from end)')
+                assert len(intervals_from_tonic) == 6, f"""a key initialised by intervals requires exactly 6 intervals after cleaning,
+                                                    but got {len(intervals_from_tonic)}: {intervals_from_tonic}"""
+                interval_hashkey = tuple(intervals_from_tonic)
+                if interval_hashkey in interval_scale_names.keys():
+                    print(f' Detected scale name: {interval_scale_names[interval_hashkey][-1]}')
+                    suffix = interval_scale_names[interval_hashkey][0]
+                    print(f' Setting suffix as: {suffix}')
+                    mode_id = mode_lookup[suffix]
+                    print(f' Detected mode_id: {mode_id}')
+                elif interval_hashkey in interval_mode_names.keys():
+                    print(f' Detected mode name: {interval_mode_names[interval_hashkey][-1]}')
+                    suffix = interval_mode_names[interval_hashkey][0]
+                    print(f' Setting suffix as: {suffix}')
+                    mode_id = mode_lookup[suffix]
+                    print(f' Detected mode_id: {mode_id}')
+                else:
+                    print(f' +++ Received unusual series of intervals: {interval_hashkey}')
+                    print(f' +++ Instantiating unknown key')
+                    suffix = '(unknown)'
+                    mode_id = None
+                return tonic, suffix, intervals_from_tonic, mode_id
+
+            elif quality is None:
+                print(f'    Case 1a but no quality arg explicitly passed; defaulting to major')
+                quality = 'major'
+            else:
+                raise Exception(f'quality arg to Key init method is of unexpected type: {type(quality)}')
 
 
-        if isinstance(name, str):
-            # catch a specific exemption:
-            if 'harmonic' in name or 'melodic' in name:
-                raise ValueError("Keys of quality 'melodic' or 'harmonic' must have major or minor specified explicitly")
+        ### case 2: arg1 is string but not simply a tonic name
+        else:
+            print(f'Scale instantiation case 2: we have been passed a string that is not a tonic note: ({arg1})')
+            print(f'Trying to read it as a whole key name')
+            if parsing.is_valid_note_name(arg1[:2]):
+                note_name = arg[:1]
+                rest_idx = 2
+            elif parsing.is_valid_note_name(arg1[0]):
+                note_name = arg[0]
+                rest_idx = 1
+            else:
+                raise ValueError(f'Key init method received a string as first arg that does not contain a tonic its first two characters: {arg1}')
 
-        if quality is None: # assume major by default if quality is not given
-            quality = 'major'
+            # cast as Note object:
+            tonic = Note(note_name)
+            # check if space given between tonic and quality, skip if it has:
+            if arg1[rest_idx] == ' ':
+                rest_idx += 1
+            # parse rest of string as quality:
+            print(f'Detected tonic: {tonic}')
+            if quality is not None:
+                print(f'and ignoring quality arg: {quality}')
+            quality = arg1[rest_idx:]
+            print(f'quality instead detected as: {quality}')
+
+        # # and then determine what we've been given for quality and mode:
+        # if isinstance(quality, str):
+        #     print(f'  reading second arg (of type str) as quality: {quality}')
+        #
+        #     # we have been passed quality, which can be a scale quality like 'major' or 'harmonic minor'
+        #     # so first we check whether it is in our list of scale names:
+        #
+
+
+
+        # if isinstance(name, str):
+        #     # catch a specific exemption:
+        #     if 'harmonic' in name or 'melodic' in name:
+        #         raise ValueError("Keys of quality 'melodic' or 'harmonic' must have major or minor specified explicitly")
+
 
         # see if we can parse the first argument as a whole key name:
         if isinstance(name, str) and name in whole_key_name_intervals.keys():

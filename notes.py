@@ -1,7 +1,7 @@
 # python library for handling musical notes, intervals, and chords
 
 from muse.intervals import Interval
-from muse.parsing import note_names, parse_octavenote_name, is_flat, is_sharp, is_valid_note_name
+from muse.parsing import note_names, parse_octavenote_name, is_flat, is_sharp, is_valid_note_name, parse_out_note_names
 import muse.conversion as conv
 
 from muse.util import log, test
@@ -30,7 +30,9 @@ def accidental_note_name(pos, prefer_sharps=False):
 
 
 class Note:
-    """a note quality not associated with a specific note inside an octave, such as C or D#"""
+    """a note/chroma/pitch-class defined in the abstract,
+    i.e. not associated with a specific note inside an octave,
+    such as: C or D#"""
     def __init__(self, name=None, position=None, prefer_sharps=None):
         # set main object attributes from init args:
         self.name, self.position, self.prefer_sharps = self._parse_input(name, position, prefer_sharps)
@@ -53,6 +55,10 @@ class Note:
             name = None
 
         if name is not None:
+            if isinstance(name, Note):
+                # accept Note objects as init arg
+                name = name.chroma
+
             if not isinstance(name, str):
                 raise TypeError(f'expected str or int but received {type(name)} to initialise Note object')
             # log(f'Initialising Note with name: {name}')
@@ -124,7 +130,7 @@ class Note:
 
     def in_octave(self, octave=4):
         """instantiates an OctaveNote object corresponding to this Note played in a specific octave"""
-        return OctaveNote(f'{self.name}{int(octave)}')
+        return OctaveNote(f'{self.chroma}{int(octave)}')
 
     # quick accessor for in_octave method defined above:
     def __getitem__(self, octave):
@@ -188,22 +194,24 @@ class Note:
 
         from chords import Chord
         return Chord(self, arg)
-        # # case 1: string denoting chord quality
-        # if isinstance(arg, str):
-        #     quality = arg
-        #     return chords.Chord(self.name, quality)
-        # # case 2: iterable of semitone intervals
-        # else:
-        #     assert isinstance(arg, (list, tuple)), "Note.chord method expects a string or iterable as its one input arg"
-        #     # cast ints to intervals if needed:
-        #     intervals = [i if isinstance(i, Interval) else Interval(i) for i in arg]
-        #     return chords.Chord(self.name, intervals)
 
-    # # quick accessor for chord method defined above:
-    # def __call__(self, arg='major'):
-    #     """returns a Chord based on this Note as tonic"""
-    #     return self.chord(arg)
+    def _wave(self, duration, falloff=True, **kwargs):
+        """Outputs a sine wave corresponding to this note,
+        by default with exponential volume increase and falloff"""
+        # from muse.audio import sine_wave, exp_falloff
+        # non-OctaveNotes have no pitch defined,
+        # so instantiate a child OctaveNote in default octave=4 and return its wave method instead:
+        return self[4]._wave(duration=duration, falloff=falloff, **kwargs)
+        # wave = sine_wave(freq=wave_note.pitch, duration=duration)
+        # if falloff:
+        #     wave = exp_falloff(wave, **kwargs)
+        # return wave
 
+    def play(self, duration=3, falloff=True):
+        # from muse.audio import play_wave
+        return self[4].play(duration=duration, falloff=falloff)
+        # wave = self._wave(duration=duration, falloff=falloff)
+        # play_wave(wave)
 
 
 
@@ -218,7 +226,7 @@ class OctaveNote(Note):
     """
 
     def __init__(self, name=None, value=None, pitch=None, prefer_sharps=None):
-        """initialises a Note object from one of the following:
+        """initialises an OctaveNote object from one of the following:
         name: a string denoting a specific note, like 'C#3', or a pitch class, like 'C#'
         value: an integer denoting the note's position on an 88-note piano keyboard,
                 where A0 is 1, C4 is 40, and C8 is 88. (the core internal representation)
@@ -237,9 +245,17 @@ class OctaveNote(Note):
     @staticmethod
     def _parse_input(name, value, pitch, prefer_sharps):
         """parses name, value, pitch input args (and sharp preference)
-        returns correct name, value, pitch, octve, and chroma"""
+        returns correct chroma, value, and pitch"""
         # check that exactly one of our input args has been provided:
         assert ((name is not None) + (value is not None) + (pitch is not None) == 1), "Argument to init must include exactly one of: name, value, or pitch"
+
+        # accept OctaveNote as input, instantiate a new one with the same properties:
+        if isinstance(name, OctaveNote):
+            return name.chroma, name.value, name.pitch
+        # accept Note as well:
+        elif isinstance(name, Note):
+            name = name.name
+            raise Exception('Note object passed to OctaveNote init method')
 
         if type(name) == int:
             # auto detect initialisation with note value as first arg, silently substitute if there's a TypeError:
@@ -266,7 +282,8 @@ class OctaveNote(Note):
             pitch = conv.value_to_pitch(value)
         if pitch is not None:
             log(f'Initialising OctaveNote with pitch: {pitch}')
-            pitch = pitch
+            pitch = float(pitch)
+            assert pitch > 0, "Pitch must be greater than 0"
             value = conv.pitch_to_value(pitch, nearest=True)
             octave, position = conv.oct_pos(value)
             chroma = accidental_note_name(position, prefer_sharps=prefer_sharps)
@@ -414,6 +431,187 @@ class OctaveNote(Note):
         else:
             raise TypeError('Can only get_note_pitch from string, int, or (oct,pos) pair')
 
+    def next(self, chroma):
+        """returns an OctaveNote object of a specified chroma
+        that is the next highest one after self"""
+        candidates = OctaveNote(f'{chroma}{self.octave}'), OctaveNote(f'{chroma}{self.octave+1}')
+        low_cand, high_cand = candidates
+        if low_cand > self:
+            return low_cand
+        else:
+            return high_cand
+
+    def _wave(self, duration, falloff=False):
+        """Outputs a sine wave corresponding to this note,
+        by default with exponential volume increase and falloff"""
+        from muse.audio import karplus_strong, lin_falloff, amp_correct
+        # wave = sine_wave(freq=self.pitch, duration=duration)
+        # use karplus-strong wave table synthesis for guitar-string timbre:
+        wave = karplus_strong(freq=self.pitch, duration=duration)
+        if falloff:
+            wave = lin_falloff(wave)
+        # if correct:
+        #     wave = amp_correct(wave, self.pitch)
+        return wave
+
+    def play(self, duration=2, falloff=True, block=False):
+        from muse.audio import play_wave
+        # return self[4].play(duration=duration, falloff=falloff)
+        wave = self._wave(duration=duration, falloff=falloff)
+        play_wave(wave, block=block)
+
+
+
+
+class NoteList(list):
+    """List subclass that is instantianted with an iterable of Note-like objects and forces them all to Note type"""
+    def __init__(self, *items):
+        if len(items) == 1:
+            arg = items[0]
+            # if we have been passed a single string as arg, parse it out as a series of notes:
+            if isinstance(arg, str):
+                arg = parse_out_note_names(arg)
+
+            # now we should have an iterable of note-likes:
+            if isinstance(arg, (list, tuple)):
+                note_items = self._cast_notes(arg)
+            else:
+                raise Exception(f'Unexpected type passed to NoteList init, expected iterable but got: {type(arg)}')
+
+        else:
+            # we've been passed a series of items that we can unpack
+            note_items = self._cast_notes(items)
+
+        super().__init__(note_items)
+
+    @staticmethod
+    def _cast_notes(items):
+        note_items = []
+        for item in items:
+            if isinstance(item, Note):
+                # add note
+                note_items.append(item)
+            elif is_valid_note_name(item):
+                # cast string to note
+                note_items.append(Note(item))
+            elif item[-1].isdigit():
+                # cast string to octavenote
+                note_items.append(OctaveNote(item))
+            else:
+                raise Exception('NoteList can only be initialised with Notes, or objects that cast to Notes')
+        return note_items
+
+    def __repr__(self):
+        # return f'𝄃{super().__repr__()}𝄂'
+        return f'𝄃{", ".join([str(n) for n in self])} 𝄂'
+
+    def __add__(self, other):
+        if isinstance(other, (int, Interval)):
+            return NoteList([n + other for n in self])
+        elif isinstance(other, NoteList):
+            assert len(self) == len(other), "Can only add NoteLists of equal length"
+            return [self[i] + other[i] for i in range(len(self))]
+        else:
+            raise Exception(f"Can't add NoteList with {type(other)}")
+
+    def __sub__(self, other):
+        if isinstance(other, (int, Interval)):
+            return NoteList([n - other for n in self])
+        elif isinstance(other, NoteList):
+            assert len(self) == len(other), "Can only subtract NoteLists of equal length"
+            return [self[i] - other[i] for i in range(len(self))]
+        else:
+            raise Exception(f"Can't subtract {type(other)} from NoteList")
+
+    def rotate(self, num_places):
+        """returns the rotated NoteList that egins num_steps up
+        from the beginning of this one. used for inversions,
+        i.e. the 2nd inversion of [0,1,2] is [1,2,0],
+        and for modes, which are rotations of scales. """
+
+        rotated_start_place = num_places
+        rotated_idxs = [(rotated_start_place + i) % len(self) for i in range(len(self))]
+        rotated_lst= [self[i] for i in rotated_idxs]
+        return NoteList(rotated_lst)
+
+    def force_octave(self, start_octave=None, min_octave=1, max_octave=5):
+        """returns another NoteList of ascending OctaveNotes corresponding to
+        the Notes in this NoteList, either starting at some specified octave
+        or within some min and max octave constraints"""
+        octavenotes = []
+
+        # use the first note's octave if it is an OctaveNote, else fall back on default
+        auto_octave = False
+        if start_octave is None:
+            if isinstance(self[0], OctaveNote):
+                start_octave = self[0].octave
+                # add octavenote to list:
+                octavenotes.append(self[0])
+            else:
+                start_octave = 4
+                auto_octave = True
+                # cast abstract first note to octavenote:
+                octavenotes.append(self[0][start_octave])
+                # auto_octave will let us adjust pitch down later
+        else:
+            # cast abstract first note to octavenote:
+            if not isinstance(self[0], OctaveNote):
+                octavenotes.append(self[0][start_octave])
+            else:
+                # overwrite octave of existing octavenote:
+                octavenotes.append((self[0].note)[start_octave])
+
+
+
+        for note in self[1:]:
+            if isinstance(note, OctaveNote):
+                octavenotes.append(note)
+            else:
+                # append the next ascending OctaveNote of that chroma:
+                octavenotes.append(octavenotes[-1].next(note.chroma))
+
+        if (auto_octave) and (octavenotes[-1].octave > max_octave):
+            # keep the chord below c5 if it's ended up too high:
+            octave_shift = wave_notes[-1] - max_octave
+            if octavenotes[0] - (12*octave_shift) < min_octave:
+                raise ValueError(f"NoteList's notes span too great of a pitch range: {octave_shift} octaves exceeds min={min_octave} and max={max_octave}")
+
+            octavenotes = [n - (12*octave_shift) for n in wave_notes]
+
+        return octavenotes
+
+    def _waves(self, duration, octave, falloff=False):
+        wave_notes = self.force_octave(start_octave=octave)
+        print(f'  -synthesising notes: {wave_notes}')
+        waves = [n._wave(duration=duration, falloff=falloff) for n in wave_notes]
+        return waves
+
+    def _chord_wave(self, duration, octave, delay=None, falloff=True):
+        from muse.audio import arrange_chord
+        from muse.chords import most_likely_chord
+        if delay is None:
+            print(f' synthesising chord: {(most_likely_chord(self)).name} in octave {octave}')
+            chord_wave = arrange_chord(self._waves(duration, octave), norm=False, falloff=falloff)
+            return chord_wave
+        else:
+            # delay arg has been given so we stagger the chord, making it an arpeggio instead:
+            return self._melody_wave(duration, octave, delay, falloff)
+
+    def _melody_wave(self, duration, octave, delay, falloff=True):
+        from muse.audio import arrange_melody
+        from muse.chords import most_likely_chord
+        print(f' synthesising arpeggio: {(most_likely_chord(self)).name} in octave {octave} (w/ delay={delay})')
+        melody_wave = arrange_melody(self._waves(duration, octave), delay=delay, norm=False, falloff=falloff)
+        return melody_wave
+
+    def play(self, duration=3, octave=None, delay=None, falloff=True, block=False, **kwargs):
+        from muse.audio import play_wave
+        if delay is not None:
+            wave = self._melody_wave(duration=duration, octave=octave, delay=delay, falloff=falloff, **kwargs)
+        else:
+            wave = self._chord_wave(duration=duration, octave=octave, falloff=falloff, **kwargs)
+        play_wave(wave, block=block)
+
 
 # predefined Note objects:
 A = Note('A')
@@ -444,3 +642,9 @@ if __name__ == '__main__':
 
     # OctaveNotes:
     test(OctaveNote('C4')+15, OctaveNote('Eb5'))
+
+    # NoteList:
+    test(NoteList('CEG'), NoteList(['C', 'E', 'G']))
+    test(NoteList('CEG'), NoteList('C', 'E', 'G'))
+
+    nl = NoteList('CEG')
