@@ -1,35 +1,51 @@
 from muse.notes import OctaveNote
-
-###
-# import sys, pdb
-import numpy as np
-import sounddevice as sd
-import matplotlib.pyplot as plt
-from matplotlib import ticker as mticker
-import threading
-from scipy.fft import fft, ifft
 from muse.util import log, test
 
-# from scipy.io.wavfile import write
+import threading
+import pdb
 
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import ticker as mticker
+from scipy.fft import fft, ifft
+import sounddevice as sd
 
-sampling_freq = 44100
-fs = sampling_freq
+# global sampling frequency:
+fs = 44100
 
+def show(*arrs, fix_ylim=True, fix_xlim=True, overlay=False):
+    if isinstance(arrs[0], tuple):
+        log(f' show detected arrs[0] as being of type: {type(arrs[0])}')
+        log(f' so calling recursively on unpacked iterable of len {len(arrs[0])}, whose first type is: {type(arrs[0][0])}')
+        show(*arrs[0], fix_ylim=fix_ylim, fix_xlim=fix_xlim, overlay=overlay)
+    else:
+        if not overlay:
+            fig, axes = plt.subplots(len(arrs), 1, sharex=fix_xlim, sharey=fix_ylim)
+            # xlims, ylims = [], []
+            if isinstance(axes, np.ndarray):
+                for arr, ax in zip(arrs, axes):
+                    ax.plot(arr)
+                    # xlims.append(ax.get_xlim())
+                    # ylims.append(ax.get_ylim())
+                # if fix_ylim:
+                #     miny, maxy = np.min([l[0] for l in ylims]), np.max([l[1] for l in ylims])
+                #     for ax in axes:
+                #         ax.set_ylim([miny, maxy])
+                # if fix_xlim:
+                #     minx, maxx = np.min([l[0] for l in xlims]), np.max([l[1] for l in xlims])
+                #     for ax in axes:
+                #         ax.set_xlim([minx, maxx])
+            else:
+                axes.plot(arrs[0])
+            fig.tight_layout()
+            plt.show()
 
-def show(*arrs, subplots=False):
-    if not subplots:
-        fig, ax = plt.subplots()
-        for arr in arrs:
-            ax.plot(arr)
-        ax.legend(range(len(arrs)))
-        plt.show()
-    elif subplots:
-        fig, axes = plt.subplots(len(arrs), 1)
-        for arr, ax in zip(arrs, axes):
-            ax.plot(arr)
-        plt.show()
-
+        elif overlay:
+            fig, ax = plt.subplots()
+            for arr in arrs:
+                ax.plot(arr)
+            ax.legend(range(len(arrs)))
+            plt.show()
 
 def show_fft(arr, xlim=(25,5000), note_names=True, which_notes=['C', 'E', 'G'], log_x=True, figsize=(14,8)):
     N = len(arr)
@@ -40,36 +56,31 @@ def show_fft(arr, xlim=(25,5000), note_names=True, which_notes=['C', 'E', 'G'], 
     fig, ax = plt.subplots(figsize=figsize)
     ax.plot(xf, yf)
 
+    ax.set_ylabel('Amplitude')
+    ax.set_xlim(xlim) # default 25 -> 5000 covers the piano key range from C1-C8
+    # set log scale on x-axis:
     if log_x:
         ax.set_xscale('log')
 
-    ax.set_ylabel('Amplitude')
-    ax.set_xlim(xlim) # default 25,5000 covers the piano key range from C1-C8
-    # ymin, ymax = ax.get_ylim() # we'll use this to place annotations if we need them
-    # anno_y = ymax * -0.04
-
-    # initialise OctaveNotes and add their pitches to the x-axis
+    # initialise OctaveNotes so we can add their pitches to the x-axis
     tick_notes = []
-    for octave in range(1,8):
+    for octave in range(1,9):
         for chroma in which_notes:
             note_name = f'{chroma}{octave}'
             note = OctaveNote(note_name)
-            # ax.annotate(note_name, (note.pitch, anno_y))
             tick_notes.append(note)
 
     if note_names:
+        # add major tick marks at the notes specified in which_notes, at every octave
         ax.set_xticks([n.pitch for n in tick_notes])
         ax.set_xticklabels([n.name for n in tick_notes])
         ax.set_xlabel('Note')
     else:
-        # octave_notes = [tick_notes[i] for i in range(0, len(tick_notes), len(which_notes))]
         # approx. octave marks:
         pitch_marks = [2**b for b in range(3,12)]
         ax.set_xticks(pitch_marks)
         ax.set_xticklabels(pitch_marks)
         # ax.xaxis.set_major_locator(mticker.LogLocator(base=2, numticks))
-        # ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
-        # ax.xaxis.set_minor_locator(mticker.MultipleLocator(100))
         ax.set_xlabel('Frequency (Hz)')
 
     # add minor tick marks for every note, but don't label them:
@@ -81,19 +92,20 @@ def show_fft(arr, xlim=(25,5000), note_names=True, which_notes=['C', 'E', 'G'], 
 def normalise(x):
     return x / np.max(x)
 
-### create wave:
-def sine_wave(freq, duration, amplitude=1):
-    # freq and sampling_Freq are in hz
+### create pure wave:
+def sine_wave(freq, duration, correct=True, amplitude=1):
     # duration is in seconds
-    sampling_freq = 44100 # hz
-    samples = np.linspace(0, duration, int(sampling_freq*duration))
+    samples = np.linspace(0, duration, int(fs*duration))
     wave = np.sin(2 * np.pi * freq * samples) * amplitude
+    # pure tones at low freqs sound quieter, so we raise the amplitude to correct:
+    if correct:
+        wave = amp_correct(wave, freq)
     return wave
 
 # pure exponential falloff function: (timbre sounds harp-like, or like an electric piano)
 def exp_falloff(wave, sharpness=5, peak_at=0.05):
     """peak_at is float, in seconds"""
-    start_samples = int(sampling_freq * peak_at)
+    start_samples = int(fs * peak_at)
     start = np.copy(wave[:start_samples])
     end = np.copy(wave[start_samples:])
     end_samples = len(end)
@@ -109,7 +121,7 @@ def exp_falloff(wave, sharpness=5, peak_at=0.05):
     return np.concatenate([start, end], axis=0)
 
 def lin_falloff(wave, start_at=0.0):
-    start_samples = int(sampling_freq * start_at)
+    start_samples = int(fs * start_at)
     end = np.copy(wave[start_samples:])
     end_samples = len(end)
 
@@ -140,7 +152,7 @@ def arrange_chord(waves, *args, norm=False, falloff=True, **kwargs):
 def arrange_melody(waves, *args, delay=0.5, norm=False, falloff=True, **kwargs):
     start_max = np.max([np.max(w) for w in waves])
 
-    delay_frames = int(delay * sampling_freq)
+    delay_frames = int(delay * fs)
     melody_wave = lin_falloff(waves[0]) if falloff else np.copy(waves[0])
     for i, wave in enumerate(waves[1:]):
 
@@ -171,7 +183,7 @@ def play_melody(waves, *args, delay=0.5, falloff=True, **kwargs):
 
 ### sd solution
 def play_wave(wave, amplitude=1, block=False):
-    sd.play(wave*amplitude, sampling_freq, blocking=block)
+    sd.play(wave*amplitude, fs, blocking=block)
 
 ### longer form solution
 def play_wave2(wave, amplitude=1):
@@ -194,7 +206,7 @@ def play_wave2(wave, amplitude=1):
             raise sd.CallbackStop()
         current_frame += chunksize
 
-    stream = sd.OutputStream(samplerate = sampling_freq,
+    stream = sd.OutputStream(samplerate = fs,
                              device = sd.default.device[1],
                              channels = data.shape[1],
                              callback = callback,
@@ -211,31 +223,84 @@ def karplus_strong(freq, duration, wave_table_reso=44100):
     """synthesises sound sample of a desired frequency and duration
     according to Karplus-Strong algorithm for guitar-pluck timbre"""
 
-    freq = int(freq)
     log(f'Desired freq is: {freq:.1f}')
+    freq = int(round(freq))
+    log(f'Rounded to: {freq}')
 
     num_samples = duration * wave_table_reso
-    table_len = int(wave_table_reso // freq) # i don't know why it's *4 but it gets the correct frequency
+    table_len = int(wave_table_reso // freq)
     log(f'Desired note duration of {num_samples} ({duration}*{wave_table_reso}) divides by {freq}*4 to get table length of: {table_len}')
     wave_table = (np.random.randint(0, 2, table_len)*2 -1).astype(float)
+    n_iter = num_samples // table_len
+
+    # # calculate linear multiplication terms for exponential decay:
+    # a = np.ones(n_iter) * decay
+    # b = np.arange(n_iter)
+    # decay_schedule = pow(a,b)
+
+    pointer = 0
+    iter_num = 0
 
     samples = np.zeros(num_samples)
-    pointer = 0
-    # step = 0
-    # num_loops = 0
-    prev_val = samples[-1]
-    for i in range(num_samples):
-                # print(f'{step} Averaging {wave_table[pointer]} and {prev_val} to get {(wave_table[pointer] + prev_val) * 0.5}')
-        wave_table[pointer] = (wave_table[pointer] + samples[i-1]) * 0.5
-        samples[i] = (wave_table[pointer])
-        # if pointer+1 >= table_len:
-        #     num_loops += 1
+    prev_val = samples[0]
+
+    for i in range(1, num_samples):
+        # print(f'{step} Averaging {wave_table[pointer]} and {prev_val} to get {(wave_table[pointer] + prev_val) * 0.5}')
+        wave_table[pointer] = ((wave_table[pointer] + samples[i-1]) * 0.5)
+        samples[i] = (wave_table[pointer]) # * decay_schedule[iter_num]
+        if pointer+1 >= table_len:
+            iter_num += 1
+
         pointer = (pointer + 1) % table_len
         # step += 1
     log(f'Actual frequency of output is: {detect_freq(samples):.1f}')
+
     return samples
 
-def play_karplus(note, duration=2, falloff = False):
+def sine_wave_table(table_len):
+    t = np.linspace(0, 2*np.pi, table_len)
+    wave_table = np.sin(t)
+    return wave_table
+
+def discrete_wave_table(table_len):
+    wave_table = (np.random.randint(0, 2, table_len)*2 -1).astype(float)
+    return wave_table
+
+def unif_wave_table(table_len):
+    wave_table = (np.random.rand(table_len)*2 -1).astype(float)
+    return wave_table
+
+def fast_karplus_strong(freq, duration, decay=0.99, wave_table_reso=44100, func=unif_wave_table):
+    log(f'Desired freq is: {freq:.1f}')
+    freq = int(round(freq))
+    log(f'Rounded to: {freq}')
+
+    num_samples = duration * wave_table_reso
+    table_len = int(wave_table_reso // freq)
+    log(f'Desired note duration of {num_samples} ({duration}*{wave_table_reso}) to get table length of: {table_len}')
+
+    wave_table = func(table_len)
+
+    n_iter = int(num_samples // table_len)
+
+    # calculate linear multiplication terms for exponential decay:
+    a = np.ones((1,n_iter)) * decay
+    b = np.arange(n_iter)
+    a_vec = pow(a,b)
+
+    # matrix of successively decaying linear multiplication terms:
+    alpha_mat = np.eye(n_iter, table_len)
+    for i in range(table_len):
+        alpha_mat[:,i] = a_vec
+
+    # tile wave table across as many rows as decay iterations:
+    x_mat = np.tile(wave_table,(n_iter,1))
+    y_mat = alpha_mat * x_mat
+
+    y_arr = y_mat.reshape(-1)
+    return y_arr
+
+def play_karplus(note, duration=2, falloff=True, fast=False, **kwargs):
     if isinstance(note, str):
         freq = OctaveNote(note).pitch
     elif isinstance(note, OctaveNote):
@@ -243,11 +308,40 @@ def play_karplus(note, duration=2, falloff = False):
     elif isinstance(note, (int, float)):
         freq = float(note)
 
-    samples = karplus_strong(freq, duration=duration)
-    if falloff:
-        samples = lin_falloff(samples)
+    if fast:
+        if falloff:
+            samples = fast_karplus_strong(freq, duration=duration, decay=0.9925)
+            samples = exp_falloff(samples, peak_at=0.01)
+        else:
+            # don't use explicit falloff postprocessing, just the natural decay term:
+            samples = fast_karplus_strong(freq, duration=duration, decay=0.9825)
+    else:
+        # slow karplus strong algorithm naturally decays, does not need additional expo term
+        samples = karplus_strong(freq, duration=duration)
+        if falloff:
+            samples = lin_falloff(samples)
     play_wave(samples)
 
+def synth_wave(freq, duration, type='KS', falloff=True):
+    """type must be one of:
+    'sine': sine wave synthesis
+    'KS': (slow) karplus-strong algorithm
+    'fast': fast karplus-strong approximation"""
+    if type == 'pure':
+        wave = sine_wave(freq, duration, correct=True)
+        if falloff:
+            wave = exp_falloff(wave)
+    elif type == 'KS':
+        wave = karplus_strong(freq, duration)
+        if falloff:
+            wave = lin_falloff(wave)
+    elif type == 'fast':
+        wave = fast_karplus_strong(freq, duration, decay=0.99)
+        if falloff:
+            wave = exp_falloff(wave, peak_at=0.01)
+    else:
+        raise Exception('type arg supplied to synth_wave must be one of: sine, KS, fast')
+    return wave
 
 def find_peaks(arr, ret=False):
     num_peaks = 0
@@ -262,8 +356,9 @@ def find_peaks(arr, ret=False):
         print(f'{num_peaks} peaks, located at:', ', '.join([str(p) for p in peak_idxs]))
 
 def detect_pure_freq(arr):
-    """detects the frequency of a pure sinusoid signal.
-    not sure what it does for non-pure signals."""
+    """detects the frequency of a pure sinusoid signal
+    by counting peaks in the waveform. probably doesn't work meaningfully
+    well for composite signals"""
     num_peaks, peak_idxs = find_peaks(arr, ret=True)
     sample_duration = len(arr) / fs # in seconds
     freq = num_peaks / sample_duration
@@ -286,58 +381,12 @@ def detect_freq(arr, note=False):
         return OctaveNote(pitch=freq).name
 
 
-class Tone(OctaveNote):
-    """a played note, with a pitch, duration (in beats), and amplitude (relative to baseline of 100)"""
-    def __init__(self, note, duration=1, amplitude=100, dynamics=False):
-
-        if isinstance(note, Note):
-            # if note is an instance of Note class, assign to attribute:
-            self.note = note
-        elif note is None:
-            # this is a rest:
-            self.note = None
-        else:
-            # otherwise instantiate it:
-            self.note = Note(note)
-
-        self.note = note
-        self.pitch = note.pitch
-        self.duration = duration # in beats?
-        self.amplitude = amplitude
-
-        self.dynamics = dynamics # for falloff?
-
-    def play(self, tempo=60):
-        duration_secs = self.duration * tempo
-        raise Exception('TBI')
-
-class Tune:
-    """an ordered list of played Tones, or NoteLists of Tones (chords), with a tempo (in beats/min)"""
-    def __init__(self, tones, tempo=60):
-        self.tones = []
-        self.tempo = tempo # bpm
-        for tone in tones:
-            assert isinstance(tone, Tone)
-            self.tones.append(tone)
-
-    def play(self):
-        for tone in self.tones:
-            tone.play(tempo=self.tempo)
-
 
 
 
 if __name__ == '__main__':
-    # c4 = sine_wave(261.63, 2)
-    # e4 = sine_wave(329.63, 2)
-    # g4 = sine_wave(392.0, 2)
-    # a4 = sine_wave(440.0, 2)
-    # cmaj = [c4, e4, g4]
-    # am_c = [c4, e4, a4]
     from muse.chords import Chord
     cmaj = Chord('C')
     am_c = Chord('Am/C')
-    am_c.arpeggio(octave=3)
-    ###
-    #
-    pass
+
+    am_c.play()

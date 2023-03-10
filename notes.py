@@ -441,17 +441,13 @@ class OctaveNote(Note):
         else:
             return high_cand
 
-    def _wave(self, duration, falloff=False):
+    def _wave(self, duration, type='KS', falloff=False):
         """Outputs a sine wave corresponding to this note,
         by default with exponential volume increase and falloff"""
-        from muse.audio import karplus_strong, lin_falloff, amp_correct
+        from muse.audio import synth_wave
         # wave = sine_wave(freq=self.pitch, duration=duration)
         # use karplus-strong wave table synthesis for guitar-string timbre:
-        wave = karplus_strong(freq=self.pitch, duration=duration)
-        if falloff:
-            wave = lin_falloff(wave)
-        # if correct:
-        #     wave = amp_correct(wave, self.pitch)
+        wave = synth_wave(freq=self.pitch, duration=duration, type=type, falloff=falloff)
         return wave
 
     def play(self, duration=2, falloff=True, block=False):
@@ -580,36 +576,36 @@ class NoteList(list):
 
         return octavenotes
 
-    def _waves(self, duration, octave, falloff=False):
+    def _waves(self, duration, octave, type, falloff=False):
         wave_notes = self.force_octave(start_octave=octave)
         print(f'  -synthesising notes: {wave_notes}')
-        waves = [n._wave(duration=duration, falloff=falloff) for n in wave_notes]
+        waves = [n._wave(duration=duration, type=type, falloff=falloff) for n in wave_notes]
         return waves
 
-    def _chord_wave(self, duration, octave, delay=None, falloff=True):
+    def _chord_wave(self, duration, octave, delay=None, type='KS', falloff=True):
         from muse.audio import arrange_chord
         from muse.chords import most_likely_chord
         if delay is None:
             print(f' synthesising chord: {(most_likely_chord(self)).name} in octave {octave}')
-            chord_wave = arrange_chord(self._waves(duration, octave), norm=False, falloff=falloff)
+            chord_wave = arrange_chord(self._waves(duration, octave, type), norm=False, falloff=falloff)
             return chord_wave
         else:
             # delay arg has been given so we stagger the chord, making it an arpeggio instead:
-            return self._melody_wave(duration, octave, delay, falloff)
+            return self._melody_wave(duration=duration, octave=octave, delay=delay, type=type, falloff=falloff)
 
-    def _melody_wave(self, duration, octave, delay, falloff=True):
+    def _melody_wave(self, duration, octave, delay, type='KS', falloff=True):
         from muse.audio import arrange_melody
         from muse.chords import most_likely_chord
         print(f' synthesising arpeggio: {(most_likely_chord(self)).name} in octave {octave} (w/ delay={delay})')
-        melody_wave = arrange_melody(self._waves(duration, octave), delay=delay, norm=False, falloff=falloff)
+        melody_wave = arrange_melody(self._waves(duration, octave, type), delay=delay, norm=False, falloff=falloff)
         return melody_wave
 
-    def play(self, duration=3, octave=None, delay=None, falloff=True, block=False, **kwargs):
+    def play(self, duration=3, octave=None, delay=None, falloff=True, block=False, type='KS', **kwargs):
         from muse.audio import play_wave
         if delay is not None:
-            wave = self._melody_wave(duration=duration, octave=octave, delay=delay, falloff=falloff, **kwargs)
+            wave = self._melody_wave(duration=duration, octave=octave, delay=delay, type=type, falloff=falloff, **kwargs)
         else:
-            wave = self._chord_wave(duration=duration, octave=octave, falloff=falloff, **kwargs)
+            wave = self._chord_wave(duration=duration, octave=octave, type=type, falloff=falloff, **kwargs)
         play_wave(wave, block=block)
 
 
