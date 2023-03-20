@@ -40,27 +40,41 @@ def rotate_list(lst, num_steps):
     used for inversions, i.e. the 2nd inversion of [0,1,2] is [1,2,0],
     and for modes, which are rotations of scales. """
 
+    N = len(lst)
     rotated_start_place = num_steps
-    rotated_idxs = [(rotated_start_place + i) % 7 for i in range(7)]
+    rotated_idxs = [(rotated_start_place + i) % N for i in range(N)]
     rotated_lst= [lst[i] for i in rotated_idxs]
     return rotated_lst
 
-def precision_recall(target, candidate):
+def precision_recall(target, candidate, weights=None):
     """return a metric that can be used to determine how well <candidate> fits <target>,
     so long as both have a meaningful __contains__ method to query their members,
-    and both contain the same types of objects (that have a meaningful __eq__ method)"""
+    and both contain the same types of objects (that have a meaningful __eq__ method).
+
+    optionally accepts a weight argument, as dict mapping items to weighting terms.
+    weights are technically arbitrary, but default to 1 if the weights for an item
+    are left unspecified in the dict, so should be set relative to that."""
 
     # in ML parlance: the candidate is the 'retrieved' set,
     # and the target is the 'relevant' set
-    num_retrieved = len(candidate)
-    num_relevant = len(target)
+    if weights is None:
+        num_retrieved = len(candidate)
+        num_relevant = len(target)
+    else: # sum of weights instead of number of items:
+        candidate_weights = [weights[c] if c in weights.keys() else 1 for c in candidate]
+        target_weights = [weights[t] if t in weights.keys() else 1 for t in target]
+
+        num_retrieved = sum(candidate_weights)
+        num_relevant = sum(target_weights)
 
     relevant_retrieved = 0 # how many of target's members are in candidate (and vice-versa)
 
     # TBI: this naive implementation is O(n^2), could be improved if this turns out to be a bottleneck
     for item in target:
         if item in candidate:
-            relevant_retrieved += 1
+            item_weight = 1 if ((weights is None) or (item not in weights.keys())) else weights[item]
+
+            relevant_retrieved += item_weight
 
     precision = relevant_retrieved / num_retrieved    # i.e. validity
     recall = relevant_retrieved / num_relevant        # i.e. completeness

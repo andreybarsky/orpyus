@@ -9,6 +9,15 @@ roman_numerals = {'I':   1,
                   'VI':  6,
                   'VII': 7}
 
+
+cadence_finality = {(5, 1): 1,   # authentic cadence
+                    (4, 1): 0.9, # plagal cadence
+                    (1, 4):    , # plagal half cadence
+                    (1, 5): 0.5, (2, 5): 0.5, (4, 5): 0.5, (6, 5): 0.5, # half cadences
+                    (5, 6): 0.4, # deceptive cadence
+
+                    }
+
 class Progression:
     """A theoretical progression between unspecified chords,
     initialised as e.g. Progression('I', 'IV', 'iii', 'V')"""
@@ -20,7 +29,7 @@ class Progression:
         ### determine progression quality from degree of the first chord:
         first_degree= degrees[0]
         if isinstance(root, str):
-            if first_degree == first_degreeupper():
+            if first_degree == first_degree.upper():
                 self.quality = 'major'
             elif root == root.lower():
                 self.quality = 'minor'

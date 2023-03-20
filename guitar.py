@@ -1,6 +1,6 @@
 import muse.notes as notes
 from muse.notes import OctaveNote, NoteList
-from muse.chords import Chord, most_likely_chord
+from muse.chords import Chord, most_likely_chord, matching_chords
 from muse.parsing import parse_out_note_names
 from muse.util import test
 import pdb
@@ -104,19 +104,19 @@ class Guitar:
         notes = self[frets]
         if pattern is not None:
             notes = NoteList([notes[p] for p in pattern])
-        notes.play(*args, arpeggio=True, interval=0.3, duration=3, **kwargs)
+        notes.play(*args, delay=0.25, duration=3, **kwargs)
 
     def strum(self, frets, *args, **kwargs):
         """plays the fretted notes as audio, arpeggiated close together"""
         notes = self[frets]
         # notes.play(*args, arpeggio=False, **kwargs)
-        notes.play(*args, arpeggio=True, interval=0.05, duration=3, **kwargs)
+        notes.play(*args, delay=0.05, duration=3, **kwargs)
 
     def chord(self, frets, *args, **kwargs):
         """plays the fretted notes as audio, summed into a chord"""
         notes = self[frets]
         # notes.play(*args, arpeggio=False, **kwargs)
-        notes.play(*args, arpeggio=False, duration=3, **kwargs)
+        notes.play(*args, duration=3, **kwargs)
 
     def __getitem__(self, frets):
         """plucks each string according to the listed fret diagram, gets the
@@ -146,6 +146,10 @@ class Guitar:
     def __call__(self, frets):
         """returns the most likely chord detected for this set of frets"""
         return most_likely_chord(self[frets])
+
+    def matching_chords(self, frets, *args, **kwargs):
+        notelist = self[frets]
+        return matching_chords(notelist, *args, **kwargs)
 
     def __str__(self):
         tuning_letters = [string.chroma for string in self.open_strings]

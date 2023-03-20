@@ -227,7 +227,7 @@ def karplus_strong(freq, duration, wave_table_reso=44100):
     freq = int(round(freq))
     log(f'Rounded to: {freq}')
 
-    num_samples = duration * wave_table_reso
+    num_samples = int(duration * wave_table_reso)
     table_len = int(wave_table_reso // freq)
     log(f'Desired note duration of {num_samples} ({duration}*{wave_table_reso}) divides by {freq}*4 to get table length of: {table_len}')
     wave_table = (np.random.randint(0, 2, table_len)*2 -1).astype(float)

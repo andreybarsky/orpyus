@@ -159,7 +159,7 @@ class Note:
 
     def __hash__(self):
         """note and octavenote hash-equivalence is based on position alone, not value"""
-        return hash(str(self))
+        return hash(f'Note:{self.position}')
 
     def __str__(self):
         # e.g. is of form: '♩C#'
@@ -329,6 +329,10 @@ class OctaveNote(Note):
 
         assert isinstance(other, Note), "OctaveNotes can only be enharmonic to other notes"
         return self.position == other.position
+
+    def __hash__(self):
+        """note and octavenote hash-equivalence is based on position alone, not value"""
+        return hash(f'Note:{self.position}')
 
     def __str__(self):
         """Returns a pretty version of this OctaveNote's name,
@@ -522,7 +526,7 @@ class NoteList(list):
     def rotate(self, num_places):
         """returns the rotated NoteList that egins num_steps up
         from the beginning of this one. used for inversions,
-        i.e. the 2nd inversion of [0,1,2] is [1,2,0],
+        i.e. the 2nd inversion of [0,1,2] is [1,2,0], (a rotation of 1 place in this case)
         and for modes, which are rotations of scales. """
 
         rotated_start_place = num_places
@@ -596,11 +600,11 @@ class NoteList(list):
     def _melody_wave(self, duration, octave, delay, type='KS', falloff=True):
         from muse.audio import arrange_melody
         from muse.chords import most_likely_chord
-        print(f' synthesising arpeggio: {(most_likely_chord(self)).name} in octave {octave} (w/ delay={delay})')
+        print(f' synthesising arpeggio: {(most_likely_chord(self)).name} in octave:{octave if octave is not None else "Default"} (w/ delay={delay})')
         melody_wave = arrange_melody(self._waves(duration, octave, type), delay=delay, norm=False, falloff=falloff)
         return melody_wave
 
-    def play(self, duration=3, octave=None, delay=None, falloff=True, block=False, type='KS', **kwargs):
+    def play(self, delay=None, duration=3, octave=None, falloff=True, block=False, type='KS', **kwargs):
         from muse.audio import play_wave
         if delay is not None:
             wave = self._melody_wave(duration=duration, octave=octave, delay=delay, type=type, falloff=falloff, **kwargs)

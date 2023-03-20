@@ -1,7 +1,7 @@
 import muse.notes as notes
 from muse.notes import Note, NoteList
 from muse.intervals import *
-from muse.util import log, test, precision_recall
+from muse.util import log, test, precision_recall, rotate_list
 from muse.parsing import valid_note_names, is_valid_note_name, parse_out_note_names
 from collections import defaultdict
 
@@ -110,8 +110,8 @@ for intervals, names in chord_names.items():
             # but note that these are also equivalent to add11s
             # (we reserve the add11 extended interval for chords with 6ths/7ths)
             altered_names.extend([f'{name}add11' if ' ' not in name else f'{name} add11' for name in names])
-            add4_chord_names[add4_intervals] = altered_names
-            very_rare_chord_suffixes.append(altered_names[0])
+            # add4_chord_names[add4_intervals] = altered_names   # removed for now (are add4s real?)
+            # very_rare_chord_suffixes.append(altered_names[0])
         # add11s
         elif len(intervals) == 3 and intervals[-1] != Maj9: # add9s can't be add11s
              add11_intervals = tuple(list(intervals) + [Per11])
@@ -683,31 +683,56 @@ class Chord:
     @property
     def sharp_notes(self):
         """returns notes inside self, all with sharp preference"""
-        return [Note(n.chroma, prefer_sharps=True) for n in self.notes]
+        return NoteList([Note(n.chroma, prefer_sharps=True) for n in self.notes])
 
     @property
     def flat_notes(self):
         """returns notes inside self, all with flat preference"""
-        return [Note(n.chroma, prefer_sharps=False) for n in self.notes]
+        return NoteList([Note(n.chroma, prefer_sharps=False) for n in self.notes])
 
     def pairwise_consonance(self):
-        pairwise = {}
+        """return a dict that maps the interval pairs in this chord as (i1, i2) tuples
+        to float values of their perceived 'consonance'"""
+        pairs = {}
 
-        # include tonic as well in matrix:
+        ### TBI: re-examine? currently inverted chords are considered less consonant than their
+        # standard versions only due to the .consonance function overvaluing the root note, which
+        # MIGHT be correct but sounds tricksy
+
+        # non-inverted factors:
         factors = [1] + [f for f, i in self.factor_intervals.items() if not isinstance(i, NullInterval)]
+        # if not self.inverted:
+            # include tonic as well in matrix:
         intervals = [IntervalDegree(0)] + [i for f, i in self.factor_intervals.items() if not isinstance(i, NullInterval)]
+
+        # else: # inverted chords can be more dissonant so we must account for them:
+        #     # use the inverted rather than standard list of factors:
+        #     root_place = [i for i, n in enumerate(self.notes) if n == self.root][0]
+        #     factors = rotate_list(factors, root_place)
+        #     # intervals = [IntervalDegree(0)] + [i for f, i in self.factor_intervals.items() if not isinstance(i, NullInterval)]
+        #     intervals = [i - self.root for i in self.inverted_notes]
+
+        # troubleshooting
 
         for xfactor, xinterval in zip(factors, intervals):
             for yfactor, yinterval in zip(factors, intervals):
                 if xfactor != yfactor: # do not compare factors to themselves
                     if yfactor > xfactor:
-                        # interval subtraction is directional: xinterval is the root
-                        distance = yinterval - xinterval
-                    else:
-                        distance = xinterval - yinterval
-                    pairwise[(self.factors[xfactor], self.factors[yfactor])] = distance.consonance
+                        # interval subtraction is directional: xfactor is the root
+                        # TBI: check this? e.g. the consonance of Am is the same for A-C as it is for C-A, seems wrong
+                        updist = yinterval - xinterval
+                        downdist = ~updist # interval inversion
 
-        return pairwise
+                        # print(f'')
+
+                        # pdb.set_trace()
+
+                        pairs[(self.factors[xfactor], self.factors[yfactor])] = updist.consonance
+                        pairs[(self.factors[yfactor], self.factors[xfactor])] = downdist.consonance
+                    # else:
+                    #     distance = xinterval - yinterval
+
+        return pairs
 
     @property
     def consonance(self):
@@ -721,11 +746,11 @@ class Chord:
         # weighted average,
         count, total = 0, 0
         for pair, consonance in pairwise.items():
-            if pair[0] == self.tonic:
+            if pair[0] == self.root:
                 # count intervals where the tonic is root as triple:
                 total += 3*consonance
                 count += 3
-            elif pair[1] == self.tonic:
+            elif pair[1] == self.root:
                 # and intervals containing the tonic as double:
                 total += 2*consonance
                 count += 2
@@ -772,7 +797,7 @@ class Chord:
     def clockwise(self, value=1):
         """fetch the next chord from clockwise around the circle of fifths,
         or if value>1, go clockwise that many steps"""
-        from scales import Key
+        from keys import Key
         reference_key = Key(self.tonic) if self.major else Key(self.relative_major().tonic)
         new_co5s_pos = (co5s_positions[reference_key] + value) % 12
         # instantiate new key object: (just in case???)
@@ -833,6 +858,9 @@ class Chord:
         hash_str = '/'.join([str(n.position) for n in self.inverted_notes])
         return hash(hash_str)
 
+    def __getitem__(self, i):
+        return self.inverted_notes[i]
+
     @property
     def inverted_notes(self):
         """if this is an inverted chord, return the notes in their inverted order (from root),
@@ -841,11 +869,12 @@ class Chord:
             assert self.root in self.notes, f"Inversion error: specified root {self.root} not in {self.notes}"
             root_place = [i for i, n in enumerate(self.notes) if n == self.root][0]
             # so we rearrange the notes from ordering [0,1,2] to e.g. [1,2,0]:
-            note_idxs = [(root_place + i) % len(self) for i in range(len(self))]
-            note_list = [self.notes[i] for i in note_idxs]
+            return self.notes.rotate(root_place)
+            # note_idxs = [(root_place + i) % len(self) for i in range(len(self))]
+            # note_list = [self.notes[i] for i in note_idxs]
         else:
-            note_list = self.notes
-        return note_list
+            return self.notes
+        # return note_list
 
     def __str__(self):
         note_list = self.inverted_notes
@@ -921,16 +950,35 @@ def StackedChord(tonic, stack):
 
 
 # automatic chord detection routine:
-def matching_chords(notelist, score=False, allow_inversions=False):
+def matching_chords(notelist, tiebreaker='likelihood', score=True, inversions=True, weighted=True, min_recall=0.8, min_precision=0.6, max_results=None):
     """given an iterable of Note or OctaveNote objects,
-    determine the chords that those notes could belong to.
+      determine the chords that those notes could belong to.
 
-    returns an ordered dict with chords as keys,
-    and (recall, precision) tuples as values for those chords.
+    returns either an ordered list (if score=False),
+      or an ordered dict (if score=True) with chords as dict keys and
+      (recall, precision, tiebreaker) tuples as corresponding dict values.
 
     chords are returned in the order: perfect matches, partial matches, precise matches,
-    where perfect matches have recall and precision = 1, partial matches have recall=1, and precise matches have precision=1
-    (note that, for chord matching, recall is a more desirable characteristic than precision, despite the name)
+      where perfect matches have recall and precision = 1, partial matches have recall=1, and precise matches have precision=1
+      (note that, for chord matching, recall is a more desirable characteristic than precision, despite the name)
+    if there are no matches, an empty dict/list is returned.
+
+    by default, we assume that the ordering in notelist is important - the first note being the root.
+      but if the notelist is specifically unordered, set inversions and weighted to False
+
+    tiebreaker must be one of 'likelihood' (default) or 'consonance'.
+        this controls the third score on which candidates are rated, after recall and precision.
+        consonance is a fuzzy measure of the consonance of a chord by its pairwise interval consonances,
+        and likelihood is a fuzzy measure of chord rarity (majors more likely than minors, triads more than tetrads, etc.)
+
+    other parameters:
+      if score is True, we return a dict that links the candidate chords (in order) to their (rec, prec, tiebreak) scores.
+        otherwise, we simply return an ordered list of the chords themselves.
+      if inversions is True, we check if inversions of candidates are better fits than the candidates themselves,
+        based on the ordering of the notes in notelist.
+      if weighted is True, we preferentially weight the tonic notes of both candidate and target for the purpose of their
+        precision and recall scores (so that e.g. recalling the tonic gives a higher score than recalling any other note)
+      if max_results is passed an integer, return only that many possible matches.
     """
 
     # parse notelist's items, casting to Note if necessary, and find list of unique ones:
@@ -956,49 +1004,79 @@ def matching_chords(notelist, score=False, allow_inversions=False):
     precise_matches = {}
     partial_matches = {}
 
+    # note_weights = {notelist[0] : 2} # first item in notelist has double weight
+
     for tonic in notes.chromatic_scale:
         for quality in chord_types:
             candidate = Chord(tonic, quality)
 
-            # get precision and recall which are the two most important metrics to sort by
-            precision, recall = precision_recall(unique_notes, candidate)
-            # but also use a third, subjective value by which to tiebreak
-            likelihood_score = 1.0
+            if weighted:
+                note_weights = {tonic: 1.5,        # chord tonic has increased weight
+                                notelist[0] : 1.1} # and first item in notelist has *slightly* higher weight
+            else:
+                note_weights = None
 
-            ### we evaluate subjective likelihood value based on whatever I want:
+            # get precision and recall which are the two most important metrics to sort by
+            precision, recall = precision_recall(unique_notes, candidate, weights=note_weights)
+
+            # but also use a third value by which to tiebreak
+
 
             # less likely if tonic is not the first note in the notelist
-            if candidate.tonic != notelist[0] and notelist[0] in candidate.notes:
-                likelihood_score -= .2
-                # initialise an inverted chord that we pass as match if it fits perfectly
-                inversion = Chord(candidate.tonic, candidate.suffix, root=notelist[0])
-            elif notelist[0] not in candidate.notes:
-                # less lkely if the the notelist and candidate don't share a tonic:
-                likelihood_score -= .1
-                inversion = None
+
+            # elif notelist[0] not in candidate.notes:
+            #     # less lkely if the the notelist and candidate don't share a tonic:
+            #     # likelihood_score -= .1
+            #     inversion = None
+            # else:
+            #     inversion = None
+
+
+            if tiebreaker == 'likelihood':
+                ### subjective likelihood is some hand-defined fuzzy metric that favours more 'likely' chords
+
+                likelihood_score = 1.0
+                # non-major chords are slightly less likely:
+                if not candidate.major:
+                    likelihood_score -= .1
+
+                # less likely for rarer chord types
+                if candidate.suffix in uncommon_chord_suffixes:
+                    likelihood_score -= .2
+                elif candidate.suffix in rare_chord_suffixes:
+                    likelihood_score -= .3
+                elif candidate.suffix in very_rare_chord_suffixes:
+                    likelihood_score -= .5
+                elif candidate.suffix in legendary_chord_suffixes:
+                    likelihood_score -= .7
+                tiebreak_score = likelihood_score
+
+            elif tiebreaker == 'consonance':
+                tiebreak_score = candidate.consonance
             else:
-                inversion = None
+                raise Exception("'tiebreaker' arg to matching_chords must be one of: likelihood, consonance")
 
-            # non-major chords are slightly less likely:
-            if not candidate.major:
-                likelihood_score -= .1
 
-            # less likely for rarer chord types
-            if candidate.suffix in uncommon_chord_suffixes:
-                likelihood_score -= .2
-            elif candidate.suffix in rare_chord_suffixes:
-                likelihood_score -= .3
-            elif candidate.suffix in very_rare_chord_suffixes:
-                likelihood_score -= .5
-            elif candidate.suffix in legendary_chord_suffixes:
-                likelihood_score -= .7
+            inverted_candidate = None
+
+            # initialise an inverted chord that we pass as match if it fits perfectly
+            if inversions and candidate.tonic != notelist[0] and notelist[0] in candidate.notes:
+                # likelihood_score -= .2
+                if precision == 1 and recall == 1:
+                    # overwrite earlier None assignment
+                    inverted_candidate = Chord(candidate.tonic, candidate.suffix, root=notelist[0])
+                    if tiebreaker == 'likelihood':
+                        inversion_tiebreak = likelihood_score
+                        tiebreak_score -= 0.1
+                    elif tiebreaker == 'consonance':
+                        inversion_tiebreak = inverted_candidate.consonance
 
             # which dict does this chord candidate go to?
             if precision == 1 and recall == 1:
                 target_dict = perfect_matches
-            elif recall == 1:
+            elif recall == 1 and precision >= min_precision:
                 target_dict = partial_matches
-            elif precision == 1:
+            elif precision == 1 and recall >= min_recall:
                 target_dict = precise_matches
             else:
                 target_dict = None
@@ -1014,26 +1092,26 @@ def matching_chords(notelist, score=False, allow_inversions=False):
                             import pdb; pdb.set_trace()
                 ###
 
-                target_dict[candidate] = (round(recall,1), round(precision,1), round(likelihood_score,1))
+                target_dict[candidate] = (round(recall,2), round(precision,2), round(tiebreak_score,2))
 
-                if allow_inversions and (inversion is not None):
-                    # add this inversion as well as the non-inverted chord, but make the inversion more likely
+                if inversions and (inverted_candidate is not None):
+                    # add this inversion as well as the non-inverted chord, but the inversion should be slightly more likely
                     ### troubleshooting
-                    if inversion in target_dict.keys():
+                    if inverted_candidate in target_dict.keys():
                         print(f" And trying to add {inversion} to target_dict but it's already there")
                         for key in target_dict.keys():
-                            if hash(key) == hash(inversion):
+                            if hash(key) == hash(inverted_candidate):
                                 print(key)
+                                ### troubleshooting
                                 import pdb; pdb.set_trace()
-                    ### troubleshooting
-                    target_dict[inversion] = (round(recall,1), round(precision,1), round(likelihood_score + .2, 1))
+                    target_dict[inverted_candidate] = (round(recall,2), round(precision,2), round(inversion_tiebreak, 2))
 
     # sort matches by their distinguishing values:
-    # i.e. sort perfect matches by likelihood:
+    # i.e. sort perfect matches by tiebreaker:
     perfect_match_list = sorted(perfect_matches.keys(), key=lambda x: perfect_matches[x][2], reverse=True)
-    # but sort perfect recall items by precision (then by likelihood)
+    # but sort perfect recall items by precision (then by tiebreaker)
     partial_match_list = sorted(partial_matches.keys(), key=lambda x: (partial_matches[x][1], partial_matches[x][2]), reverse=True)
-    # and sort perfect precision items by recall (then by likelihood)
+    # and sort perfect precision items by recall (then by tiebreaker)
     precise_match_list = sorted(precise_matches.keys(), key=lambda x: (precise_matches[x][0], precise_matches[x][2]), reverse=True)
 
     if score:
@@ -1046,19 +1124,23 @@ def matching_chords(notelist, score=False, allow_inversions=False):
         all_matches = perfect_matches
         all_matches.update(partial_matches)
         all_matches.update(precise_matches)
-        return all_matches
+        if max_results is None:
+            return all_matches
+        else:
+            # awkward way to truncate a dict:
+            trunc_matches = {k : all_matches[k] for k in list(all_matches.keys())[:max_results]}
+            return trunc_matches
     else:
         # just return the chords themselves
+        return (perfect_match_list + partial_match_list + precise_match_list)[:max_results]
 
-        return perfect_match_list + partial_match_list + precise_match_list
-
-def most_likely_chord(notelist, score=False, perfect_only=False, allow_inversions=True):
+def most_likely_chord(notelist, score=False, perfect_only=False, weighted=True, inversions=True):
     """makes a best guess at an unknown chord from a list of Note objects
     (or of objects that can be cast to Notes) and returns it.
     if score=True, also returns a tuple of that chord's (precision, recall, likelihood) values
     if perfect_only=True, only returns a match if its precision and recall are both 1"""
     # dict of matches and their (prec, rec) scores:
-    matches = matching_chords(notelist, score=True, allow_inversions=allow_inversions)
+    matches = matching_chords(notelist, 'likelihood', score=True, weighted=True, inversions=inversions)
 
     # match is the top match, or None if none were found
     match = list(matches.keys())[0] if len(matches) > 0 else None
@@ -1080,6 +1162,9 @@ def most_likely_chord(notelist, score=False, perfect_only=False, allow_inversion
 
 if __name__ == '__main__':
     ### test cases for chord construction:
+
+    # log.verbose = True
+
     test(Chord('C', 'minor'), Chord('Cm'))
     test(Chord('D', [4, 7]), Chord(['D', 'F#', 'A']))
     test(Chord('Em'), Chord('E', 'm'))
@@ -1095,3 +1180,10 @@ if __name__ == '__main__':
     test(Chord('A minor'), StackedChord('A', [Min3, Maj3]))
 
     test(most_likely_chord(['C', 'E', 'A']), Chord('Am/C'))
+
+    # test matching_chords parameters:
+    matching_chords('CEAG', 'consonance', score=True, inversions=True, weighted=True)
+
+
+# bug?
+# Chord('Gmaj11').play(delay=0.2)
