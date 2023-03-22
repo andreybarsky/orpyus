@@ -558,69 +558,6 @@ class KeyChord(Chord):
             return super().__sub__(other)
 
 
-
-# def rate_keys(chordlist):
-#     """given an iterable of Chord objects,
-#     determine the keys that those chords could belong to"""
-#
-#     ### check for common chords first:
-#     full_matches = []
-#     partial_matches = {}
-#
-#     unique_chords = []
-#     for c in chordlist:
-#         if isinstance(c, Chord):
-#             unique_chords.append(c)
-#         elif isinstance(c, str):
-#             unique_chords.append(Chord(c))
-#
-#     unique_chords = list(set(unique_chords))
-#
-#     for tonic in notes.notes:
-#         for quality in common_key_suffixes + uncommon_key_suffixes + rare_key_suffixes:
-#             candidate = Key(tonic, quality)
-#             belongs = 0
-#             for chord in unique_chords:
-#                 if chord in candidate.chords:
-#                     belongs += 1
-#             rating = belongs / len(unique_chords)
-#             # rating is 1 if every note in the notelist appears in the candidate chord
-#
-#             if rating == 1 and len(candidate) == len(unique_chords):
-#                 # one-to-one mapping, perfect match
-#                 full_matches.append(candidate)
-#             else:
-#                 if rating == 1 and len(candidate) > len(unique_chords):
-#                     # good match, but chord has some extra things in it
-#                     # penalise rating based on the difference in length
-#                     # (intersection over union?)
-#                     if len(candidate) > len(unique_chords):
-#                         specificity_penalty = len(unique_chords) / len(candidate)
-#                         rating *= specificity_penalty
-#
-#                 elif len(candidate) != len(unique_chords):
-#                     precision_penalty = 1 / abs(len(candidate) - len(unique_chords))
-#                     rating *= precision_penalty
-#                     # if len(candidate) > len(unique_notes):
-#                     #     # print('Candidate is longer than notelist')
-#                     # elif len(unique_notes) > len(candidate):
-#                     #     print('Notelist is longer than candidate')
-#
-#                 # uncommon chord types are inherently less likely:
-#                 if candidate.suffix in uncommon_key_suffixes:
-#                     rating *= 0.99
-#                 elif candidate.suffix in rare_key_suffixes:
-#                     rating *= 0.98
-#
-#                 partial_matches[candidate] = round(rating, 2)
-#
-#     return full_matches, partial_matches
-
-
-# largely copy-pasted from chords.matching_chords:
-
-#################### TBI (or completed)
-...
 def matching_keys(chordlist, by='note', tiebreaker='likelihood', modes=True, score=True, min_recall=0.8, min_precision=0.3, max_results=5):
     """given an iterable of Chord objects,
     determine the Keys that those chords could belong to.
@@ -649,15 +586,23 @@ def matching_keys(chordlist, by='note', tiebreaker='likelihood', modes=True, sco
         elif isinstance(c, str):
             chord = Chord(c)
 
+        if i == 0:
+            target_tonic = chord.tonic
+
         if by=='note':
-            for n in chord.notes:
+            for j, n in enumerate(chord.notes):
                 if n not in note_weights.keys():
                     note_weights[n] = 1
                 else:
                     note_weights[n] += 1
+
                 if i == 0:
-                    # notes in the first chord in the progression get weighted higher:
-                    note_weights[n] += 2
+                    if j == 0:
+                        # tonic of the first chord gets weighted higher:
+                        note_weights[n] += 3
+                    else:
+                        # other notes in the first chord in the progression get weighted slightly higher:
+                        note_weights[n] += 2
 
 
         elif by=='chord':
@@ -731,7 +676,7 @@ def matching_keys(chordlist, by='note', tiebreaker='likelihood', modes=True, sco
             if candidate.scale[0] in this_cand_weights.keys():
                 this_cand_weights[candidate.scale[0]] *= 1.5 # weight the candidate scale's tonic note as higher
             else:
-                this_cand_weights[candidate.scale[0]] = 1.5 # weight the candidate scale's tonic note as higher
+                this_cand_weights[candidate.scale[0]] = 1.5
 
             # if chordlist[0].notes[0] in this_cand_weights.keys():
             #     this_cand_weights[chordlist[0].notes[0]] *= 1.1 # weight the target's starting tonic as *slightly* higher
@@ -744,23 +689,20 @@ def matching_keys(chordlist, by='note', tiebreaker='likelihood', modes=True, sco
             this_cand_weights = copy(chord_weights)
 
             if candidate.chords[0] in this_cand_weights.keys():
-                this_cand_weights[candidate.chords[0]] *= 1.5 # weight the candidate scale's tonic note as higher
+                this_cand_weights[candidate.chords[0]] *= 1.5 # weight the candidate scale's tonic chord as higher
             else:
-                this_cand_weights[candidate.chords[0]] = 1.5 # weight the candidate scale's tonic note as higher
+                this_cand_weights[candidate.chords[0]] = 1.5
 
-            # if chordlist[0].notes[0] in this_cand_weights.keys():
-            #     this_cand_weights[chordlist[0]] *= 1.1 # weight the target's starting tonic as *slightly* higher
-            # else:
-            #     this_cand_weights[chordlist[0]] = 1.1 # weight the target's starting tonic as *slightly* higher
-
-            # this_cand_weights[candidate.chords[0]] * 1.5 # weight the candidate scale's tonic chord as higher
-            # this_cand_weights[chordlist[0]] * 1.1 # weight the target's starting tonic as *slightly* higher
             precision, recall = precision_recall(unique_target_items, candidate.chords, weights=this_cand_weights)
 
         # but also use a third, subjective value by which to tiebreak
         likelihood_score = 1.
 
         ### we evaluate subjective likelihood value based on whatever I want:
+
+        # perfect likelihood only if the candidate and chordlist share a tonic:
+        if candidate.tonic != target_tonic:
+            likelihood_score -= .1
 
         # non-major keys are slightly less likely:
         # if not candidate.major:

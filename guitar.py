@@ -47,48 +47,6 @@ class Guitar:
             open_strings = tuning_chromas.force_octave(start_octave=2)
             self.open_strings = [String(s) for s in open_strings]
 
-            # first_string_fragment = tuning[:2]
-            # if first_string_fragment[-1] in ['b', '#']:
-            #     first_string_note = first_string_fragment
-            #     string_idx = 2
-            #     prefer_sharps = first_string_fragment[-1]  == '#' # use sharp or flat notation depending on what is used in input string
-            # else:
-            #     first_string_note = first_string_fragment[0]
-            #     string_idx = 1
-            #     prefer_sharps = True # but doesn't matter
-            # # first string is going to be in octave 1 or 2, find whichever is closest to E2:
-            # low_bass, high_bass = String(first_string_note + '1'), String(first_string_note + '2')
-            # low_dist, high_dist = abs(low_bass - default_bass), abs(high_bass - default_bass)
-            #
-            # if low_dist < high_dist:
-            #     first_string = low_bass
-            # else:
-            #     first_string = high_bass
-            #
-            # first_string._set_sharp_preference(prefer_sharps)
-            # self.open_strings = [first_string]
-            # prev_string = first_string
-            #
-            # while len(self.open_strings) < self.num_strings:
-            #     string_note_fragment = tuning[string_idx : string_idx+2]
-            #     # string_letter = tuning[string_idx]
-            #     if string_note_fragment[-1] in ['#', 'b']:
-            #         string_note = tuning[string_idx: string_idx+2]
-            #         string_idx += 2
-            #         prefer_sharps = string_note_fragment[-1] == '#'
-            #     else:
-            #         string_note = tuning[string_idx]
-            #         string_idx += 1
-            #         prefer_sharps = True # but doesn't matter
-            #
-            #     cur_octave = prev_string.octave
-            #     low_string, high_string = String(string_note + str(cur_octave)), String(string_note + str(cur_octave+1))
-            #     low_dist, high_dist = (low_string - prev_string), (high_string - prev_string)
-            #     if low_dist.value > 0:
-            #         self.open_strings.append(low_string)
-            #     else:
-            #         self.open_strings.append(high_string)
-            #     prev_string = self.open_strings[-1]
 
     def distance_from_standard(self):
         """how many semitones up/down must the strings of a standard guitar be tuned to get this tuning?"""
