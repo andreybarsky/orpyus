@@ -1,12 +1,14 @@
 
-import muse.notes as notes
-from muse.notes import Note, OctaveNote, NoteList
-from muse.chords import Chord, chord_names, matching_chords, most_likely_chord, relative_minors, relative_majors
-from muse.intervals import Interval, IntervalDegree, Min2, Maj2, Min3, Maj3, Per4, Per5, Min6, Maj6, Min7, Maj7
-import muse.scales as scales
-# from muse.scales import interval_scale_names, scale_name_intervals, interval_mode_names, mode_name_intervals, mode_lookup, standard_scale_names  #, non_scale_interval_mode_names
-import muse.parsing as parsing
-from muse.util import log, test, precision_recall
+import notes
+from notes import Note, OctaveNote, NoteList
+from chords import Chord, chord_names, matching_chords, most_likely_chord, relative_minors, relative_majors
+from intervals import Interval, IntervalDegree, Min2, Maj2, Min3, Maj3, Per4, Per5, Min6, Maj6, Min7, Maj7
+from progressions import ScaleDegree
+from qualities import Quality
+import scales
+# from scales import interval_scale_names, scale_name_intervals, interval_mode_names, mode_name_intervals, mode_lookup, standard_scale_names  #, non_scale_interval_mode_names
+import parsing as parsing
+from util import log, test, precision_recall
 
 from itertools import cycle
 from collections import defaultdict
@@ -15,6 +17,10 @@ import pdb
 # notes in order of which are flattened/sharpened in a key signature:
 flat_order = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
 sharp_order = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
+
+
+
+# TBI: valid_chords method should enumerate returned chords by scale degree
 
 class Key:
     # TBI: key signature, sharp/flat detection
@@ -365,6 +371,18 @@ class Key:
         chord_stats = [(c, round(1-(c.rarity-1)/4,1), c.consonance) for c in chord_list]
         return chord_stats
 
+    @property
+    def relative_minor(self):
+        assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
+        rm_tonic_name = relative_minors[self.tonic.name]
+        return Key(rm_tonic_name, 'minor')
+
+    @property
+    def relative_major(self):
+        assert not self.major, f'{self} is already major, and therefore has no relative major'
+        rm_tonic_name = relative_majors[self.tonic.name]
+        return Key(rm_tonic_name)
+
     def __contains__(self, item):
         """is this Chord or Note part of this key?"""
         if isinstance(item, Note):
@@ -479,17 +497,16 @@ class Key:
     def counterclockwise(self, value=1):
         return self.clockwise(-value)
 
-    @property
-    def relative_minor(self):
-        assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
-        rm_tonic_name = relative_minors[self.tonic.name]
-        return Key(rm_tonic_name, 'minor')
 
-    @property
-    def relative_major(self):
-        assert not self.major, f'{self} is already major, and therefore has no relative major'
-        rm_tonic_name = relative_majors[self.tonic.name]
-        return Key(rm_tonic_name)
+
+    def __invert__(self):
+        """~ operator returns the relative major/minor of a key"""
+        if self.major:
+            return self.relative_minor
+        elif self.minor:
+            return self.relative_major
+        else:
+            return self
 
 
 

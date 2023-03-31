@@ -1,5 +1,7 @@
-from muse.intervals import *
-from muse.chords import Chord
+from intervals import *
+from chords import Chord
+from qualities import Quality
+from scales import scale_name_intervals
 
 roman_numerals = {'I':   1,
                   'II':  2,
@@ -9,18 +11,127 @@ roman_numerals = {'I':   1,
                   'VI':  6,
                   'VII': 7}
 
+numerals_roman = {v:k for k,v in roman_numerals.items()}
 
-cadence_finality = {(5, 1): 1,   # authentic cadence
-                    (4, 1): 0.9, # plagal cadence
-                    (1, 4):    , # plagal half cadence
-                    (1, 5): 0.5, (2, 5): 0.5, (4, 5): 0.5, (6, 5): 0.5, # half cadences
-                    (5, 6): 0.4, # deceptive cadence
+# # scrap this for a more theoretical approach?
+# cadence_finality = {(5, 1): 1,   # authentic cadence
+#                     (4, 1): 0.9, # plagal cadence
+#                     (1, 4): 0.4, # plagal half cadence
+#                     (1, 5): 0.5, (2, 5): 0.5, (4, 5): 0.5, (6, 5): 0.5, # half cadences
+#                     (5, 6): 0.4, # deceptive cadence
+#                     }
 
-                    }
+
+### TBI: seventh-chord ScaleDegrees that automatically use min/maj/dom/dim 7th modifiers
+
+class ScaleDegree:
+    """A hypothetical (triad) chord that exists as the degree of some hypothetical diatonic major/minor scale"""
+    def __init__(self, name, diminish=True):
+        """name is a case-sensitive roman numeral that describes the scale degree,
+        uppercase for major or lowercase for minor,
+        with a potential qualifier like 7, #5, 0, etc. - should be a valid chord suffix
+
+        OR an explicit [degree, quality, (optional) modifier] iterable"""
+
+        if isinstance(name, str):
+            # parse input string:
+            self.degree, self.quality, self.modifier = self._parse_input(name)
+        else:
+            assert isinstance(name, (list, tuple)), f'Input to ScaleDegree expected to be string or iterable but got: {type(name)}'
+            # just take degree/quality/modifier directly
+            if len(name) == 2:
+                self.degree, self.quality = name
+            elif len(name) == 3:
+                self.degree, self.quality, self.modifier = name
+            else:
+                raise Exception(f'Invalid tuple provided to ScaleDegree init: {name}')
+
+        if isinstance(self.quality, str):
+            # cast to quality object if it is not already one:
+            self.quality = Quality(self.quality)
+
+        self.major, self.minor = self.quality.flags
+
+        # determine tonic quality:
+        if (self.minor and self.degree in [1, 4, 5]) or (self.major and self.degree not in [1, 4, 5]):
+            self.key_quality = Quality('minor')
+        else:
+            self.key_quality = Quality('major')
+        self.major_key, self.minor_key = self.key_quality.flags
+
+
+    def _parse_input(self, name):
+        """parses degree, descriptor, and quality from input arg"""
+        assert isinstance(name, str), 'name arg to ScaleDegree init should be a string'
+
+        # look for roman numerals by checking the first 3/2/1 chars of name:
+        degree_int = None
+        num_chars_to_check = min([3, len(name)])
+        for i in range(num_chars_to_check, 0, -1):
+            potential_name = name[:i]
+            print(f'Checking name {name} up to index {i}: {potential_name}')
+            if potential_name.upper() in roman_numerals.keys():
+                # this is the scale degree
+                degree_int = roman_numerals[potential_name.upper()]
+                if potential_name.isupper():
+                    qual_obj = Quality('major')
+                elif potential_name.islower():
+                    qual_obj = Quality('minor')
+                else:
+                    raise Exception(f'Inconsistent case for scale degree input: {potential_name} (should be entirely upper or lower)')
+                break
+        if degree_int is None:
+            raise Exception(f'Scale degree input does not appear to contain a valid roman numeral: {name}')
+        if len(name) > i:
+            # modified
+            rest = name[i:]
+            print(f'Detected ScaleDegree modifier: {rest}')
+            modifier = rest
+        else:
+            modifier = None
+        return degree_int, qual_obj, modifier
+
+    def __str__(self):
+        roman = numerals_roman[self.degree]
+        if self.quality == 'minor':
+            roman = roman.lower()
+        if self.modifier is not None:
+            roman += f' ({self.modifier})'
+        return f'ScaleDegree: {roman}'
+
+    def __repr__(self):
+        return str(self)
+
+    def __add__(self, other, diminish=True):
+        """mod-7 arithmetic on scale chord roots"""
+        new_degree = (((self.degree + other) -1 ) % 7 ) + 1
+        new_quality = self.quality
+        if new_degree not in [1,4,5]: # swap quality if needed:
+            new_quality = ~self.quality
+
+        new_modifier = None
+        if diminish:
+            # set default dim modifier on 7 and 2 chords:
+            if (new_degree == 7 and self.major_key) or (new_degree == 2 and self.minor_key):
+                new_modifier = 'dim'
+        else:
+            return ScaleDegree((new_degree, new_quality, new_modifier))
+
+    def __sub__(self, other, diminish=True):
+        if isinstance(other, int):
+            # just addition by negative other
+            return self.add(-other, diminish=diminish)
+        elif isinstance(other, ScaleDegree):
+            # subtraction of scaledegrees returns their signed distance
+            return self.degree - other.degree
+
+
 
 class Progression:
     """A theoretical progression between unspecified chords,
-    initialised as e.g. Progression('I', 'IV', 'iii', 'V')"""
+    as an ordered collection of ScaleDegrees,
+    initialised as list: e.g. Progression(['I', 'IV', 'iii', 'V'])
+    or as string separated by dashes, e.g.: Progression('I-IV-iii-V')"""
     def __init__(self, degrees):
         self.intervals = []
 
@@ -66,21 +177,6 @@ class Progression:
             if (self.quality == 'major' and deg_int == 7) or (self.quality == 'minor' and deg_int == 2):
                 if deg_quality == 'minor':
                     deg_quality = 'diminished'
-
-            # elif isinstance(deg, int):
-            #     # we interpret positive numbers as major degrees
-            #     # and negative numbers as minor degrees
-            #     deg_int = deg
-            #     if self.quality == 'major' and deg_int == 7:
-            #         if deg.lower() == deg:
-            #             deg_quality = 'diminished'
-            #         elif deg.upper() == deg:
-            #             deg_quality = 'major'
-            #     elif self.quality == 'minor' and deg_int == 2:
-            #         if deg.lower() == deg:
-            #             deg_quality = 'diminished'
-            #         elif deg.upper() == deg:
-            #             deg_quality = 'major'
 
             deg_interval = Interval.from_degree(deg_int, quality=deg_quality)
             self.intervals.append(deg_interval)
@@ -160,3 +256,9 @@ class ChordProgression(Progression):
 #         notes = [item if isinstance(item, Note) else Note(item) for item in notes]
 #
 #         self.notes = set(sorted(notes))
+
+
+if __name__ == '__main__':
+    # test arithmetic operations on ScaleDegree objects:
+    test(ScaleDegree('I') + 3, ScaleDegree('IV'))
+    test(ScaleDegre('V') - 2, ScaleDegree('iii'))

@@ -1,10 +1,10 @@
 # python library for handling musical notes, intervals, and chords
 
-from muse.intervals import Interval
-from muse.parsing import note_names, parse_octavenote_name, is_flat, is_sharp, is_valid_note_name, parse_out_note_names
-import muse.conversion as conv
+from intervals import Interval
+from parsing import note_names, parse_octavenote_name, is_flat, is_sharp, is_valid_note_name, parse_out_note_names
+import conversion as conv
 
-from muse.util import log, test
+from util import log, test
 
 import math
 import pdb
@@ -198,7 +198,7 @@ class Note:
     def _wave(self, duration, falloff=True, **kwargs):
         """Outputs a sine wave corresponding to this note,
         by default with exponential volume increase and falloff"""
-        # from muse.audio import sine_wave, exp_falloff
+        # from audio import sine_wave, exp_falloff
         # non-OctaveNotes have no pitch defined,
         # so instantiate a child OctaveNote in default octave=4 and return its wave method instead:
         return self[4]._wave(duration=duration, falloff=falloff, **kwargs)
@@ -208,7 +208,7 @@ class Note:
         # return wave
 
     def play(self, duration=3, falloff=True):
-        # from muse.audio import play_wave
+        # from audio import play_wave
         return self[4].play(duration=duration, falloff=falloff)
         # wave = self._wave(duration=duration, falloff=falloff)
         # play_wave(wave)
@@ -448,14 +448,14 @@ class OctaveNote(Note):
     def _wave(self, duration, type='KS', falloff=False):
         """Outputs a sine wave corresponding to this note,
         by default with exponential volume increase and falloff"""
-        from muse.audio import synth_wave
+        from audio import synth_wave
         # wave = sine_wave(freq=self.pitch, duration=duration)
         # use karplus-strong wave table synthesis for guitar-string timbre:
         wave = synth_wave(freq=self.pitch, duration=duration, type=type, falloff=falloff)
         return wave
 
     def play(self, duration=2, falloff=True, block=False):
-        from muse.audio import play_wave
+        from audio import play_wave
         # return self[4].play(duration=duration, falloff=falloff)
         wave = self._wave(duration=duration, falloff=falloff)
         play_wave(wave, block=block)
@@ -472,7 +472,7 @@ class NoteList(list):
             if isinstance(arg, str):
                 arg = parse_out_note_names(arg)
 
-            # now we should have an iterable of note-likes:
+            # now either way we should have an iterable of note-likes:
             if isinstance(arg, (list, tuple)):
                 note_items = self._cast_notes(arg)
             else:
@@ -587,8 +587,8 @@ class NoteList(list):
         return waves
 
     def _chord_wave(self, duration, octave, delay=None, type='KS', falloff=True):
-        from muse.audio import arrange_chord
-        from muse.chords import most_likely_chord
+        from audio import arrange_chord
+        from chords import most_likely_chord
         if delay is None:
             print(f' synthesising chord: {(most_likely_chord(self)).name} in octave {octave}')
             chord_wave = arrange_chord(self._waves(duration, octave, type), norm=False, falloff=falloff)
@@ -598,14 +598,14 @@ class NoteList(list):
             return self._melody_wave(duration=duration, octave=octave, delay=delay, type=type, falloff=falloff)
 
     def _melody_wave(self, duration, octave, delay, type='KS', falloff=True):
-        from muse.audio import arrange_melody
-        from muse.chords import most_likely_chord
+        from audio import arrange_melody
+        from chords import most_likely_chord
         print(f' synthesising arpeggio: {(most_likely_chord(self)).name} in octave:{octave if octave is not None else "Default"} (w/ delay={delay})')
         melody_wave = arrange_melody(self._waves(duration, octave, type), delay=delay, norm=False, falloff=falloff)
         return melody_wave
 
     def play(self, delay=None, duration=3, octave=None, falloff=True, block=False, type='KS', **kwargs):
-        from muse.audio import play_wave
+        from audio import play_wave
         if delay is not None:
             wave = self._melody_wave(duration=duration, octave=octave, delay=delay, type=type, falloff=falloff, **kwargs)
         else:

@@ -1,4 +1,4 @@
-from muse.util import log, test
+from util import log, test
 import pdb
 
 # bug: inversion of ExtendedIntervals doesn't seem to work

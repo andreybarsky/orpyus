@@ -1,5 +1,5 @@
-from muse.notes import OctaveNote
-from muse.util import log, test
+from notes import OctaveNote
+from util import log, test
 
 import threading
 import pdb
@@ -385,7 +385,7 @@ def detect_freq(arr, note=False):
 
 
 if __name__ == '__main__':
-    from muse.chords import Chord
+    from chords import Chord
     cmaj = Chord('C')
     am_c = Chord('Am/C')
 

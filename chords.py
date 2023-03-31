@@ -1,8 +1,8 @@
-import muse.notes as notes
-from muse.notes import Note, NoteList
-from muse.intervals import *
-from muse.util import log, test, precision_recall, rotate_list
-from muse.parsing import valid_note_names, is_valid_note_name, parse_out_note_names
+import notes as notes
+from notes import Note, NoteList
+from intervals import *
+from util import log, test, precision_recall, rotate_list
+from parsing import valid_note_names, is_valid_note_name, parse_out_note_names
 from collections import defaultdict
 
 import pdb
@@ -559,8 +559,10 @@ class Chord:
             return default
 
     def _set_sharp_preference(self, prefer_sharps):
-        """set the sharp preference of all notes inside this Chord,
+        """set the sharp preference of this Chord,
+        and of all notes inside this Chord,
         including the tonic, root, and constituent factors"""
+        self.prefer_sharps = prefer_sharps
         self.tonic._set_sharp_preference(prefer_sharps)
         self.root._set_sharp_preference(prefer_sharps)
         for n in self.notes:
@@ -950,7 +952,7 @@ def StackedChord(tonic, stack):
 
 
 # automatic chord detection routine:
-def matching_chords(notelist, tiebreaker='likelihood', score=True, inversions=True, weighted=True, min_recall=0.8, min_precision=0.6, max_results=None):
+def matching_chords(notelist, tiebreaker='likelihood', score=True, inversions=True, weighted=False, min_recall=0.8, min_precision=0.8, max_results=None):
     """given an iterable of Note or OctaveNote objects,
       determine the chords that those notes could belong to.
 
@@ -983,6 +985,7 @@ def matching_chords(notelist, tiebreaker='likelihood', score=True, inversions=Tr
 
     # parse notelist's items, casting to Note if necessary, and find list of unique ones:
     unique_notes = []
+    unique_notes_hash = {}
 
     if isinstance(notelist, str):
         notelist = parse_out_note_names(notelist)
@@ -996,9 +999,12 @@ def matching_chords(notelist, tiebreaker='likelihood', score=True, inversions=Tr
             note = Note(n)
         else:
             raise Exception(f'notelist passed to matching_chords function contains an item of unexpected type {type(n)}: {n}')
-        if note not in unique_notes:
+        if note not in unique_notes_hash.keys():
             unique_notes.append(note)
-    unique_notes = list(set(unique_notes))
+            unique_notes_hash[note] = 1
+        else:
+            unique_notes_hash[note] += 1
+    # unique_notes = list(set(unique_notes))
 
     perfect_matches = {}
     precise_matches = {}
@@ -1010,9 +1016,13 @@ def matching_chords(notelist, tiebreaker='likelihood', score=True, inversions=Tr
         for quality in chord_types:
             candidate = Chord(tonic, quality)
 
+
             if weighted:
-                note_weights = {tonic: 1.5,        # chord tonic has increased weight
-                                notelist[0] : 1.1} # and first item in notelist has *slightly* higher weight
+                note_weights = {tonic: 1.1,        # chord tonic has increased weight
+                                unique_notes[0] : 1.1, # as does first item in notelist
+                                }
+                if 5 in candidate.factors.keys():
+                    note_weights[candidate.factors[5]] = 0.9 # but the fifth has low weight because it can be skipped
             else:
                 note_weights = None
 
@@ -1060,11 +1070,11 @@ def matching_chords(notelist, tiebreaker='likelihood', score=True, inversions=Tr
             inverted_candidate = None
 
             # initialise an inverted chord that we pass as match if it fits perfectly
-            if inversions and candidate.tonic != notelist[0] and notelist[0] in candidate.notes:
+            if inversions and (candidate.tonic != unique_notes[0]) and (unique_notes[0] in candidate.notes):
                 # likelihood_score -= .2
                 if precision == 1 and recall == 1:
                     # overwrite earlier None assignment
-                    inverted_candidate = Chord(candidate.tonic, candidate.suffix, root=notelist[0])
+                    inverted_candidate = Chord(candidate.tonic, candidate.suffix, root=unique_notes[0])
                     if tiebreaker == 'likelihood':
                         inversion_tiebreak = likelihood_score
                         tiebreak_score -= 0.1
@@ -1144,10 +1154,10 @@ def most_likely_chord(notelist, score=False, perfect_only=False, weighted=True, 
 
     # match is the top match, or None if none were found
     match = list(matches.keys())[0] if len(matches) > 0 else None
-    recall, precision, likelihood = matches[match]
 
     if score:
         if match is not None:
+            recall, precision, likelihood = matches[match]
             if (not perfect_only) or (precision==1 and recall == 1):
                 return match, (recall, precision, likelihood)
         else:

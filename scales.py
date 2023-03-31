@@ -1,8 +1,8 @@
-from muse.intervals import *
-# from muse.scales import interval_scale_names, key_name_intervals
-from muse.util import rotate_list
-from muse.parsing import num_suffixes
-import muse.notes as notes
+from intervals import *
+# from scales import interval_scale_names, key_name_intervals
+from util import rotate_list
+from parsing import num_suffixes
+import notes as notes
 import pdb
 
 # standard keys are: natural/melodic/harmonic majors and minors

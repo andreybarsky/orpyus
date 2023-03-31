@@ -82,7 +82,26 @@ def precision_recall(target, candidate, weights=None):
     return precision, recall
 
 
+def transpose_nested_list(nested_list):
+    """Given a list of lists (of equal length), or other iterables like strings,
+      which represent values across separate rows, returns a list of lists
+      that is transposed such that the former rows are now the columns
+      and vice versa"""
 
+    num_rows = len(nested_list)
+    num_cols = len(nested_list[0])
+
+    new_rows = []
+    for c in range(num_cols):
+        this_row = []
+        for r in range(num_rows):
+            this_row.append(nested_list[r][c])
+        # cast to string if the original nested list was also strings:
+        if isinstance(nested_list[r], str):
+            new_rows.append(''.join(this_row))
+        else:
+            new_rows.append(this_row)
+    return new_rows
 
 if __name__ == '__main__':
     # some tests on membership evaluation
