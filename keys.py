@@ -11,10 +11,11 @@ import parsing as parsing
 from util import log, test, precision_recall
 
 from itertools import cycle
-from collections import defaultdict
+from collections import defaultdict, Counter
+from copy import copy
 import pdb
 
-# notes in order of which are flattened/sharpened in a key signature:
+# natural notes in order of which are flattened/sharpened in a key signature:
 flat_order = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
 sharp_order = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
 
@@ -27,7 +28,7 @@ class Key:
     def __init__(self, arg1, quality=None, prefer_sharps=None):
         """Initialise a Key by one of three input cases:
         1) arg1 is the full name of a key, like 'D major' or 'C#m',
-            which can include modes like 'D dorian'
+            which can include natural modes like 'D dorian'
             or even exotic harmonic/melodic modes like 'D phrygian dominant'
 
         2) arg1 is the tonic of a key, either as a Note or a string denoting a Note:
@@ -335,12 +336,27 @@ class Key:
         return [self.build_triad(i) for i in range(1, len(self)+1)]
 
     @property
-    def valid_chords(self, by='rarity', min_rarity=0.5, min_consonance=0.25):
-        # loop through all possible chords and return the ones that are valid in this key:
-        chord_hash = {}
+    def valid_chords(self):
+        # property wrapper for get_valid_chords method with default args
+        return self.get_valid_chords()
 
+    def get_valid_chords(self, by='rarity', min_rarity=0.5, min_consonance=0.25, degrees=True):
+        """by: one of 'rarity' or 'consonance'.
+          determines which metric to rank the chords by.
+
+        degrees: if True, returns a dict mapping scale degrees to dicts of chords built on that degree.
+                 if False, returns a single dict of chords.
+                 in both cases, the values in the chord dict are the scores by which they are ranked (rarity or consonance)."""
+        # initialise output counters:
+        if degrees:
+            degree_chord_candidates = {d: Counter() for d in range(1, 8)}
+        else:
+            chord_candidates = Counter()
+
+            # loop through all possible chords and return the ones that are valid in this key:
         for intervals, names in chord_names.items():
-            for note in self.scale:
+            for d, note in enumerate(self.scale):
+
                 candidate_chord = KeyChord(note, intervals, key=self)
                 # include only if it exceeds min rarity/consonance requirements:
                 if candidate_chord.rarity >= min_rarity and candidate_chord.consonance >= min_consonance:
@@ -351,25 +367,53 @@ class Key:
                             valid = False
                     # add to our hash if it is:
                     if valid:
-                        if candidate_chord not in chord_hash:
-                            chord_hash[candidate_chord] = 1
+                        if degrees:
+                            degree_chord_candidates[d+1].update([candidate_chord])
                         else:
-                            chord_hash[candidate_chord] += 1
+                            chord_candidates.update([candidate_chord])
 
-        chord_list = list(chord_hash.keys())
+                        # if candidate_chord not in chord_hash:
+                        #     chord_hash[candidate_chord] = 1
+                        # else:
+                        #     chord_hash[candidate_chord] += 1
 
-        if by=='rarity':
-            # sort by rarity and then by consonance:
-            chord_list = sorted(chord_list, key=lambda c: (-c.rarity, c.consonance), reverse=True)
-        elif by=='consonance':
-            # sort by rarity and then by consonance:
-            chord_list = sorted(chord_list, key=lambda c: (c.consonance, -c.rarity), reverse=True)
+        # now we sort the output dict/s by rarity or consonance
+        if degrees:
+            degree_chord_stats = {}
+            for d in degree_chord_candidates.keys():
+                degree_chords = degree_chord_candidates[d].keys()
+                chord_list = list(degree_chords)
+
+                if by=='rarity':
+                    # sort by rarity and then by consonance:
+                    chord_list = sorted(chord_list, key=lambda c: (-c.rarity, c.consonance), reverse=True)
+                elif by=='consonance':
+                    # sort by rarity and then by consonance:
+                    chord_list = sorted(chord_list, key=lambda c: (c.consonance, -c.rarity), reverse=True)
+                else:
+                    raise Exception("Key.valid_chords method requires arg 'by' to be one of: 'rarity' or 'consonance'")
+
+                # return chord rarity, consonance tuple as stats:
+                chord_stats = [(c, round(1-(c.rarity-1)/4,1), c.consonance) for c in chord_list]
+                degree_chord_stats[d] = chord_stats
+            return degree_chord_stats
+
         else:
-            raise Exception("Key.valid_chords method requires arg 'by' to be one of: 'rarity' or 'consonance'")
+            # not broken up by degrees, just return one big chord list:
+            chord_list = list(chord_candidates.keys())
+            if by=='rarity':
+                # sort by rarity and then by consonance:
+                chord_list = sorted(chord_list, key=lambda c: (-c.rarity, c.consonance), reverse=True)
+            elif by=='consonance':
+                # sort by rarity and then by consonance:
+                chord_list = sorted(chord_list, key=lambda c: (c.consonance, -c.rarity), reverse=True)
+            else:
+                raise Exception("Key.valid_chords method requires arg 'by' to be one of: 'rarity' or 'consonance'")
 
-        # return chord rarity, consonance tuple as stats:
-        chord_stats = [(c, round(1-(c.rarity-1)/4,1), c.consonance) for c in chord_list]
-        return chord_stats
+            # return chord rarity, consonance tuple as stats:
+            chord_stats = [(c, round(1-(c.rarity-1)/4,1), c.consonance) for c in chord_list]
+            return chord_stats
+
 
     @property
     def relative_minor(self):
@@ -575,71 +619,143 @@ class KeyChord(Chord):
             return super().__sub__(other)
 
 
-def matching_keys(chordlist, by='note', tiebreaker='likelihood', modes=True, score=True, min_recall=0.8, min_precision=0.3, max_results=5):
-    """given an iterable of Chord objects,
-    determine the Keys that those chords could belong to.
+def matching_keys(target, by='note', input_as='chords', modes=True, score=True, min_recall=0.8, min_precision=0.3, max_results=5):
+    """given a target iterable of Chord or Note objects,
+    determine the Keys that those could belong to.
 
-    returns an ordered dict with Keys as keys,
-    and (recall, precision) tuples as values for those keys"""
+    we rank the returned candidate Keys in order of: recall, precision, then a tiebreaker metric
+    that we call 'likelihood'. this is a series of fuzzy notions about which keys are more common.
+    (major and minor keys are more likely than exotic modes, etc.)
 
-    # parse the items in chordlist, casting to Chord if necessary, and find list of unique ones:
+    arguments:
+      -by: one of 'note' (default) or 'chord'.
+        if by note, we match the notes given in target to the notes of each candidate key.
+        if by chord, we match the chords directly to the triad chords of each candidate key.
+
+      -input_as: one of 'chords' (default) or 'notes'.
+        if by chords, we assume the target is an iterable of Chord objects, or strings that cast to Chord objects.
+        if by notes, we take the target to be an iterable of Note objects instead.
+          (note that by=='chord' is incompatible with input_as=='notes')
+
+      -modes: boolean (True by default)
+        if True, we search all possible modes of the four foundational 'base' scales.
+        if False, we search only the standard scales (which includes a few non-base modes, e.g. natural minor)
+
+      -score: boolean (True by default)
+        if True, we return the matching candidate keys as an ordered dict, linking keys to score tuples
+          ordered as (recall, precision, likelihood), and ranked in that order, with perfect-recall candidates first.
+        if False, we return matching candidate keys in the same order, but as a simple list, without score information.
+
+      -min_recall, min_precision: float (in range 0-1)
+        the minimum recall-score and precision-score required for a candidate key to count as a match.
+          all returned candidates are still ranked, with perfect matches first, but this allows us to truncate.
+      -max_results: int
+        the maximum number of results to return. simply truncates the returned object
+      """
+
+    # parse the items in target, casting to Chord if necessary, and find list of unique ones:
     # unique_chords = []
     # chord_weights = {}
 
-    if by=='note':
-        unique_notes = []
-        note_weights = {}
+    # if by=='note':
+    #     unique_notes = []
+    #     note_weights = {}
+    #
+    # elif by=='chord':
+    #     unique_chords = []
+    #     chord_weights = {}
+    # else:
+    #     raise Exception("matching_keys function must be by='note' or by='chord'")
+    # target_items = Counter()
 
-    elif by=='chord':
-        unique_chords = []
-        chord_weights = {}
-    else:
-        raise Exception("matching_keys function must be by='note' or by='chord'")
-
-
-    for i, c in enumerate(chordlist):
-        if isinstance(c, Chord):
-            chord = Chord(c.tonic, c.suffix)
-        elif isinstance(c, str):
-            chord = Chord(c)
-
-        if i == 0:
-            target_tonic = chord.tonic
+    if input_as=='chords':
+        # parse the target iterable, which should be a list/tuple of chord-likes
+        assert isinstance(target, (list, tuple)), f"Expected an iterable of Chords but got: {type(target)}"
+        chordlist = [Chord(c) for c in target]
 
         if by=='note':
-            for j, n in enumerate(chord.notes):
-                if n not in note_weights.keys():
-                    note_weights[n] = 1
-                else:
-                    note_weights[n] += 1
+            # break down the input chordlist into all its constituent notes:
+            # straight list of all notes in the chords given
+            notelist = []
+            for i, chord in enumerate(chordlist):
+                notelist.extend(chord.notes)
 
-                if i == 0:
-                    if j == 0:
-                        # tonic of the first chord gets weighted higher:
-                        note_weights[n] += 3
-                    else:
-                        # other notes in the first chord in the progression get weighted slightly higher:
-                        note_weights[n] += 2
+            # hash the notelist and store their frequencies as weights:
+            target_items = Counter(notelist)
 
-
+            # increase the weight of the tonic note slightly:
+            target_tonic = chordlist[0].tonic
+            target_items[target_tonic] += 1
         elif by=='chord':
-            if chord not in chord_weights.keys():
-                chord_weights[chord] = 1
-            else:
-                # increment weight of this chord for the final ranking:
-                chord_weights[chord] += 1
-            if i == 0:
-                # first chord in the progression also gets weighted higher:
-                chord_weights[chord] += 2
+            # search the chord list directly
+            target_items = Counter(chordlist)
+            # increase the weight of the first chord slightly:
+            target_tonic = chordlist[0]
+            target_items[target_tonic] += 1
+
+    elif input_as=='notes':
+        # notably: incompatible with by=='chords'
+        if by=='chord':
+            raise Exception(f"matching_keys input_as=='notes' is incompatible with by=='chord'")
+        assert by=='note', f"matching_keys got arg input_as=='notes', but is not by=='note'. received by=={by}"
+
+        # could be a list/tuple of note-likes, or else a string that must be parsed out:
+        if isinstance(target, str):
+            note_names = parse_out_note_names(target)
+            notelist = [Note(n) for n in note_names]
+        else:
+            assert isinstance(target, (list, tuple)), f"Expected an iterable of Notes but got: {type(target)}"
+            notelist = [Note(n) for n in target]
+
+        target_items = Counter(notelist)
+
+        # increase the weight of the first note slightly:
+        target_tonic = notelist[0]
+        target_items[target_tonic] += 1
+    else:
+        raise Exception(f"'input_as' should be one of: 'notes' or 'chords', but got: {input_as}")
+
+    # for i, c in enumerate(chordlist):
+    #     if isinstance(c, Chord):
+    #         chord = Chord(c.tonic, c.suffix)
+    #     elif isinstance(c, str):
+    #         chord = Chord(c)
+    #
+    #     if i == 0:
+    #         target_tonic = chord.tonic
+    #
+    #     if by=='note':
+    #         for j, n in enumerate(chord.notes):
+    #             if n not in note_weights.keys():
+    #                 note_weights[n] = 1
+    #             else:
+    #                 note_weights[n] += 1
+    #
+    #             if i == 0:
+    #                 if j == 0:
+    #                     # tonic of the first chord gets weighted higher:
+    #                     note_weights[n] += 3
+    #                 else:
+    #                     # other notes in the first chord in the progression get weighted slightly higher:
+    #                     note_weights[n] += 2
+    #
+    #     elif by=='chord':
+    #         if chord not in chord_weights.keys():
+    #             chord_weights[chord] = 1
+    #         else:
+    #             # increment weight of this chord for the final ranking:
+    #             chord_weights[chord] += 1
+    #         if i == 0:
+    #             # first chord in the progression also gets weighted higher:
+    #             chord_weights[chord] += 2
 
 
 
-    perfect_matches = {}
-    precise_matches = {}
-    partial_matches = {}
 
-    unique_target_items = list(chord_weights.keys()) if by=='chord' else list(note_weights.keys())
+    # the keys of the hash are also the set of unique member items:
+    unique_target_items = list(target_items.keys())
 
+    # build the list of candidates by looping through all possible keys and instantiating them:
     candidates = []
     unique_candidates = set([])
     for tonic in notes.chromatic_scale:
@@ -677,40 +793,31 @@ def matching_keys(chordlist, by='note', tiebreaker='likelihood', modes=True, sco
 
     # item_weights = chord_weights if by=='chord' else note_weights
 
-    # loop through all possible keys, instantiate them, and compare their members:
+    # start comparing candidates to the target and looking for matches
+    perfect_matches = {}
+    precise_matches = {}
+    partial_matches = {}
     for candidate in candidates:
         log(f'Checking candidate: {candidate}')
-        # candidate = Key(f'{tonic.name}{quality}')
-        # candidate_modes = candidate.modes()
 
-        # get precision and recall which are the two most important metrics to sort by
+        # copy the weights dict so we can weight the candidate's tonic as slightly higher:
+        this_cand_weights = copy(target_items)
 
-        from copy import copy
-
-        ### TBI: FIX THIS VERY UGLY BLOCK
         if by=='note':
-            this_cand_weights = copy(note_weights)
-            if candidate.scale[0] in this_cand_weights.keys():
-                this_cand_weights[candidate.scale[0]] *= 1.5 # weight the candidate scale's tonic note as higher
-            else:
-                this_cand_weights[candidate.scale[0]] = 1.5
+            # up-weight the candidate scale tonic note:
+            candidate_tonic = candidate.tonic
+            candidate_items = candidate.scale
+        if by=='chord':
+            # up-weight the candidate scale tonic chord:
+            candidate_tonic = candidate.chords[0]
+            candidate_items = candidate.get_valid_chords(degrees=False)
 
-            # if chordlist[0].notes[0] in this_cand_weights.keys():
-            #     this_cand_weights[chordlist[0].notes[0]] *= 1.1 # weight the target's starting tonic as *slightly* higher
-            # else:
-            #     this_cand_weights[chordlist[0].notes[0]] = 1.1 # weight the target's starting tonic as *slightly* higher
+        # up-weight:
+        this_cand_weights.update([candidate_tonic])
 
-            precision, recall = precision_recall(unique_target_items, candidate.scale, weights=this_cand_weights)
+        # calculate precision and recall (the two most important metrics to sort by)
+        precision, recall = precision_recall(unique_target_items, candidate_items, weights=this_cand_weights)
 
-        elif by=='chord':
-            this_cand_weights = copy(chord_weights)
-
-            if candidate.chords[0] in this_cand_weights.keys():
-                this_cand_weights[candidate.chords[0]] *= 1.5 # weight the candidate scale's tonic chord as higher
-            else:
-                this_cand_weights[candidate.chords[0]] = 1.5
-
-            precision, recall = precision_recall(unique_target_items, candidate.chords, weights=this_cand_weights)
 
         # but also use a third, subjective value by which to tiebreak
         likelihood_score = 1.
@@ -718,12 +825,12 @@ def matching_keys(chordlist, by='note', tiebreaker='likelihood', modes=True, sco
         ### we evaluate subjective likelihood value based on whatever I want:
 
         # perfect likelihood only if the candidate and chordlist share a tonic:
-        if candidate.tonic != target_tonic:
-            likelihood_score -= .1
+        if candidate_tonic != target_tonic:
+            likelihood_score -= .3
 
         # non-major keys are slightly less likely:
-        # if not candidate.major:
-        #     likelihood_score -= .1
+        if not candidate.major:
+            likelihood_score -= .1
         # non-standard keys are even less likely:
         if not candidate.standard:
             likelihood_score -= .2
@@ -734,10 +841,10 @@ def matching_keys(chordlist, by='note', tiebreaker='likelihood', modes=True, sco
         elif candidate.suffix in scales.uncommon_suffixes:
             likelihood_score -= .2
         elif candidate.suffix in scales.rare_suffixes:
-            likelihood_score -= .4
+            likelihood_score -= .3
         else:
             log(f'{candidate} is some weird mode')
-            likelihood_score -= .6
+            likelihood_score -= .4
             # raise Exception(f'Suffix {candidate.suffix} has no rarity')
 
         # which dict does this key candidate go to?
@@ -861,7 +968,7 @@ rare_mode_suffixes = [] # modes of melodic/harmonic major keys
 
 
 
-if __name__ == '__main__':
+def unit_test():
     # test key init cases:
     # 1a: init by tonic, quality, vs 2: init by whole key name
     test(Key('A', 'minor'), Key('Am'))
@@ -880,13 +987,31 @@ if __name__ == '__main__':
     test(Key('A dorian', 'minor'), Key('A', 'dorian'))
 
     # test valid chords:
-    Key('Am').valid_chords
+    print('Testing valid_chords')
+    print('Valid chords of Am:')
+    Am_chords = Key('Am').get_valid_chords(degrees=False)
+    print('\n'.join(Am_chords))
 
-    Key('D# dorian').valid_chords
+    print('Valid chords of D# dorian, by degree:')
+    Ddor_chords = Key('D# dorian').valid_chords
+    for deg in range(1, 8):
+        print(f'Degree {deg}:')
+        print('\n'.join(Ddor_chords[deg]))
 
     # test matching keys:
+    print('Testing matching_keys')
     matching_keys(['D', 'A', 'Bm', 'G'], modes=False)
     matching_keys(['Am', 'F5', 'G', 'E'], modes=True)
+    matching_keys(['Am', 'F5', 'G', 'E'], by='chord')
+    matching_keys(['Am', 'F5', 'G', 'E'], by='note')
+    matching_keys(['A', 'F', 'G', 'E'], input_as='notes', by='note')
+    matching_keys('AFGEbC', input_as='notes', by='note')
+    matching_keys(['A', 'F', 'G', 'E'], input_as='notes', by='chord') # should error
+
+
+
+if __name__ == '__main__':
+    unit_test()
 
 
 else:

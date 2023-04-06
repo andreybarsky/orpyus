@@ -6,7 +6,7 @@ import pdb
 class Interval:
 
     """a distance between notes, in semitones"""
-    def __init__(self, value):
+    def __init__(self, value, degree=None):
         """Interval init accepts a value as well as an optional degree (position in whole tones relative to tonic=1).
         if degree is not given, we infer whether it is a major or minor chord from its interval.
         otherwise, we detect it as 'diminished' or 'augmented' etc.

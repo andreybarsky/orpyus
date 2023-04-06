@@ -29,7 +29,7 @@ chord_names = defaultdict(lambda: [' (unknown chord)'],
     (Dim3, Per5): ['sus2', 'suspended 2nd', 'suspended second', 's2'],
     (Aug3, Per5): ['sus4', 'suspended 4th', 'suspended fourth', 's4'],
     (Maj3, Aug5): ['+', 'aug', 'augmented triad', 'augmented fifth', 'augmented 5th', 'aug5'],    #  #5? ♯5?
-    (Min3, Dim5): ['dim', 'o', 'o', 'diminished', 'diminished triad', 'diminished fifth', 'diminished 5th', 'dim5', 'm♭5', 'mb5'],
+    (Min3, Dim5): ['dim', '°', 'o', 'diminished', 'diminished triad', 'diminished fifth', 'diminished 5th', 'dim5', 'm♭5', 'mb5'],
     (Maj3, Dim5): ['Mb5', '♭5', 'M♭5', 'Δ-5', ],
 
     # sixths
@@ -42,7 +42,7 @@ chord_names = defaultdict(lambda: [' (unknown chord)'],
     (Maj3, Per5, Maj7): ['maj7', 'major seventh', 'major 7th', 'major 7', 'M7', 'Δ7'],
     (Min3, Per5, Min7): ['m7', 'minor seventh', 'minor 7th', 'minor 7', 'min7', '-7'],
     (Min3, Dim5, Min7): ['hdim7', 'ø7', 'ø', 'm7(b5)', 'm7(♭5)', 'm7b5', 'm7♭5', 'half diminished seventh', 'half diminished 7th', 'half diminished 7', 'halfdim7'],
-    (Min3, Dim5, Dim7): ['dim7', 'diminished seventh', 'diminished 7th', 'diminished 7', '°', '°7', 'o', 'o7', 'o', 'o7', '7b5', '7♭5', 'b7b5', 'b7♭5',],
+    (Min3, Dim5, Dim7): ['dim7', 'diminished seventh', 'diminished 7th', 'diminished 7', '°7', 'o', 'o7', 'o', 'o7', '7b5', '7♭5', 'b7b5', 'b7♭5',],
     (Maj3, Aug5, Min7): ['aug7', 'augmented seventh', 'augmented 7th', 'augmented 7', '+7', '7#5', '#7#5', '#5#7', '7♯5', '♯7♯5', '♯5♯7'],
     (Min3, Per5, Maj7): ['mmaj7', '-Δ7', '-M7'], # but additional aliases, see below
 
@@ -251,8 +251,12 @@ class Chord:
         ###### parse input according to one of 3 separate cases.
         ###### in each, we must set tonic, intervals, and root
 
+        ### case 0: input is Chord, we simply pass its parameters back:
+        if isinstance(arg1, Chord):
+            return arg1.tonic, arg1.intervals, arg1.root
+
         ### case 1: input is Note, or casts to Note
-        if isinstance(arg1, Note) or (isinstance(arg1, str) and is_valid_note_name(arg1)):
+        elif isinstance(arg1, Note) or (isinstance(arg1, str) and is_valid_note_name(arg1)):
             # tonic has been given
             log(f'Chord.init case 1: Parsing arg1 ({arg1}) as tonic of Chord')
             if isinstance(arg1, str):
