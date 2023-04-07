@@ -1,10 +1,11 @@
 from intervals import *
 # from scales import interval_scale_names, key_name_intervals
-from util import rotate_list
+from util import rotate_list, log
 from parsing import num_suffixes
 import notes as notes
 import pdb
 
+log.verbose = True
 # standard keys are: natural/melodic/harmonic majors and minors
 
 # dict mapping 'standard' key intervals to all accepted aliases for scale qualities
@@ -20,13 +21,13 @@ interval_scale_names = {
     }
 
 # 'proper' name is listed last, short suffix is listed first:
-standard_scales = list([names[-1] for names in interval_scale_names.values()])
+standard_scale_names = list([names[-1] for names in interval_scale_names.values()])
 standard_scale_suffixes = list([names[0] for names in interval_scale_names.values()])
 
 #### here we define the 'base scales': natural major, melodic minor, harmonic minor/major
 # which are those scales that are not modes of other scales
 # and the names their modes are known by
-base_scales = ['major', 'melodic minor', 'harmonic minor', 'harmonic major']
+base_scale_names = ['major', 'melodic minor', 'harmonic minor', 'harmonic major']
 # note that melodic major modes are just rotations of melodic minor modes
 # this is technically true in the reverse as well, but 'melodic minor' is more common / well-known than mel. major
 
@@ -69,15 +70,15 @@ def get_modes(scale_name):
     this_mode_intervals_from_tonic = scale_name_intervals[scale_name]
     this_mode_degrees_to_intervals = {}
     for degree in range(1,8):
-        this_mode_degrees_to_intervals[degree] = get_mode_intervals(this_mode_intervals_from_tonic, degree)
+        this_mode_degrees_to_intervals[degree] = rotate_mode_intervals(this_mode_intervals_from_tonic, degree)
     return this_mode_degrees_to_intervals
 
-def get_mode_intervals(scale_intervals_from_tonic, degree):
+def rotate_mode_intervals(scale_intervals_from_tonic, degree):
     """given a list of 6 intervals from tonic that describe a key/scale,
     e.g.: (maj2, maj3, per4, per5, maj6, maj7),
     and an integer degree between 1 and 7 (inclusive),
     return the mode of that scale corresponding to that degree"""
-    assert len(scale_intervals_from_tonic) == 6, """list of intervals passed to get_mode_intervals must exclude tonics (degrees 1 and 8), and so should be exactly 6 intervals long"""
+    assert len(scale_intervals_from_tonic) == 6, """list of intervals passed to rotate_mode_intervals must exclude tonics (degrees 1 and 8), and so should be exactly 6 intervals long"""
 
     relative_intervals = stacked_intervals(list(scale_intervals_from_tonic) + [P8])
     rotated_relative_intervals = rotate_list(relative_intervals, degree-1)
@@ -116,39 +117,48 @@ for base in mode_bases:
             mode_hashkey = (base, degree)
             mode_lookup[full_name] = mode_hashkey
 
-        mode_intervals_from_tonic = get_mode_intervals(intervals_from_tonic, degree)
+        mode_intervals_from_tonic = rotate_mode_intervals(intervals_from_tonic, degree)
         mode_interval_from_tonic_short_names = [f'{i.quality[:3]}{i.degree}' for i in mode_intervals_from_tonic]
         mode_interval_from_tonic_short_names = ', '.join(mode_interval_from_tonic_short_names)
         log(f'mode *{degree}* of {base} key: {mode_interval_from_tonic_short_names}')
 
         this_mode_names = mode_idx_names[base][degree]
         this_mode_names.extend([f'{m} scale' for m in this_mode_names])
-        # workaround: we want the 'suffix' and 'scale_name' for modes to be the common mode name itself
-        # so we append a copy of the first mode name to each list, so that it acts as first and last:
-        this_mode_names.extend(this_mode_names[:1])
+
 
         interval_key = tuple(mode_intervals_from_tonic)
 
         log(f'  also known as: {", ".join(this_mode_names)}')
-
-        interval_mode_names[interval_key] = this_mode_names
 
         if interval_key in interval_scale_names.keys():
             log(f'--also enharmonic to:{interval_scale_names[interval_key][-1]} scale')
             # add non-mode scale names to mode_lookup too: e.g. mode_lookup['natural minor'] returns ('major', 6)
             for name in interval_scale_names[interval_key]:
                 mode_lookup[name] = mode_hashkey
+                # add standard scale names to the interval_scale_names lookup too:
+                this_mode_names.append(name)
         else: # record the modes that are not enharmonic to base scales in a separate dict
             non_scale_interval_mode_names[interval_key] = this_mode_names
+
+        interval_mode_names[interval_key] = this_mode_names
+
+        # workaround: we want the 'suffix' and 'scale_name' for modes to be the common mode name itself
+        # so we append a copy of the first mode name to each list, so that it acts as first and last:
+        this_mode_names.extend(this_mode_names[:1])
 
 
     log('=========\n')
 
-# reverse dict that maps all mode names to their intervals:
+######################
+# important output: reverse dict that maps all mode names to their intervals:
 mode_name_intervals = {}
 for intervals, names in interval_mode_names.items():
     for name in names:
         mode_name_intervals[name] = intervals
+######################
+
+def unit_test():
+    test(mode_name_intervals['natural major'], tuple(get_modes('major')[1]))
 
 if __name__ == '__main__':
-    pass # tests ?
+    unit_test()
