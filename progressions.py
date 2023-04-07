@@ -105,7 +105,11 @@ class ScaleDegreeChord(ScaleDegree):
     def _parse_input(self, name):
         """parses degree, descriptor, and quality from input arg"""
 
-        if isinstance(name, (list, tuple)):
+        # accept re-casting:
+        if isinstance(name, ScaleDegreeChord):
+            return name.degree, name.quality, name.qualifiers
+
+        elif isinstance(name, (list, tuple)):
             # just take degree/quality/modifier directly
             if len(name) == 2:
                 degree, quality = name

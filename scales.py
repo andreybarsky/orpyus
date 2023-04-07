@@ -63,7 +63,8 @@ class ScaleDegree:
 
 
 def interval_distance(deg1, deg2, step_degree):
-    """distance between two scale-degrees, in degree-interval steps"""
+    """distance between two scale-degrees, in degree-interval steps.
+    note that a fifth is 4 step_degrees, a third is 2 step_degrees, etc."""
     assert step_degree in range(1,8), f'Invalid step degree for counting interval distance between ScaleDegrees: {step_degree}'
     deg1 = ScaleDegree(deg1)
     distance = 0
@@ -86,14 +87,18 @@ class Scale:
     def __init__(self, scale_name: str):
         self.name, self.intervals, self.base_scale, self.rotation = self._parse_input(scale_name)
 
+
         # determine quality by asking: is the third major or minor
-        self.quality = self.intervals[2].quality
+        self.quality = self.intervals[1].quality
 
         # build own ScaleDegrees:
         self.degrees = {ScaleDegree(1): Unison}
         for d, i in enumerate(self.intervals):
             degree = ScaleDegree(d+2)
             self.degrees[degree] = i
+            # sanity check: one interval on each degree
+            assert i.degree == degree.value, f'Interval degree {i.degree} does not equal expected scale degree: {degree.value}'
+            # this will work once new_intervals is finished
 
     def __contains__(self, item):
         return item in self.intervals
