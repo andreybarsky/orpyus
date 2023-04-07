@@ -1,5 +1,6 @@
 # OOP representation of major/minor quality that is invertible and has a null (indeterminate) value
-from util import reverse_dict, unpack_and_reverse_dict, test, log
+from util import reverse_dict, unpack_and_reverse_dict, reduce_aliases, test, log
+
 
 # TBI: double dim/aug qualities?
 
@@ -78,6 +79,9 @@ class Quality:
     def __eq__(self, other):
         """qualities are equal to other qualities with the same name/value"""
         return self.value == other.value
+
+    def __hash__(self):
+        return hash(str(self))
 
     def __str__(self):
         return f'~Quality:{self.name}~'
@@ -191,6 +195,8 @@ class ChordQualifier:
         if verifications is not None:
             assert isinstance(verifications, dict), f'"verify" arg to ChordQualifier must be a dict, but got: {type(verifications)}'
             self.verifications = verifications
+        else:
+            self.verifications = {}
 
     def apply(self, factors):
         """modify a ChordFactors object with the alterations specified in this Qualifier"""
@@ -258,7 +264,7 @@ class ChordQualifier:
             modifier_names = {-1: 'flatten', 1: 'raise',
                               -2: 'double flatten', 2: 'double raise'}
             m_name = modifier_names[v]
-            modifications.append(f'{m_name} the {d_name})
+            modifications.append(f'{m_name} the {d_name}')
         modifications = ','.join(modifications).capitalize()
         for d,v in self.verifications.items():
             d_name = degree_names[d]
@@ -274,8 +280,7 @@ class ChordQualifier:
 
 
     def __str__(self):
-        name = f': {self.name}' if self.name is not None else ''
-        return f'ChordQualifier{self.name}\n' + self.describe()
+        return f'ChordQualifier:\n' + self.describe()
 
     def __repr__(self):
         return str(self)
@@ -352,7 +357,7 @@ qualifier_aliases = {'': ['maj', 'maj3', 'M', 'Ma', 'major', 'dominant', 'dom'],
                      'sus': ['s', 'suspended'],
                      '4': ['4th', 'four', 'fourth'],
                      '2': ['2nd', 'two', 'second'],
-                     '6': ['add6'], # no such thing as an add6
+                     '6': ['add6'], # no such thing as an add6!
                      'dim': ['o', '°', 'diminished'],
                      'aug': ['+','augmented'],
                      'hdim': ['ø', 'half diminished', 'half dim'],
@@ -366,11 +371,53 @@ qualifier_aliases = {'': ['maj', 'maj3', 'M', 'Ma', 'major', 'dominant', 'dom'],
                      '11': ['eleven', '11th', 'eleventh']
                      }
 
+accidental_ops = {'♭': -1, '♯': 1, '♮': 0}
 
 def parse_chord_qualifiers(qual_str):
     """given a string of qualifiers that typically follows a chord root,
     e.g. 7sus4add11♯5,
     recursively parse them into a list of ChordQualifier objects"""
+
+    reduced_quals = ''.join(reduce_aliases(qual_str, qualifier_aliases))
+
+    raw_qual_ops = reduce_aliases(reduced_quals, chord_types)
+
+    # raw_qual_ops might include iterables (concatenations),
+    # so we loop through those and process them:
+    qual_ops = cast_qualifiers(raw_qual_ops)
+
+    return qual_ops
+
+def cast_qualifiers(qual):
+    """accepts a ChordQualifier object, a string that casts to one, or a list of either,
+    and recursively returns a strict list of ChordQualifier objects"""
+    qual_list = []
+    if isinstance(qual, ChordQualifier):
+        qual_list.append(qual)
+    elif isinstance(qual, str):
+        # could be a string that exists in chord_types or chord_modifiers
+        # so fetch it and convert to ChordQualifier object(or list of such)
+        if qual in chord_types or qual in chord_modifiers:
+            fetched_qual = chord_types[qual] if qual in chord_types else chord_modifiers[qual]
+            # it might be a list, so extend the list recursively:
+            qual_list.extend(cast_qualifiers(fetched_qual))
+        else:
+            # could be a chord alteration, like ♭5 or ♯7
+            if (len(qual) in [2,3]) and (qual[0] in accidental_ops):
+                degree = qual[1:]
+                op = accidental_ops[qual[0]]
+                qual_list.append(ChordQualifier(make={degree:op}))
+            else:
+                raise ValueError(f'Invalid string provided to cast_qualifiers: {qual} (expected a chord_type, chord_modifier or alteration)')
+    elif isinstance(qual, (list, tuple)):
+        # is an iterable of acceptable objects, so call recursively
+        for each_qual in qual:
+            qual_list.extend(cast_qualifiers(each_qual))
+    else:
+        raise TypeError(f'cast_qualifiers expected a ChordQualifier, or a string that casts to one, or a list/tuple of either, but got: {type(qual)}')
+        return qual_list
+
+
 
 ###############################
 
@@ -384,6 +431,11 @@ def unit_test():
     # test quality from offset:
     test(Quality.from_offset_wrt_major(-1), Quality('minor'))
     test(Quality.from_offset_wrt_perfect(1), Quality('augmented'))
+
+    # test chordqualifier parsing:
+    example = 'minormajor7 add11b5'
+    print(parse_chord_qualifiers(example))
+
 
 if __name__ == '__main__':
     unit_test()

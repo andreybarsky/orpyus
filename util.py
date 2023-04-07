@@ -87,12 +87,19 @@ def reverse_dict(dct):
     rev_dct = {k:v for v,k in dct.items()}
     return rev_dct
 
-def unpack_and_reverse_dict(dct, include_keys=False):
+def unpack_and_reverse_dict(dct, include_keys=False, force_list=False):
     """accepts a dict whose values are iterables, the items of which are all unique,
     and returns the reversed dict that maps each item to its corresponding parent key"""
     rev_dct = {}
     for k, v_list in dct.items():
-        assert isinstance(v_list, (tuple, list)), f"unpack_and_reverse_dict expects dict values to be tuples or lists of strings"
+        if not isinstance(v_list, (tuple, list)):
+            # we expected the value to be an iterable, but it isn't one
+            if force_list:
+                # set it to be one anyway:
+                v_list = [v_list]
+            else:
+                raise TypeError(f"unpack_and_reverse_dict expects dict values to be tuples or lists of strings")
+
         for v_item in v_list:
             rev_dct[v_item] = k
         if include_keys:
@@ -100,7 +107,7 @@ def unpack_and_reverse_dict(dct, include_keys=False):
             rev_dct[k] = k
     return rev_dct
 
-def reduce_aliases(target, aliases, strip=True, verbose=False):
+def reduce_aliases(target, aliases, strip=True, verbose=False, force_list=True):
     """given a target string,
     and a dict mapping string replacements from target to arbitrary objects,
     recursively replace the string starting from longest possibilities first
@@ -109,7 +116,7 @@ def reduce_aliases(target, aliases, strip=True, verbose=False):
     if strip, pad replacement candidates with whitespace as well"""
 
     # reverse aliases dict:
-    replacements = unpack_and_reverse_dict(aliases)
+    replacements = unpack_and_reverse_dict(aliases, force_list=force_list)
     if strip:
         # add whitespace to the front of every replacmeent in addition:
         replacements.update({f' {k}':v for k,v in replacements.items()})

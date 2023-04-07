@@ -2,17 +2,8 @@
 from chords import Chord
 from qualities import Major, Minor, Perfect, Diminished
 from scales import scale_name_intervals
-from util import test
+from util import reduce_alias, reverse_dict, test
 
-roman_numerals = {'I':   1,
-                  'II':  2,
-                  'III': 3,
-                  'IV':  4,
-                  'V':   5,
-                  'VI':  6,
-                  'VII': 7}
-
-numerals_roman = {v:k for k,v in roman_numerals.items()}
 
 # # scrap this for a more theoretical approach?
 # cadence_finality = {(5, 1): 1,   # authentic cadence
@@ -50,6 +41,25 @@ class ScaleDegree:
 
     def __repr__(self):
         return str(self)
+
+numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII'}
+roman_numerals = reverse_dict(numerals_roman)
+
+roman_degree_chords = {}
+# render as an alias dict:
+for arabic,roman in numerals_roman.items():
+    roman_degree_chords[roman] = (arabic, Major)
+    roman_degree_chords[roman.lower()] = (arabic, Minor)
+# and the reverse mapping, for SDC.__repr__:
+degree_chords_roman = reverse_dict(roman_degree_chords)
+
+def parse_roman_numeral(numeral):
+    """given a (string) roman numeral, in upper or lower case,
+    with a potential chord qualifier at the end,
+    parse into a (degree, quality, qualifier) tuple"""
+    out = reduce_alias(numeral, roman_degree_chords)
+
+
 
 
 class ScaleDegreeChord(ScaleDegree):

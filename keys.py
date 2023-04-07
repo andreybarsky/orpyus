@@ -1031,18 +1031,7 @@ else:
 
 
 
-    # by semitone, not degree
-    scale_function_names = {0: "tonic", # 1st
-                            2: "supertonic", # 2nd
-                            3: "mediant", # 3rd (minor)
-                            4: "mediant", # 3rd (major)
-                            5: "subdominant", # 4th
-                            7: "dominant", # 5th
-                            8: "submediant", # 6th (minor)
-                            9: "submediant", # 6th (major)
-                            10: "subtonic", # 7th (minor)
-                            11: "leading tone", # 7th (major)
-                            }
+
 
 
     C = Bs = Key('C')

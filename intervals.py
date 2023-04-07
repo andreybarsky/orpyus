@@ -1,4 +1,5 @@
 from util import log, test
+from terminology import degree_names
 import pdb
 
 # bug: inversion of ExtendedIntervals doesn't seem to work
@@ -568,9 +569,7 @@ def intervals_from_tonic(interval_stack):
 
 # various useful mappings used in interval initialisation/parsing:
 
-degree_names = {1: 'unison',  2: 'second', 3: 'third',
-                4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh',
-                8: 'octave', 9: 'ninth', 10: 'tenth', 11: 'eleventh'}
+
 
 default_interval_qualities = {
                 0: 'perfect',
