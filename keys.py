@@ -118,13 +118,13 @@ class Key:
         self.num_sharps = ...
     ###################################
 
-    @property
-    def pentatonic(self):
-        if self.major: # and self.natural?
-            pent_scale = [self[s] for s in [1,2,3,5,6]]
-        elif self.minor: # and self.natural?
-            pent_scale = [self[s] for s in [1,3,4,5,7]]
-        return pent_scale
+    # @property
+    # def pentatonic(self):
+    #     if self.major: # and self.natural?
+    #         pent_scale = [self[s] for s in [1,2,3,5,6]]
+    #     elif self.minor: # and self.natural?
+    #         pent_scale = [self[s] for s in [1,3,4,5,7]]
+    #     return pent_scale
 
     ### TBI: blues pentatonic scales?
     # (Maj2, Per4, Per5, Maj6): [' blues major', ' blues major pentatonic', ' blues'],

@@ -1,8 +1,8 @@
 # from intervals import *
 from chords import Chord
-from qualities import Major, Minor, Perfect, Diminished
-from scales import scale_name_intervals
-from util import reduce_alias, reverse_dict, test
+from qualities import Major, Minor, Perfect, Diminished, parse_chord_qualifiers
+from scales import ScaleDegree, Scale, scale_name_intervals
+from util import reduce_aliases, reverse_dict, test
 
 
 # # scrap this for a more theoretical approach?
@@ -34,13 +34,7 @@ from util import reduce_alias, reverse_dict, test
 # “subdominant.” Meeus additionally allows two classes of “substitute” progression: rootprogression by third can “substitute” for a fifth-progression in the same direction; and
 # root-progression by step can “substitute” for a fifth-progression in the opposite direction
 
-class ScaleDegree:
-    """The degrees of a scale, with modulo arithmetic defined over them"""
-    def __str__(self):
-        return f'ScaleDegree: {self.degree}\u0302' # unicode circumflex character
 
-    def __repr__(self):
-        return str(self)
 
 numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII'}
 roman_numerals = reverse_dict(numerals_roman)
@@ -56,33 +50,46 @@ degree_chords_roman = reverse_dict(roman_degree_chords)
 def parse_roman_numeral(numeral):
     """given a (string) roman numeral, in upper or lower case,
     with a potential chord qualifier at the end,
-    parse into a (degree, quality, qualifier) tuple"""
-    out = reduce_alias(numeral, roman_degree_chords)
+    parse into a (degree:int, qualifiers:list) tuple"""
+    out = reduce_aliases(numeral, roman_degree_chords)
+    assert isinstance(out[0], tuple) # an integer, quality tuple
+    deg, quality = out[0]
+    # we should treat the quality (if minor) as a qualifier in its own right:
+    qualifiers = []
+    if quality.minor:
+        quality_qualifier = ChordQualifier('minor')
+        qualifiers.append(quality_qualifier)
 
+    if len(out) > 1: # got one or more additional qualifiers as well
+        quals = parse_chord_qualifiers(out[1:])
+        qualifiers.extend(quals)
+
+    return deg, quality, qualifiers
 
 
 
 class ScaleDegreeChord(ScaleDegree):
     """A hypothetical (triad) chord whose root exists as the degree of some hypothetical diatonic major/minor scale"""
-    def __init__(self, name, diminish=True):
+    def __init__(self, name, scale=None):
         """name is a case-sensitive roman numeral that describes the scale degree,
         uppercase for major or lowercase for minor,
         with a potential qualifier like 7, #5, 0, etc. - should be a valid chord suffix
 
         OR an explicit [degree, quality, (optional) modifier] iterable"""
 
-        if isinstance(name, str):
-            # parse input string:
-            self.degree, self.quality, self.modifier = self._parse_input(name)
-        else:
-            assert isinstance(name, (list, tuple)), f'Input to ScaleDegree expected to be string or iterable but got: {type(name)}'
-            # just take degree/quality/modifier directly
-            if len(name) == 2:
-                self.degree, self.quality = name
-            elif len(name) == 3:
-                self.degree, self.quality, self.modifier = name
-            else:
-                raise Exception(f'Invalid tuple provided to ScaleDegree init: {name}')
+        # if isinstance(name, str):
+        #     # parse input string:
+        self.degree, self.quality, self.qualifiers = self._parse_input(name)
+        # else:
+        #     assert isinstance(name, (list, tuple)), f'Input to ScaleDegree expected to be string or iterable but got: {type(name)}'
+        #     # just take degree/quality/modifier directly
+        #     if len(name) == 2:
+        #         self.degree, self.quality = name
+        #         self.qualifiers = []
+        #     elif len(name) == 3:
+        #         self.degree, self.quality, self.qualifiers = name
+        #     else:
+        #         raise Exception(f'Invalid tuple provided to ScaleDegree init: {name}')
 
         # if isinstance(self.quality, str):
         #     # cast to quality object if it is not already one:
@@ -97,37 +104,56 @@ class ScaleDegreeChord(ScaleDegree):
 
     def _parse_input(self, name):
         """parses degree, descriptor, and quality from input arg"""
-        assert isinstance(name, str), 'name arg to ScaleDegree init should be a string'
 
-        # look for roman numerals by checking the first 3/2/1 chars of name:
-        degree_int = None
-        num_chars_to_check = min([3, len(name)])
-        for i in range(num_chars_to_check, 0, -1):
-            potential_name = name[:i]
-            print(f'Checking name {name} up to index {i}: {potential_name}')
-            if potential_name.upper() in roman_numerals.keys():
-                # this is the scale degree
-                degree_int = roman_numerals[potential_name.upper()]
-                if potential_name.isupper():
-                    quality = Major
-                elif potential_name.islower():
-                    quality = Minor
-                else:
-                    raise Exception(f'Inconsistent case for scale degree input: {potential_name} (should be entirely upper or lower)')
-                break
-        if degree_int is None:
-            raise Exception(f'Scale degree input does not appear to contain a valid roman numeral: {name}')
-        if len(name) > i:
-            # modified
-            rest = name[i:]
-            print(f'Detected ScaleDegree modifier: {rest}')
-            modifier = ChordQuality(rest)
-            if modifier.diminished:
-                assert quality.minor, f"Degree {name} is to be diminished, but {name[:i]} is not minor"
-                quality = Diminished
+        if isinstance(name, (list, tuple)):
+            # just take degree/quality/modifier directly
+            if len(name) == 2:
+                degree, quality = name
+                qualifiers = []
+            elif len(name) == 3:
+                degree, quality, qualifiers = name
+            else:
+                raise Exception(f'Invalid tuple provided to ScaleDegree init: {name}')
+            return degree, quality, qualifiers
+
+
+        elif isinstance(name, str):
+            # this is a roman numeral, possibly with some qualifier/s afterward
+            degree, quality, qualifiers = parse_roman_numeral(name)
+            return degree, quality, qualifiers
+
         else:
-            modifier = None
-        return degree_int, quality, modifier
+            raise TypeError(f'ScaleDegreeChord expected input to be a str or tuple but got: {type(name)}')
+
+        # # look for roman numerals by checking the first 3/2/1 chars of name:
+        # degree_int = None
+        # num_chars_to_check = min([3, len(name)])
+        # for i in range(num_chars_to_check, 0, -1):
+        #     potential_name = name[:i]
+        #     print(f'Checking name {name} up to index {i}: {potential_name}')
+        #     if potential_name.upper() in roman_numerals.keys():
+        #         # this is the scale degree
+        #         degree_int = roman_numerals[potential_name.upper()]
+        #         if potential_name.isupper():
+        #             quality = Major
+        #         elif potential_name.islower():
+        #             quality = Minor
+        #         else:
+        #             raise Exception(f'Inconsistent case for scale degree input: {potential_name} (should be entirely upper or lower)')
+        #         break
+        # if degree_int is None:
+        #     raise Exception(f'Scale degree input does not appear to contain a valid roman numeral: {name}')
+        # if len(name) > i:
+        #     # modified
+        #     rest = name[i:]
+        #     print(f'Detected ScaleDegree modifier: {rest}')
+        #     modifier = ChordQuality(rest)
+        #     if modifier.diminished:
+        #         assert quality.minor, f"Degree {name} is to be diminished, but {name[:i]} is not minor"
+        #         quality = Diminished
+        # else:
+        #     modifier = None
+        # return degree_int, quality, modifier
 
     def __str__(self):
         roman = numerals_roman[self.degree]
@@ -142,6 +168,7 @@ class ScaleDegreeChord(ScaleDegree):
 
     def __add__(self, other, diminish=True):
         """mod-7 arithmetic on scale chord roots"""
+        other = int(other)
         new_degree = (((self.degree + other) -1 ) % 7 ) + 1
         new_quality = self.quality
         if new_degree not in [1,4,5]: # swap quality if needed:

@@ -55,12 +55,18 @@ class ChordFactors(dict):
 
     def __add__(self, other):
         """modifies these factors by the alterations in a ChordQualifier"""
-        assert isinstance(other, ChordQualifier)
-        other.apply(self)
+        if isinstance(other, ChordQualifier):
+            other.apply(self)
+            self.qualifiers.append(other)
+        elif isinstance(other, (list, tuple)):
+            # apply a list of ChordQualifiers instead:
+            for qual in other:
+                assert isinstance(qual, ChordQualifier), f"ChordFactor tried to be modified by an item in a list that was not a ChordQualifier but was: {type(qual)}"
+                qual.apply(self)
+                self.qualifiers.append(qual)
         # ensure that we keep ourselves sorted:
         sorted_keys = sorted(list(self.keys()))
         return ChordFactors({k: self[k] for k in sorted_keys}, qualifiers = self.qualifiers+[other])
-
 
 
 

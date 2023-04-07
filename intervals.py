@@ -16,6 +16,10 @@ class Interval:
         e.g. if value= 16, this is considered to be a major third, played an octave above,
         instead of a major 10th. if we DO want this to be a major 10th, see the CompoundInterval class."""
 
+        # accept re-casting:
+        if isinstance(value, Interval):
+            value, degree = value.value, value.degree
+            
         self.value = value
         self.width = abs(value)
 
@@ -141,6 +145,9 @@ class Interval:
                        'dissonant': self.dissonant,
                        }
         return [string for string, attr in flags_names.items() if attr]
+
+    def __int__(self):
+        return self.value
 
     # interval constructor methods:
     def __add__(self, other):

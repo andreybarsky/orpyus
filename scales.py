@@ -5,13 +5,167 @@ from parsing import num_suffixes
 import notes as notes
 import pdb
 
-log.verbose = True
+
+class ScaleDegree:
+    """The degrees of a scale, with modulo arithmetic defined over them"""
+
+    def __init__(self, degree):
+        # accept re-casting:
+        if isinstance(degree, ScaleDegree):
+            self.value = degree.value
+        else:
+            assert isinstance(degree, int), f'ScaleDegree received invalid init arg, expected int but got: {degree}'
+            if (degree < 1) or (degree > 7):
+                degree = ((degree-1) % 7) + 1
+            self.value = degree
+
+    def __add__(self, other):
+        assert isinstance(other, (int, Interval))
+        other_val = int(other)
+        return ScaleDegree(self.value + other_val)
+        # # mod back to range 1-7
+        # new_degree = ((new_degree-1) % 7) + 1
+
+    def __sub__(self, other):
+        assert isinstance(other, (int, Interval))
+        return self + (-other)
+
+    def __str__(self):
+        return f'{self.value}\u0302' # unicode circumflex character
+
+    def __repr__(self):
+        return str(self)
+
+    def __int__(self):
+        return self.value
+
+    def __eq__(self, other):
+        if isinstance(other, ScaleDegree):
+            return self.value == other.value
+        else:
+            raise TypeError(f'__eq__ not defined between ScaleDegree and {type(other)}')
+
+    def __hash__(self):
+        return hash(str(self))
+
+    def fifth_distance(self, other):
+        return interval_distance(self, other, 4)
+
+    def fourth_distance(self, other):
+        return interval_distance(self, other, 3)
+
+    def third_distance(self, other):
+        return interval_distance(self, other, 2)
+
+    def second_distance(self, other):
+        return interval_distance(self, other, 1)
+
+
+
+def interval_distance(deg1, deg2, step_degree):
+    """distance between two scale-degrees, in degree-interval steps"""
+    assert step_degree in range(1,8), f'Invalid step degree for counting interval distance between ScaleDegrees: {step_degree}'
+    deg1 = ScaleDegree(deg1)
+    distance = 0
+    # count in two directions simultaneously, return the lowest:
+    pos_proxy = ScaleDegree(deg2)
+    neg_proxy = ScaleDegree(deg2)
+    while (pos_proxy != deg1) and (neg_proxy != deg1):
+        pos_proxy += step_degree
+        neg_proxy -= step_degree
+        distance += 1
+    if pos_proxy == deg1:
+        return -distance
+    elif neg_proxy == deg1:
+        return distance
+
+### TBI: should scales be able to be modified by ChordQualifiers or something similar, like ChordFactors can?
+class Scale:
+    """a hypothetical scale not built on any specific note,
+    but defined by a series of intervals from its tonic"""
+    def __init__(self, scale_name: str):
+        self.name, self.intervals, self.base_scale, self.rotation = self._parse_input(scale_name)
+
+        # determine quality by asking: is the third major or minor
+        self.quality = self.intervals[2].quality
+
+        # build own ScaleDegrees:
+        self.degrees = {ScaleDegree(1): Unison}
+        for d, i in enumerate(self.intervals):
+            degree = ScaleDegree(d+2)
+            self.degrees[degree] = i
+
+    def __contains__(self, item):
+        return item in self.intervals
+
+    def _parse_input(self, inp):
+        # if input is an existing scale, just keep it:
+        if isinstance(inp, Scale):
+            return inp.name, inp.intervals, inp.base_scale, inp.rotation
+        elif isinstance(inp, str):
+            if inp in mode_lookup:
+                base_scale, rotation = mode_lookup[inp]
+            else:
+                raise ValueError(f'{inp} does not seem to correspond to a valid rotation of a base scale')
+
+            if inp in mode_name_intervals:
+                intervals = mode_name_intervals[inp]
+            else:
+                raise ValueError(f'{inp} does not seem to correspond to a valid set of intervals')
+
+            name = interval_mode_names[intervals][-1]
+
+            return name, intervals, base_scale, rotation
+
+        elif isinstance(inp, (list, tuple)):
+            # received a list, parse it as a series of intervals:
+            intervals = tuple([Interval(i) for i in inp])
+            name = interval_mode_names[intervals][-1]
+            base_scale, rotation = mode_lookup[name]
+            return name, intervals, base_scale, rotation
+        else:
+            raise TypeError(f'Invalid input to Scale init: expected scale_name string, or iterable of intervals, or Scale object, but got: {type(inp)}')
+
+    @staticmethod
+    def from_intervals(interval_key):
+        scale_name = interval_mode_names[interval_key]
+        return Scale(scale_name)
+
+    def __str__(self):
+        return f'Scale:{self.name}'
+
+    def __repr__(self):
+        return str(self)
+
+    def __len__(self):
+        return len(self.scale)
+
+    def __eq__(self, other):
+        if isinstance(other, Scale):
+            return self.intervals == other.intervals
+        else:
+            raise TypeError(f'__eq__ not defined between Scale and {type(other)}')
+
+    def __getitem__(self, d):
+        d = ScaleDegree(d)
+        return self.degrees[d]
+
+
+    @property
+    def pentatonic(self):
+        if self.quality.major: # and self.natural?
+            pent_scale = [self[s] for s in [1,2,3,5,6]]
+        elif self.quality.minor: # and self.natural?
+            pent_scale = [self[s] for s in [1,3,4,5,7]]
+        return pent_scale
+
+
 # standard keys are: natural/melodic/harmonic majors and minors
 
 # dict mapping 'standard' key intervals to all accepted aliases for scale qualities
 interval_scale_names = {
-    (Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', 'maj', 'M', 'natural major', 'major'],
-    (Maj2, Min3, Per4, Per5, Min6, Min7): ['m', 'min', 'natural minor', 'minor'],
+    (Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', 'maj', 'M', 'major', 'natural major' ],
+    (Maj2, Min3, Per4, Per5, Min6, Min7): ['m', 'min', 'minor', 'natural minor' ],
 
     (Maj2, Maj3, Per4, Per5, Min6, Maj7): ['maj harmonic', 'M harmonic', 'harmonic major',],
     (Maj2, Min3, Per4, Per5, Min6, Maj7): ['m harmonic', 'harmonic minor'],
@@ -47,7 +201,7 @@ mode_idx_names = {
                  }
 
 
-## dict mapping all accepted key quality names to lists of their intervals:
+## dict mapping all accepted (standard) key quality names to lists of their intervals:
 scale_name_intervals = {}
 # dict mapping valid whole names of each possible key (for every tonic) to a tuple: (tonic, intervals)
 
@@ -130,21 +284,23 @@ for base in mode_bases:
 
         log(f'  also known as: {", ".join(this_mode_names)}')
 
+        # workaround: we want the 'suffix' and 'scale_name' for modes to be the common mode name itself
+        # so we append a copy of the first mode name to each list, so that it acts as first and last:
+        this_mode_names.extend(this_mode_names[:1])
+
         if interval_key in interval_scale_names.keys():
             log(f'--also enharmonic to:{interval_scale_names[interval_key][-1]} scale')
             # add non-mode scale names to mode_lookup too: e.g. mode_lookup['natural minor'] returns ('major', 6)
             for name in interval_scale_names[interval_key]:
                 mode_lookup[name] = mode_hashkey
                 # add standard scale names to the interval_scale_names lookup too:
-                this_mode_names.append(name)
+                this_mode_names.append(name) # (this also means the last standard scale name becomes the standard lookup name)
         else: # record the modes that are not enharmonic to base scales in a separate dict
             non_scale_interval_mode_names[interval_key] = this_mode_names
 
         interval_mode_names[interval_key] = this_mode_names
 
-        # workaround: we want the 'suffix' and 'scale_name' for modes to be the common mode name itself
-        # so we append a copy of the first mode name to each list, so that it acts as first and last:
-        this_mode_names.extend(this_mode_names[:1])
+
 
 
     log('=========\n')
@@ -159,6 +315,7 @@ for intervals, names in interval_mode_names.items():
 
 def unit_test():
     test(mode_name_intervals['natural major'], tuple(get_modes('major')[1]))
+    test(Scale('major'), Scale(scale_name_intervals['natural major']))
 
 if __name__ == '__main__':
     unit_test()

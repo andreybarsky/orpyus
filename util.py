@@ -84,7 +84,12 @@ def precision_recall(target, candidate, weights=None):
 def reverse_dict(dct):
     """accepts a dict whose values and keys are both unique,
     and returns the reversed dict where keys are values and vice versa"""
-    rev_dct = {k:v for v,k in dct.items()}
+    rev_dct = {}
+    for k,v in dct.items():
+        if isinstance(v, list):
+            v = tuple(v)
+        rev_dct[v] = k
+    # rev_dct = {k:v for v,k in dct.items()}
     return rev_dct
 
 def unpack_and_reverse_dict(dct, include_keys=False, force_list=False):
@@ -107,19 +112,35 @@ def unpack_and_reverse_dict(dct, include_keys=False, force_list=False):
             rev_dct[k] = k
     return rev_dct
 
-def reduce_aliases(target, aliases, strip=True, verbose=False, force_list=True):
-    """given a target string,
-    and a dict mapping string replacements from target to arbitrary objects,
-    recursively replace the string starting from longest possibilities first
-    until we have reduced it to its canonical form.
+def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True, include_keys=False, discard=False, verbose=False):
+    """given an input string, and a dict that maps potential input substrings
+    to replacements (which can be arbitrary objects), recursively replace the string
+    starting from longest possibilities first, until we have reduced it to its canonical form.
 
-    if strip, pad replacement candidates with whitespace as well"""
+    if strip, pad replacement candidates with whitespace as well.
+    if reverse, we expect a dict where the VALUES are the replacements, instead of the reverse.
+        we assume that the values, then, are lists of replacement substrings,
+        and the keys are arbitrary objects.
+    if force_list, we relax this assumption on the values, and allow them to be non-lists,
+        in which case we just wrap them up as single-item lists.
 
-    # reverse aliases dict:
-    replacements = unpack_and_reverse_dict(aliases, force_list=force_list)
+    if discard, we discard nonmatching characters instead of adding them to the output list."""
+
+    if reverse:
+        replacements = unpack_and_reverse_dict(aliases, force_list=force_list, include_keys=include_keys)
+    else:
+        replacements = aliases
+
+
     if strip:
         # add whitespace to the front of every replacmeent in addition:
-        replacements.update({f' {k}':v for k,v in replacements.items()})
+        whitespaced_replacements = {f' {k}':v for k,v in replacements.items()}
+        # as well as versions with stripped whitespace everywhere:
+        stripped_replacements = {k.replace(' ', ''):v for k,v in replacements.items()}
+
+        replacements.update(whitespaced_replacements)
+        replacements.update(stripped_replacements)
+
     alias_lengths = [len(a) for a in replacements.keys()]
     max_alias_len = max(alias_lengths)
 
@@ -127,31 +148,32 @@ def reduce_aliases(target, aliases, strip=True, verbose=False, force_list=True):
     output = []
 
     # iterate starting from each character of the current string:
-    cur_target_idx = 0
+    cur_input_idx = 0
 
-    while cur_target_idx < len(target):
+    while cur_input_idx < len(inp):
 
-        remaining_chars = len(target) - cur_target_idx
+        remaining_chars = len(inp) - cur_input_idx
         start_length = min([remaining_chars, max_alias_len])
         # iterate backward starting from the longest possible replacement here:
         found_match = False
         for cur_rep_len in range(start_length, 0, -1):
             cur_len_replacements = {k:v for k,v in replacements.items() if len(k) == cur_rep_len}
-            substring = target[cur_target_idx : cur_target_idx + cur_rep_len]
+            substring = inp[cur_input_idx : cur_input_idx + cur_rep_len]
             if substring in cur_len_replacements.keys():
                 # found a replacement:
                 rep = cur_len_replacements[substring]
                 output.append(rep)
-                cur_target_idx += cur_rep_len
+                cur_input_idx += cur_rep_len
                 found_match = True
                 if verbose:
-                    print(f'Replacing {substring} with {rep} at original index={cur_target_idx-cur_rep_len}. New index is {cur_target_idx}, current replacement is: {output}')
+                    print(f'Replacing {substring} with {rep} at original index={cur_input_idx-cur_rep_len}. New index is {cur_input_idx}, current replacement is: {output}')
                     import pdb; pdb.set_trace()
                 break
         if not found_match:
             # no replacement at this character, advance forward by one character
-            output.append(target[cur_target_idx])
-            cur_target_idx += 1
+            if not discard:
+                output.append(inp[cur_input_idx])
+            cur_input_idx += 1
 
     # finished, join output string and return:
     return output
