@@ -92,26 +92,14 @@ class AbstractChord:
     whose principal members are Intervals. see AbstractChord._parse_input for valid input schemas.
     an AbstractChord is fully identified by its Factors and its Inversion."""
     def __init__(self, name=None, factors=None, intervals=None, inversion=None, inversion_degree=None, qualifiers=None):
-
-        self.factors, self.intervals, self.inversion = self._parse_input(name, factors, intervals, inversion, inversion_degree, qualifiers)
-
-        # dict mapping chord factors to intervals from tonic:
-        self.factor_intervals = {i.degree: i for i in self.intervals}
-
-        # quality of a chord is the quality of its third:
-        self.quality = qualities.Perfect if 3 not in self.factors else self.factor_intervals[3].quality
-
-    @staticmethod
-    def _parse_input(name, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=False):
-        """takes valid inputs to AbstractChord and parses them into factors, intervals and inversion.
-        primary arg must be one of the following mutually exclusive keywords, in order of resolution:
+        """primary input arg must be one of the following mutually exclusive keywords, in order of resolution:
         1. 'name' arg as string denoting the name of an AbstractChord (like 'mmaj7'),
                 which we look up and parse as a list of ChordQualifiers.
                   --this name can also contain an inversion (like 'mmaj7/2'), which
                     we interpret as an 'inversion' arg (and therefore ignore an
                     inversion kwarg if one has been supplied)
-        2. 'name' arg of type AbstractChord, or a subclass of AbstractChord, from which
-                we re-cast the factors and inversion directly.
+        2. (re-casting): 'name' arg of type AbstractChord, or a subclass of AbstractChord, from which
+                we read the factors/intervals/inversion directly.
         3. 'factors' arg of type ChordFactors, keying degree to semitone offsets,
                 which we accept directly.
         4. 'intervals' arg as list of Intervals, or ints that cast to Intervals, which we
@@ -133,16 +121,38 @@ class AbstractChord:
 
         note that both are ignored if the 'name' arg contains a slash."""
 
+        self.factors, self.root_intervals, self.inversion = self._parse_input(name, factors, intervals, inversion, inversion_degree, qualifiers)
+
+        # dict mapping chord factors to intervals from tonic:
+        self.factor_intervals = {i.degree: i for i in self.root_intervals}
+
+        if self.inversion is not None: # list of self.intervals is with respect to this chord's inversion
+            self.intervals = rotate_list(self.root_intervals, self.inversion)
+        else:
+            self.intervals = self.root_intervals
+
+        # quality of a chord is the quality of its third:
+        self.quality = qualities.Perfect if 3 not in self.factors else self.factor_intervals[3].quality
+
+    @staticmethod
+    def _parse_input(name, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=False):
+        """takes valid inputs to AbstractChord and parses them into factors, intervals and inversion."""
+
         # factors = None
 
         if name is not None:
-
             assert factors is None and intervals is None
             if '/' in name:
                 assert inversion is None and inversion_degree is None, 'Parsed slash chord as denoting inversion, but received mutually exclusive inversion arg'
                 # parse inversion from name
                 name, inversion_str = name.split('/')
-                inversion = int(inversion_str)
+
+                if inversion_str.isnumeric():
+                    inversion = int(inversion_str)
+                else:
+                    assert allow_note_name, f'String inversions only allowed for non-AbstractChords'
+                    inversion = inversion_str
+
             # detect major chord:
             if name == '' or name in ((qualities.qualifier_aliases['maj']) + ['maj']):
                 factors = ChordFactors(major_triad)
@@ -191,9 +201,16 @@ class AbstractChord:
                     break
 
         if inversion is not None:
-            assert isinstance(inversion, int), f'inversion must be an int, but got: {type(inversion)}'
-            # cannot have a 3rd inversion of a triad chord, etc., so sanity check:
-            assert 0 < inversion <= (len(factors)-1), f'{inversion} is an invalid inversion number for chord with {len(factors)} factors'
+            if isinstance(inversion, int):
+                assert 0 < inversion <= (len(factors)-1), f'{inversion} is an invalid inversion number for chord with {len(factors)} factors'
+            elif isinstance(inversion, str):
+                if not allow_note_name:
+                    raise TypeError(f'inversion arg for AbstractChord must be an int, but got: {type(inversion)}')
+                else:
+                    if not is_valid_note_name(inversion):
+                        raise ValueError(f'got string argument to inversion, but does not seem to be a valid note name: {inversion}')
+            else:
+                raise TypeError(f'inversion must be an int or str, but got: {type(inversion)}')
 
         return factors, sorted(intervals), inversion
 
@@ -201,9 +218,14 @@ class AbstractChord:
         return len(self.factors)
 
     @property
+    def _inv_string(self):
+        """inversion string, used internally by suffix method (and inherited by subclasses)"""
+        return f'/{self.inversion}' if (self.inversion is not None) else ''
+
+    @property
     def suffix(self, inversion=True):
         """dynamically determine chord suffix from factors and inversion"""
-        inv_string = f'/{self.inversion}' if ((inversion) and (self.inversion is not None)) else ''
+        inv_string = self._inv_string if inversion else ''
         if self.factors in factors_to_chordnames:
             return factors_to_chordnames[self.factors] + inv_string
         elif self.factors == major_triad:
@@ -243,21 +265,26 @@ class Chord(AbstractChord):
 
         self.root, chord_name = self._parse_root(name, root)
 
-        self.bass = Note(self.root)
-        if bass is not None:
-            # handle inversion on bass note:
-            pass
+        self.factors, self.intervals, inversion = self._parse_input(chord_name, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=True)
+        # note that while self.inversion in AbstratChord comes out as strictly int or None
+        # here we allow it to be a string denoting the bass note, which we'll correct in a minute
 
-        super().__init__(chord_name, factors, intervals, inversion, inversion_degree, qualifiers)
+        # mapping of chord factors to intervals from tonic:
+        self.factor_intervals = {i.degree: i for i in self.intervals}
+        # mapping of chord factors to notes:
+        self.factor_notes = {degree: (self.root + i) for degree, i in self.factor_intervals.items()}
 
-        # self.factors, self.intervals, self.inversion = AbstractChord._parse_input()
+        # list of notes inside this chord:
+        self.root_notes = NoteList([self.root + i for i in self.intervals])
 
-        # determine notes inside this chord:
+        # discover the correct inversion parameters, as well as inverted notes:
+        self.inversion, self.inversion_degree, self.bass, self.notes = self._parse_inversion(inversion)
 
-        self.notes = NoteList([self.root + i for i in self.intervals])
+        # quality of a chord is the quality of its third:
+        self.quality = qualities.Perfect if 3 not in self.factors else self.factor_intervals[3].quality
 
-        self.prefer_sharps = self._detect_sharp_preference()
-        self._set_sharp_preference(self.prefer_sharps)
+        # set sharp preference based on root note:
+        self._set_sharp_preference()
 
     @staticmethod
     def _parse_root(name, root):
@@ -272,14 +299,45 @@ class Chord(AbstractChord):
             chord_name = name
         return root, chord_name
 
+    def _parse_inversion(self, inversion):
+        """given an inversion as int (Xth inversion) or string (bass note),
+        return canonical forms: (inversion, inversion_degree, bass)
+        with respect to already-defined self.root_notes"""
+        if inversion is None:
+            inversion = inversion_degree = None
+            bass = self.root
+            inverted_notes = self.root_notes
+            return inversion, inversion_degree, bass, inverted_notes
+        elif isinstance(inversion, int):
+            assert 0 < inversion <= (len(self.factors)-1), f'{inversion} is an invalid inversion number for chord with {len(self.factors)} factors'
+            inversion_degree = self.intervals[inversion].degree
+            bass = self.root_notes[inversion]
+        elif isinstance(inversion, (Note, str)):
+            # assert is_valid_note_name(str), f'{inversion} was supplied as inversion bass note, but does not seem to be a note'
+            bass = Note(inversion)
+            inversion_degree = [k for k,v in self.factor_notes.items() if v == bass][0]
+            # get inversion from inversion_degree:
+            for x, deg in enumerate(sorted(self.factors.keys())):
+                if inversion_degree == deg:
+                    inversion = x
+                    break
+
+        # infer inverted note order by finding the bass's place in our root_notes notelist:
+        bass_place = [i for i, n in enumerate(self.root_notes) if n == bass][0]
+        # and rearranging the notes by rotation, e.g. from ordering [0,1,2] to [1,2,0]:
+        inverted_notes = self.root_notes.rotate(bass_place)
+
+        return inversion, inversion_degree, bass, inverted_notes
+
+    @property
+    def _inv_string(self):
+        """inversion string, used internally by suffix method (and inherited by subclasses)"""
+        return f'/{self.bass}' if (self.inversion is not None) else ''
+
+
     def _detect_sharp_preference(self, default=False): #tonic, quality='major', default=False):
         """detect if a chord should prefer sharp or flat labelling
         depending on its tonic and quality"""
-        # if isinstance(tonic, str):
-        #     tonic = Note(str)
-        # assert isinstance(tonic, Note)
-        # tonic_chord = Chord(tonic)
-
         if self.quality.major:
             if self.root in sharp_major_tonics:
                 return True
@@ -297,21 +355,20 @@ class Chord(AbstractChord):
         else:
             return default
 
-    def _set_sharp_preference(self, prefer_sharps):
+    def _set_sharp_preference(self, prefer_sharps=None):
         """set the sharp preference of this Chord,
         and of all notes inside this Chord,
         including the tonic, root, and constituent factors"""
+        if prefer_sharps is None:
+            # detect from object attributes
+            prefer_sharps = self._detect_sharp_preference()
+
         self.prefer_sharps = prefer_sharps
         self.root._set_sharp_preference(prefer_sharps)
         self.bass._set_sharp_preference(prefer_sharps)
         for n in self.notes:
             n._set_sharp_preference(prefer_sharps)
-        # for n in self.factors.values():
-        #     n._set_sharp_preference(prefer_sharps)
 
-        # # reset name of chord to reflect preference:
-        # root_str = f'/{self.root.name}' if self.inverted else ''
-        # self.name = self.tonic.name + self.suffix + root_str
 
     @property
     def sharp_notes(self):
@@ -486,30 +543,3 @@ class ChordVoicing(Chord):
                     octave = octave
                     root = Note(root).in_octave(octave)
             return root, octave, name
-
-
-# major_triad_factors = ChordFactors({1:0, 3:0, 5:0})
-# major_triad = AbstractChord(factors=major_triad_factors)
-
-def _parse_chord_name(name):
-    # the hard one: given a chord name, parse its root, its qualifiers, and its inversion:
-    if len(name) >= 2 and is_valid_note_name(name[:2]):
-        rest_idx = 2
-    elif is_valid_note_name(name[0]):
-        rest_idx = 1
-    else:
-        raise ValueError(f'{name} does not contain a valid root note name in its first two characters')
-    root_name = name[:rest_idx]
-
-    rest = name[rest_idx:]
-    if '/' in rest:
-        # contains an inversion
-        qualifiers, inversion = rest.split('/')
-    else:
-        qualifiers = rest
-        inversion = None
-
-    qual_objects = parse_chord_qualifiers(qualifiers)
-    inversion = int(inversion) if inversion.isnumeric() else Note(inversion)
-
-    return Note(root_name), qual_objects, inversion
