@@ -3,6 +3,9 @@ from chords import Chord
 from qualities import Major, Minor, Perfect, Diminished, parse_chord_qualifiers
 from scales import ScaleDegree, Scale, scale_name_intervals
 from util import reduce_aliases, reverse_dict, test
+from parsing import roman_numerals, numerals_roman
+
+
 
 
 # # scrap this for a more theoretical approach?
@@ -36,8 +39,18 @@ from util import reduce_aliases, reverse_dict, test
 
 
 
-numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII'}
-roman_numerals = reverse_dict(numerals_roman)
+scale_function_names = {0: "tonic", # 1st
+                        2: "supertonic", # 2nd
+                        3: "mediant", # 3rd (minor)
+                        4: "mediant", # 3rd (major)
+                        5: "subdominant", # 4th
+                        7: "dominant", # 5th
+                        8: "submediant", # 6th (minor)
+                        9: "submediant", # 6th (major)
+                        10: "subtonic", # 7th (minor)
+                        11: "leading tone", # 7th (major)
+                        }
+
 
 roman_degree_chords = {}
 # render as an alias dict:
@@ -80,6 +93,11 @@ class ScaleDegreeChord(ScaleDegree):
         # if isinstance(name, str):
         #     # parse input string:
         self.degree, self.quality, self.qualifiers = self._parse_input(name)
+
+        if scale is not None:
+            self.scale = Scale(scale)
+        else:
+            self.scale = None
         # else:
         #     assert isinstance(name, (list, tuple)), f'Input to ScaleDegree expected to be string or iterable but got: {type(name)}'
         #     # just take degree/quality/modifier directly

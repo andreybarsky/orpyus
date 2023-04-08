@@ -2,7 +2,7 @@
 import notes
 from notes import Note, OctaveNote, NoteList
 from chords import Chord, chord_names, matching_chords, most_likely_chord, relative_minors, relative_majors
-from intervals import Interval, IntervalDegree, Min2, Maj2, Min3, Maj3, Per4, Per5, Min6, Maj6, Min7, Maj7
+from intervals import Interval, Min2, Maj2, Min3, Maj3, Per4, Per5, Min6, Maj6, Min7, Maj7
 from progressions import ScaleDegree
 from qualities import Quality
 import scales
@@ -54,7 +54,7 @@ class Key:
         self.base_scale, self.mode_degree = self.mode_id
 
         # a scale is 'standard' if it is not some exotic mode: i.e. natural minor is standard even though it is technically a mode of nat. major
-        if self.scale_name in scales.standard_scales:
+        if self.scale_name in scales.standard_scale_names:
             self.standard = True
         else:
             self.standard = False
@@ -118,17 +118,9 @@ class Key:
         self.num_sharps = ...
     ###################################
 
-    # @property
-    # def pentatonic(self):
-    #     if self.major: # and self.natural?
-    #         pent_scale = [self[s] for s in [1,2,3,5,6]]
-    #     elif self.minor: # and self.natural?
-    #         pent_scale = [self[s] for s in [1,3,4,5,7]]
-    #     return pent_scale
 
-    ### TBI: blues pentatonic scales?
-    # (Maj2, Per4, Per5, Maj6): [' blues major', ' blues major pentatonic', ' blues'],
-    # (Min3, Per4, Min6, Min7): [' blues minor', ' blues minor pentatonic', 'm blues'],
+
+
 
     @staticmethod
     def _parse_input(arg1, quality):
@@ -321,7 +313,7 @@ class Key:
 
         root, third, fifth = self[degree], self[degree+2], self[degree+4]
         # tonic is known so we can get chord quality from intervals:
-        intervals = (IntervalDegree((third-root).value, degree=3), IntervalDegree((fifth-root).value, degree=5))
+        intervals = (Interval((third-root).value, degree=3), Interval((fifth-root).value, degree=5))
         if intervals in chord_names.keys():
             return Chord(root, chord_names[intervals][0])
         else:
@@ -461,7 +453,7 @@ class Key:
         return self.chords[i-1]
 
     def __str__(self):
-        return f'𝄞{self.name}'
+        return f'𝄞 {self.name}'
 
     def __repr__(self):
         return str(self)
@@ -552,9 +544,26 @@ class Key:
         else:
             return self
 
-
-
-
+    @staticmethod
+    def from_signature(flats=None, sharps=None, quality='major'):
+        if flats is not None:
+            assert (isinstance(flats, int)) and (sharps is None), "Key signature must have either sharps OR flats, as int"
+            acc = 'b'
+            acc_order = flat_order
+            num_accs = flats
+        elif sharps is not None:
+            assert (isinstance(sharps, int)) and (sharps is flats), "Key signature must have either sharps OR flats, as int"
+            acc = '#'
+            acc_order = sharp_order
+            num_accs = sharps
+        # which notes get flattened/sharpened:
+        which_accs = set(acc_order[:num_accs])
+        key_notes = []
+        for note_name in parsing.natural_note_names:
+            if note_name in which_accs:
+                key_notes.append(note_name + acc)
+            else:
+                key_notes.append(note_name)
 
 class KeyNote(Note):
     def __init__(self, *args, key, **kwargs):
@@ -759,7 +768,7 @@ def matching_keys(target, by='note', input_as='chords', modes=True, score=True, 
     candidates = []
     unique_candidates = set([])
     for tonic in notes.chromatic_scale:
-        for quality in scales.standard_scales:
+        for quality in scales.standard_scale_names:
             candidate = Key(tonic.name, quality)
             candidates.append(candidate)
 

@@ -1,6 +1,7 @@
 # OOP representation of major/minor quality that is invertible and has a null (indeterminate) value
 from util import reverse_dict, unpack_and_reverse_dict, reduce_aliases, test, log
-from terminology import degree_names
+from parsing import degree_names, is_valid_note_name
+from copy import deepcopy
 import pdb
 
 # TBI: double dim/aug qualities?
@@ -46,14 +47,18 @@ class Quality:
         self.augmented = self.value == 2
         self.diminished = self.value == -2
 
-        # if we want to check whether this quality is major-ish (i.e. major or augmented), etc., we have these:
+        # an interval is 'major-ish' if it is major/augmented, and 'minor-ish' if it is minor/diminished:
         self.major_ish = self.value >= 1
         self.minor_ish = self.value <= -1
 
     def _parse_input(self, inp):
         """accepts either a string denoting quality name, or an existing quality.
         sanitises input and returns the corresponding canonical name and quality value"""
-        if isinstance(inp, str):
+
+        if isinstance(inp, Quality):
+            # accept re-casting:
+            return inp.name, inp.value
+        elif isinstance(inp, str):
             # case-insensitive except for the crucial distinction between m and M:
             name = inp.lower() if len(inp) > 1 else inp
 
@@ -65,10 +70,6 @@ class Quality:
             else:
                 raise Exception(f'Quality object init received unknown quality name: {inp}')
 
-        elif isinstance(inp, Quality):
-            # catch if we have been fed an existing Quality,
-            # in which case just re-init:
-            return inp.name, inp.value
         else:
             raise Exception(f'Quality object initialised using name arg, expected string (or Quality object) but got type: {type(name)}')
 
@@ -203,7 +204,7 @@ class ChordQualifier:
 
     def apply(self, factors):
         """modify a ChordFactors object with the alterations specified in this Qualifier"""
-        assert isinstance(factors, ChordFactors), f"ChordQualifiers can only be applied to ChordFactors, but was attempted on: {type(factors)}"
+        assert isinstance(factors, dict), f"ChordQualifiers can only be applied to ChordFactors or  dicts, but was attempted on: {type(factors)}"
         # in order: remove, add, modify
 
         # remove any number of existing degrees
@@ -348,21 +349,23 @@ class ChordQualifier:
 chord_types =  {'m': ChordQualifier(make={3: -1}),
                 '5': ChordQualifier(remove=3, verify={5:0}),
                 'dim': ChordQualifier(modify={3:-1, 5:-1}),
-                'aug': ChordQualifier(modify={5:+1}, verify={3:0}),
+                '+': ChordQualifier(modify={5:+1}, verify={3:0}),
                 '6': ChordQualifier(add=6),
 
                 '7': ChordQualifier(make={7: -1}), # dominant 7th
-                'maj7': ChordQualifier(make={7: 0}, verify={3:0}),
+                'maj7': ChordQualifier(make={7: 0}),
                 'dim7': ChordQualifier(make={3:-1, 5:-1, 7:-2}),
-                # m7 is an implicit concatenation of 'm' and '7'
-                # mmaj7 is an implicit concatenation of 'm' and 'maj7'
+
+                # note: m7 is an implicit concatenation of 'm' and '7'
+                # and mmaj7 is an implicit concatenation of 'm' and 'maj7'
 
                 # explicit concatenations:
                 'hdim7': ['dim', '7'],    # half diminished 7th (diminished triad with minor 7th)
                 '9': ['7', '♮9'],          # i.e. dominant 9th
-                'm9': ['m', '7', '♮9'],      # minor 9th
+                'm9': ['m', '7', '♮9'],    # minor 9th
                 'maj9': ['maj7', '♮9'],    # major 9th
-                'dm9': ['7', '♭9'],         # dominant minor 9th
+                'dm9': ['7', '♭9'],        # dominant minor 9th
+                'dim9': ['dim7', '♮9'],    # diminished 9th
 
                 '11': ['9', '♮11'],
                 'm11': ['m9', '♮11'],
@@ -377,7 +380,7 @@ chord_modifiers = {'(no5)': ChordQualifier(remove=5),
 
                     'add9': ChordQualifier(add={9:0}, verify={7: False}),
                     'add11': ChordQualifier(add=11, verify={9: False}),
-                    'add4': ChordQualifier(add=4), # are these real? or just add11s
+                    # 'add4': ChordQualifier(add=4), # are these real? or just add11s
                     }
 
 # add chord alterations as well: (♯5, ♭11, etc.)
@@ -401,7 +404,7 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      'm': ['minor', 'min', '-',],
                      'sus': ['s', 'suspended'],
                      'dim': ['o', '°', 'diminished'],
-                     'aug': ['+','augmented'],
+                     '+': ['aug','augmented'],
                      'hdim': ['ø', 'half diminished', 'half dim', 'half-diminished', 'half-dim'],
                      'add': ['added'],
                      '': ['dominant', 'dom'], # bit of a kludge; but 'domX' always refers to an X chord so it works in practice
@@ -420,12 +423,16 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
 alias_qualifiers = unpack_and_reverse_dict(qualifier_aliases)
 
 
-def parse_chord_qualifiers(qual_str, verbose=False):
+def parse_chord_qualifiers(qual_str, verbose=False, allow_note_names=False):
     """given a string of qualifiers that typically follows a chord root,
     e.g. 7sus4add11♯5,
     recursively parse them into a list of ChordQualifier objects"""
 
     reduced_quals = reduce_aliases(qual_str, qualifier_aliases, reverse=True, include_keys=True)
+    if not allow_note_names:
+        if is_valid_note_name(reduced_quals[0], case_sensitive=True):
+            raise ValueError(f'parse_chord_qualifiers got fed a string starting with a note name: {qual_str} (parsed as {reduced_quals})')
+
     # we need to catch a special case: 'major' as first qualifier NOT followed by an extended degree number
     major_in_front = (len(reduced_quals) >= 1 and reduced_quals[0] == 'maj')
     followed_by_degree = (len(reduced_quals) >= 2 and reduced_quals[1] in ['7', '9', '11'])

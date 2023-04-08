@@ -1,5 +1,5 @@
 from qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
-from progressions import ScaleDegree
+from parsing import degree_names, num_suffixes
 from util import test
 import pdb
 
@@ -11,8 +11,8 @@ class Interval:
 
     def __init__(self, value:int, degree=None):
         if isinstance(value, Interval):
-            # casting from another interval object:
-            value = value.value
+            # accept re-casting from another interval object:
+            value = value.value, degree = value.degree
 
         self.value = value # signed integer semitone distance
 
@@ -93,6 +93,17 @@ class Interval:
         return f'{self.quality.name.capitalize()} {degree_name.capitalize()}{qualifier_string}'
 
     @property
+    def short_name(self):
+        if self.mod == 0:
+            return 'Unison'
+        elif self.quality.perfect:
+            short_qual = 'Perf'
+        else:
+            short_qual = (self.quality.name.capitalize())[:3]
+        short_deg = f'{self.extended_degree}{num_suffixes[self.extended_degree]}'
+        return f'{short_qual}{short_deg}'
+
+    @property
     def consonance(self):
         # a very fuzzy notion of interval consonance:
         if self.mod in [1, 6, 11]:
@@ -106,27 +117,45 @@ class Interval:
         return consonance
 
     @staticmethod
-    def from_degree(degree, quality=None):
+    def from_degree(degree, quality=None, offset=None):
         """alternative init method: given a degree (and an optional quality)
         initialise the appropriate Interval object.
         degree is assumed to be appropriately major/perfect if not specified"""
 
-        default_value = default_degree_intervals[degree]
+        extended_degree = degree
+        if degree >= 8:
+            octave_span, degree = divmod(degree - 1, 7)
+            degree += 1
+        else:
+            octave_span = 0
 
         if quality is not None:
+            assert offset is None, f'Interval.from_degree received mutually exclusive quality and offset args'
             # cast to quality object if it is not one:
             quality = Quality(quality)
-
-            # modify interval value up or down depending on quality:
             if degree in perfect_degrees:
-                value = default_value + quality.offset_wrt_perfect
+                offset = quality.offset_wrt_perfect
             else:
-                value = default_value + quality.offset_wrt_major
-            return Interval(value, degree=degree)
+                offset = quality.offset_wrt_major
+        elif offset is not None:
+            assert quality is None, f'Interval.from_degree received mutually exclusive quality and offset args'
 
-        else:
-            # auto assume perfect or major - no adjustment needed to default
-            return Interval(default_value)
+        # elif offset is not None:
+        #     if degree in perfect_degrees:
+        #         quality = Quality.from_offset_wrt_perfect(offset)
+        #     else:
+        #         quality = Quality.from_offset_wrt_major(offset)
+
+        default_value = default_degree_intervals[degree] + (12*octave_span)
+        interval_value = default_value + offset
+        return Interval(interval_value, degree=extended_degree)
+
+    @property
+    def offset_from_default(self):
+        """how many semitones this interval is from its default/canonical (perfect/major) degree"""
+        perfect_degree = self.degree in [1,4,5]
+        offset = self.quality.offset_wrt_perfect if perfect_degree else self.quality.offset_wrt_major
+        return offset
 
     def __int__(self):
         return self.value
@@ -228,29 +257,22 @@ class Interval:
     def __repr__(self):
         return str(self)
 
-    # #### boolean validity checks for chord construction:
-    # def valid_degree(self, deg):
-    #     return self.mod in degree_valid_intervals[deg]
-    #
-    # @property
-    # def valid_third(self):
-    #     return self.valid_degree(3)
-    #
-    # @property
-    # def valid_fifth(self):
-    #     return self.valid_degree(5)
-    #
-    # @property
-    # def valid_seventh(self):
-    #     return self.valid_degree(7)
-    #
-    # @property
-    # def common_seventh(self):
-    #     """special case: common 7-degree intervals (value 10 or 11) need to be
-    #     considered more common than 6ths, which are themselves more common than
-    #     the uncommon dim7 (value9). used by automatic chord detection."""
-    #     return self.mod in [10,11]
-
+# from a list of intervals-from-tonic (e.g. a key specification), get the corresponding stacked intervals:
+def stacked_intervals(tonic_intervals):
+    stack = [tonic_intervals[0]]
+    steps_traversed = 0
+    for i, interval in enumerate(tonic_intervals[1:]):
+        prev_interval_value = stack[-1].value
+        next_interval_value = interval.value - prev_interval_value- steps_traversed
+        steps_traversed += prev_interval_value
+        stack.append(Interval(next_interval_value))
+    return stack
+# opposite operation: from a list of stacked intervals, get the intervals-from-tonic:
+def intervals_from_tonic(interval_stack):
+    tonic_intervals = [interval_stack[0]]
+    for i in interval_stack[1:]:
+        tonic_intervals.append(tonic_intervals[-1] + i)
+    return tonic_intervals
 
 # which intervals are considered perfect/major:
 perfect_intervals = [0, 5, 7]
@@ -284,10 +306,9 @@ default_degree_intervals = {
                 # 8: 12, # octave
                 }
 
-degree_names = {1: 'unison',  2: 'second', 3: 'third',
-                4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh',
-                8: 'octave', 9: 'ninth', 10: 'tenth',
-                11: 'eleventh', 12: 'twelfth', 13: 'thirteenth'}
+
+
+
 
 # interval aliases:
 

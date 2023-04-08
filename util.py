@@ -178,7 +178,27 @@ def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True, inc
     # finished, join output string and return:
     return output
 
+def check_all(iterable, check, type_assertion):
+    """accepts an iterable of objects, and a type that they are assumed to be,
+    and individually checks that all items in iterable are of that type.
 
+    'check' arg determines what function we use to check type. must be one of:
+        'isinstance' / 'instance': use "isinstance(X, Y)""
+        '==' / 'eq' / 'equals':    use "type(X) == Y"
+        'is':                      use "X is Y"                             """
+    for item in iterable:
+        if check in ('isinstance', 'instance'):
+            if not (isinstance(item, type_assertion)):
+                return False
+        elif check in ('==', 'eq', 'equals'):
+            if not (type(item) == type_assertion):
+                return False
+        elif check == 'is':
+            if not (item is type_assertion):
+                return False
+        else:
+            raise Exception(f"invalid check arg ({check}) to assert_all, must be one of: 'isinstance', '==, 'is'")
+    return True
 
 def transpose_nested_list(nested_list):
     """Given a list of lists (of equal length), or other iterables like strings,
