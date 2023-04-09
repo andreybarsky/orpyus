@@ -1,6 +1,6 @@
 from qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
 from parsing import degree_names, num_suffixes
-from util import test
+from util import rotate_list, test
 import pdb
 
 class Interval:
@@ -12,7 +12,8 @@ class Interval:
     def __init__(self, value:int, degree=None):
         if isinstance(value, Interval):
             # accept re-casting from another interval object:
-            value = value.value, degree = value.degree
+            degree = value.extended_degree
+            value = value.value
 
         self.value = value # signed integer semitone distance
 
@@ -32,7 +33,7 @@ class Interval:
         self.unison = (self.mod == 0)
 
         if degree is None:
-            # auto-detect degree by assuming ordinary diatonic intervals:
+            # no degree provided, so auto-detect degree by assuming ordinary diatonic intervals:
             self.degree = default_interval_degrees[self.mod] * self.sign
 
             # self.extended_degree is >=8 if this is a ninth or eleventh etc,
@@ -94,14 +95,12 @@ class Interval:
 
     @property
     def short_name(self):
-        if self.mod == 0:
-            return 'Unison'
-        elif self.quality.perfect:
-            short_qual = 'Perf'
+        if self.value == 0:
+            return '‹Rt›'
         else:
-            short_qual = (self.quality.name.capitalize())[:3]
-        short_deg = f'{self.extended_degree}{num_suffixes[self.extended_degree]}'
-        return f'{short_qual}{short_deg}'
+            sign_str = '-' if self.sign == -1 else ''
+            short_deg = f'{self.extended_degree}'
+            return f'‹{sign_str}{self.quality.short_name}{short_deg}›'
 
     @property
     def consonance(self):
@@ -139,12 +138,9 @@ class Interval:
                 offset = quality.offset_wrt_major
         elif offset is not None:
             assert quality is None, f'Interval.from_degree received mutually exclusive quality and offset args'
-
-        # elif offset is not None:
-        #     if degree in perfect_degrees:
-        #         quality = Quality.from_offset_wrt_perfect(offset)
-        #     else:
-        #         quality = Quality.from_offset_wrt_major(offset)
+        else:
+            # neither quality nor offset given: assume major/perfect, with no offset
+            offset = 0
 
         default_value = default_degree_intervals[degree] + (12*octave_span)
         interval_value = default_value + offset
@@ -205,6 +201,14 @@ class Interval:
         else:
             return Interval(-self.value)
 
+    def flatten(self):
+        """returns Interval object corresponding to this interval's mod-value and mod-degree"""
+        if self.value < 0:
+            # invert before flattening:
+            return (~self).flatten()
+        else:
+            return Interval(self.mod, degree=self.degree)
+
     def __eq__(self, other):
         """Value equivalence comparison for intervals - returns True if both have
         same value (but disregard degree)"""
@@ -219,9 +223,9 @@ class Interval:
         """Enharmonic equivalence comparison for intervals - returns True if both have
         same mod attr (but disregard degree and signed distance value)"""
         if isinstance(other, Interval):
-            return self.value % 12 == other.value % 12
+            return self.mod == other.mod
         elif isinstance(other, int):
-            return self.value % 12 == other % 12
+            return self.mod == (other % 12)
         else:
             raise TypeError('Intervals can only be compared to integers or other Intervals')
 
@@ -257,22 +261,150 @@ class Interval:
     def __repr__(self):
         return str(self)
 
-# from a list of intervals-from-tonic (e.g. a key specification), get the corresponding stacked intervals:
-def stacked_intervals(tonic_intervals):
-    stack = [tonic_intervals[0]]
-    steps_traversed = 0
-    for i, interval in enumerate(tonic_intervals[1:]):
-        prev_interval_value = stack[-1].value
-        next_interval_value = interval.value - prev_interval_value- steps_traversed
-        steps_traversed += prev_interval_value
-        stack.append(Interval(next_interval_value))
-    return stack
-# opposite operation: from a list of stacked intervals, get the intervals-from-tonic:
-def intervals_from_tonic(interval_stack):
-    tonic_intervals = [interval_stack[0]]
-    for i in interval_stack[1:]:
-        tonic_intervals.append(tonic_intervals[-1] + i)
-    return tonic_intervals
+class IntervalList(list):
+    """List subclass that is instantianted with an iterable of Interval-like objects and forces them all to Interval type".
+    useful for representing the attributes of e.g. AbstractChords and Scales."""
+    def __init__(self, *items):
+        if len(items) == 1 and isinstance(items[0], (list, tuple)):
+            # been passed a list of items, instead of a series of list items
+            items = items[0]
+        interval_items = self._cast_intervals(items)
+
+        super().__init__(interval_items)
+
+    @staticmethod
+    def _cast_intervals(items):
+        interval_items = []
+        for item in items:
+            if isinstance(item, Interval):
+                # add note
+                interval_items.append(item)
+            elif isinstance(item, int):
+                # cast int to interval
+                interval_items.append(Interval(item))
+            else:
+                raise Exception('IntervalList can only be initialised with Intervals, or ints that cast to Intervals')
+        return interval_items
+
+    def __str__(self):
+        return f'𝄁{", ".join([i.short_name for i in self])} 𝄁'
+
+    def __repr__(self):
+        return str(self)
+
+    def __add__(self, other):
+        """adds a scalar to each interval in this list,
+        or accepts an iterable and performs point-wise addition."""
+        if isinstance(other, (int, Interval)):
+            return IntervalList([i + other for i in self])
+        elif isinstance(other, (list, tuple)):
+            assert len(other) == len(self), f'IntervalLists can only be added with scalars or with other iterables of the same length'
+            return IntervalList([i + j for i,j in zip(self, other)])
+        else:
+            raise TypeError(f'IntervalLists can only be added with ints, Intervals, or iterables of either, but got type: {type(other)}')
+
+    def __sub__(self, other):
+        """subtracts a scalar from each interval in this list,
+        or accepts an iterable and performs point-wise subtraction."""
+        if isinstance(other, (int, Interval)):
+            return IntervalList([i - other for i in self])
+        elif isinstance(other, (list, tuple)):
+            assert len(other) == len(self), f'IntervalLists can only be subtracted with scalars or with other iterables of the same length'
+            return IntervalList([i - j for i,j in zip(self, other)])
+        else:
+            raise TypeError(f'IntervalLists can only be subtracted with ints, Intervals, or iterables of either, but got type: {type(other)}')
+
+    def sort(self):
+        super().sort()
+
+    def sorted(self):
+        # note that sorted(IntervalList) returns a list, NOT an IntervalList.
+        # we must use this instead
+        return IntervalList(sorted(self))
+
+    def strip(self):
+        """remove unison intervals from start and end of this list"""
+        if self[0].mod == 0:
+            new_intervals = self[1:]
+        else:
+            new_intervals = self[:]
+        if self[-1].mod == 0:
+            new_intervals = new_intervals[:-1]
+        return IntervalList(new_intervals)
+
+    def pad(self, left=True, right=False):
+        """if this list does NOT start and/or end with unisons, add them where appropriate"""
+        assert self == self.sorted(), f'non-sorted IntervalLists should NOT be padded'
+        if (self[0].mod != 0) and left:
+            new_intervals = [Interval(0)] + self[:]
+        else:
+            new_intervals = self[:]
+        if (self[-1].mod != 0) and right:
+            # add unison/octave above the last interval:
+            octave_span = self[-1].octave_span + 1
+            new_intervals = new_intervals + [Interval(12*(octave_span))]
+        return IntervalList(new_intervals)
+
+    def flatten(self, duplicates=False):
+        """flatten all intervals in this list and return them as a new (sorted) list.
+        if duplicates=False, remove those that are non-unique. else, keep them. """
+        new_intervals = [i.flatten() for i in self]
+        if not duplicates:
+            new_intervals = list(set(new_intervals))
+        return IntervalList(sorted(new_intervals))
+
+    def rotate(self, num_places):
+        """returns the rotated IntervalList that begins num_steps up
+        from the beginning of this one. used for inversions."""
+        return IntervalList(rotate_list(self, num_places))
+
+    def invert(self, position):
+        """used for calculating inversions: rotates, then subtracts
+        the value of the resulting first interval in list, and returns
+        those inverted intervals as a new IntervalList"""
+        rotated = self.rotate(position)
+        recentred = rotated - rotated[0] # centres first interval to be root again
+        inverted = recentred.flatten()   # inverts negative intervals to their correct values
+        return inverted
+
+    def stack(self):
+        """equivalent to cumsum: returns a new IntervalList based on the successive
+        sums of this one, as intervals from tonic.
+        e.g. [M3, m3, M3, M3].stack() returns [M3, P5, M7, m10]"""
+        interval_stack = self[:1]
+        for i in self[1:]:
+            interval_stack.append(i + interval_stack[-1])
+        return IntervalList(interval_stack)
+
+    def unstack(self):
+        """inverse operation - assume we are already stacked as intervals from tonic,
+        and recover the original stacked intervals.
+        e.g. [M3, P5, M7, m10].unstack() returns [M3, m3, M3, M3]"""
+        assert self == self.sorted(), f'Cannot unstack an un-ordered IntervalList: {self}'
+        interval_unstack = self[:1]
+        for i in range(1, len(self)):
+            interval_unstack.append(self[i] - self[i-1])
+        return IntervalList(interval_unstack)
+
+# quality-of-life alias:
+Intervals = IntervalList
+
+# # from a list of intervals-from-tonic (e.g. a key specification), get the corresponding stacked intervals:
+# def stacked_intervals(tonic_intervals):
+#     stack = [tonic_intervals[0]]
+#     steps_traversed = 0
+#     for i, interval in enumerate(tonic_intervals[1:]):
+#         prev_interval_value = stack[-1].value
+#         next_interval_value = interval.value - prev_interval_value- steps_traversed
+#         steps_traversed += prev_interval_value
+#         stack.append(Interval(next_interval_value))
+#     return stack
+# # opposite operation: from a list of stacked intervals, get the intervals-from-tonic:
+# def intervals_from_tonic(interval_stack):
+#     tonic_intervals = [interval_stack[0]]
+#     for i in interval_stack[1:]:
+#         tonic_intervals.append(tonic_intervals[-1] + i)
+#     return tonic_intervals
 
 # which intervals are considered perfect/major:
 perfect_intervals = [0, 5, 7]
@@ -362,7 +494,13 @@ DiminishedTwelfth = DimTwelfth = Diminished12th = Dim12th = Dim12 = Interval(18,
 PerfectTwelfth = PerTwelfth = Perfect12th = Perfect12 = Per12 = P12 = Interval(19)
 AugmentedTwelfth = AugTwelfth = Augmented12th = Aug12th = Aug12 = Interval(20, degree=12)
 
-common_intervals = [P1, m2, M2, m3, M3, P4, Dim5, Per5, m6, M6, m7, M7, P8, m9, M9, m10, M10, P11]
+# compound sixths
+DiminishedThirteenth = DimThirteenth = Diminished13th = Dim13th = Dim13 = Interval(19, degree=13)
+MinorThirteenth = MinThirteenth = Minor13th = Minor13 = Min13 = Min13th = m13 = Interval(20)
+MajorThirteenth = MajThirteenth = Major13th = Major13 = Maj13 = Maj13th = M13 = Interval(21)
+AugmentedThirteenth = AugThirteenth = Augmented13th = Aug13th = Aug13 = Interval(22, degree=13)
+
+common_intervals = [P1, m2, M2, m3, M3, P4, Dim5, Per5, m6, M6, m7, M7, P8, m9, M9, m10, M10, P11, P12, m13, M13]
 
 def unit_test():
     test(Interval(4) - Interval(2), Interval(2))
@@ -376,6 +514,17 @@ def unit_test():
     test(~Interval(-7), Per4)
     test(-Aug9, Interval(-15, degree=-9))
     test(~Dim12, -Aug11)
+
+    test(Interval(14), Interval.from_degree(9))
+
+    # test re-casting:
+    test(Interval(Interval(14)), Interval(14))
+
+    # test interval lists:
+    test(IntervalList([M3, P5]).pad(), IntervalList([P1, M3, P5, P8]))
+    test(IntervalList([M3, P5]), IntervalList([P1, M3, P5, P8]).strip())
+    test(IntervalList([M2, M3, P5]), IntervalList([M3, P5, M9]).flatten())
+
 
 
 if __name__ == '__main__':
