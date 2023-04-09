@@ -2,7 +2,7 @@
 
 import notes
 from notes import Note, NoteList
-from intervals import Interval
+from intervals import Interval, IntervalList
 from util import log, test, precision_recall, rotate_list, check_all, reverse_dict
 from parsing import valid_note_names, is_valid_note_name, parse_out_note_names, note_split, begins_with_valid_note_name
 import qualities
@@ -78,6 +78,12 @@ class ChordFactors(dict):
         sorted_keys = sorted(list(output_factors.keys()))
         return ChordFactors({k: output_factors[k] for k in sorted_keys}, qualifiers = output_factors.qualifiers)
 
+
+    def distance(self, other):
+        ### TBI: pick up here!
+        # distance from other ChordFactors objects, to detect altered chords from their factors
+        pass
+
     def __hash__(self):
         return hash(tuple(self))
 
@@ -127,7 +133,7 @@ class AbstractChord:
         self.factor_intervals = {i.degree: i for i in self.root_intervals}
 
         if self.inversion is not None: # list of self.intervals is with respect to this chord's inversion
-            self.intervals = rotate_list(self.root_intervals, self.inversion)
+            self.intervals = self.root_intervals.invert(self.inversion)
         else:
             self.intervals = self.root_intervals
 
@@ -136,12 +142,13 @@ class AbstractChord:
 
     @staticmethod
     def _parse_input(name, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=False):
-        """takes valid inputs to AbstractChord and parses them into factors, intervals and inversion."""
-
-        # factors = None
+        """takes valid inputs to AbstractChord and parses them into factors, intervals and inversion.
+        (see docstring for AbstractChord.__init__)"""
 
         if name is not None:
             assert factors is None and intervals is None
+            # sometimes backslashes are used for inversions instead of forward slashes:
+            name = name.replace('\\', '/')
             if '/' in name:
                 assert inversion is None and inversion_degree is None, 'Parsed slash chord as denoting inversion, but received mutually exclusive inversion arg'
                 # parse inversion from name
@@ -163,16 +170,21 @@ class AbstractChord:
             assert name is None and intervals is None
         elif intervals is not None:
             assert name is None and factors is None
-            # sanitise interval list input:
-            intervals = sorted([Interval(i) for i in intervals])
-            assert len(intervals) == len(set(intervals)), f'Interval list contains repeated intervals: {intervals}'
-            if intervals[0].value != 0:
-                # add Unison interval if it is not present
-                intervals = [Interval(0)] + intervals
+            # sanitise interval list input, expect root to be provided:
+            intervals = IntervalList(intervals).pad(left=True, right=False)
+            assert len(intervals) == len(set(intervals)), f'Interval list supplied to AbstractChord init contains repeated intervals: {intervals}'
+
+            ### now we do not pad
+            # if intervals[0].value != 0:
+            #     # add Unison interval if it is not present
+            #     intervals = [Interval(0)] + intervals
+
             # build factors by looping through intervals:
-            factors = {}
+            factors = ChordFactors({1:0})
             for i in intervals: # parse interval degree and quality
-                factors[i.degree] = i.offset_from_default
+                # catch special case: do not record perfect octaves
+                if i.mod != 0:
+                    factors[i.extended_degree] = i.offset_from_default
 
         if qualifiers is not None:
             if factors is None:
@@ -192,6 +204,7 @@ class AbstractChord:
             for deg, offset in factors.items():
                 # note that interval list always includes Unison as root
                 intervals.append(Interval.from_degree(deg, offset=offset))
+            intervals = IntervalList(intervals)
 
         if inversion_degree is not None:
             # which Xth inversion is this, from the inversion degree:
@@ -212,7 +225,7 @@ class AbstractChord:
             else:
                 raise TypeError(f'inversion must be an int or str, but got: {type(inversion)}')
 
-        return factors, sorted(intervals), inversion
+        return factors, intervals.sorted(), inversion
 
     def __len__(self):
         return len(self.factors)
@@ -237,14 +250,25 @@ class AbstractChord:
     def name(self):
         return f'{self.suffix} chord'
 
+    def root(self, root_note):
+        """constructs a Chord object from this AbstractChord with respect to a desired root"""
+        return Chord(root=root_note, factors=self.factors, inversion=self.inversion)
+
     def __str__(self):
-        # note_list = self.inverted_notes
-        interval_short_names = ['Root'] + [i.short_name for i in self.intervals[1:]]
+        # note that intervals are presented with respect to inversion
+        interval_short_names = [i.short_name for i in self.intervals]
         intervals_str = ', '.join(interval_short_names)
         return f'♫ {self.name}  | {intervals_str} |'
 
     def __repr__(self):
         return str(self)
+
+    def __eq__(self, other):
+        """AbstractChords are equal to others on the basis of their factors and inversion"""
+        if type(other) == AbstractChord:
+            return (self.factors == other.factors) and (self.inversion == other.inversion)
+        else:
+            raise TypeError(f'AbstractChords can only be compared to other AbstractChords')
 
 ################################################################################
 
@@ -265,26 +289,29 @@ class Chord(AbstractChord):
 
         self.root, chord_name = self._parse_root(name, root)
 
-        self.factors, self.intervals, inversion = self._parse_input(chord_name, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=True)
+        self.factors, self.root_intervals, inversion = self._parse_input(chord_name, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=True)
         # note that while self.inversion in AbstratChord comes out as strictly int or None
         # here we allow it to be a string denoting the bass note, which we'll correct in a minute
 
         # mapping of chord factors to intervals from tonic:
-        self.factor_intervals = {i.degree: i for i in self.intervals}
+        self.factor_intervals = {i.degree: i for i in self.root_intervals}
         # mapping of chord factors to notes:
         self.factor_notes = {degree: (self.root + i) for degree, i in self.factor_intervals.items()}
 
-        # list of notes inside this chord:
-        self.root_notes = NoteList([self.root + i for i in self.intervals])
+        # list of notes inside this chord, in root position:
+        self.root_notes = NoteList([self.root + i for i in self.root_intervals])
 
-        # discover the correct inversion parameters, as well as inverted notes:
-        self.inversion, self.inversion_degree, self.bass, self.notes = self._parse_inversion(inversion)
+        # discover the correct inversion parameters, as well as inverted notes / intervals if they differ from root position:
+        inv_params, self.notes, self.intervals = self._parse_inversion(inversion)
+
+        self.inversion, self.inversion_degree, self.bass = inv_params
 
         # quality of a chord is the quality of its third:
         self.quality = qualities.Perfect if 3 not in self.factors else self.factor_intervals[3].quality
 
         # set sharp preference based on root note:
         self._set_sharp_preference()
+
 
     @staticmethod
     def _parse_root(name, root):
@@ -305,16 +332,25 @@ class Chord(AbstractChord):
         with respect to already-defined self.root_notes"""
         if inversion is None:
             inversion = inversion_degree = None
+            # no inversion, so the bass is just the root, and the notes/intervals are in root position:
             bass = self.root
-            inverted_notes = self.root_notes
-            return inversion, inversion_degree, bass, inverted_notes
+            inverted_notes, inverted_intervals = self.root_notes, self.root_intervals
+
+            inv_params = (inversion, inversion_degree, bass)
+            return (inv_params), inverted_notes, inverted_intervals
+
         elif isinstance(inversion, int):
             assert 0 < inversion <= (len(self.factors)-1), f'{inversion} is an invalid inversion number for chord with {len(self.factors)} factors'
-            inversion_degree = self.intervals[inversion].degree
+            inversion_degree = self.root_intervals[inversion].degree
             bass = self.root_notes[inversion]
         elif isinstance(inversion, (Note, str)):
-            # assert is_valid_note_name(str), f'{inversion} was supplied as inversion bass note, but does not seem to be a note'
             bass = Note(inversion)
+
+            ### here we catch a special case: inversion over a bass note that is not in the specified chord.
+            # e.g. something like Chord('D/C#') - it is not really a D major chord,
+            # but a voicing of Dmaj7 or
+
+            assert bass in self.factor_notes.values(), f"Chord initialised with inversion over {bass}, but {bass} is not in this chord's notes: {self.factor_notes}"
             inversion_degree = [k for k,v in self.factor_notes.items() if v == bass][0]
             # get inversion from inversion_degree:
             for x, deg in enumerate(sorted(self.factors.keys())):
@@ -324,16 +360,19 @@ class Chord(AbstractChord):
 
         # infer inverted note order by finding the bass's place in our root_notes notelist:
         bass_place = [i for i, n in enumerate(self.root_notes) if n == bass][0]
+        assert inversion == bass_place ### is this always true?
         # and rearranging the notes by rotation, e.g. from ordering [0,1,2] to [1,2,0]:
         inverted_notes = self.root_notes.rotate(bass_place)
+        # inverted_intervals = [Interval(0)] + [n - bass for n in inverted_notes[1:]]
+        inverted_intervals = self.root_intervals.invert(bass_place)
 
-        return inversion, inversion_degree, bass, inverted_notes
+        inv_params = (inversion, inversion_degree, bass)
+        return (inv_params), inverted_notes, inverted_intervals
 
     @property
     def _inv_string(self):
         """inversion string, used internally by suffix method (and inherited by subclasses)"""
-        return f'/{self.bass}' if (self.inversion is not None) else ''
-
+        return f'/{self.bass.name}' if (self.inversion is not None) else ''
 
     def _detect_sharp_preference(self, default=False): #tonic, quality='major', default=False):
         """detect if a chord should prefer sharp or flat labelling
@@ -369,7 +408,6 @@ class Chord(AbstractChord):
         for n in self.notes:
             n._set_sharp_preference(prefer_sharps)
 
-
     @property
     def sharp_notes(self):
         """returns notes inside self, all with sharp preference"""
@@ -384,6 +422,8 @@ class Chord(AbstractChord):
     def name(self):
         return f'{self.root.name}{self.suffix}'
 
+
+
     def __str__(self):
         # note_list = self.inverted_notes
         # interval_short_names = ['Root'] + [i.short_name for i in self.intervals[1:]]
@@ -395,28 +435,129 @@ class Chord(AbstractChord):
     def __repr__(self):
         return str(self)
 
+    def __eq__(self, other):
+        """Chords are equal to others on the basis of their root, factors and inversion"""
+        if type(other) == Chord:
+            return (self.factors == other.factors) and (self.inversion == other.inversion) and (self.root == other.root)
+        else:
+            raise TypeError(f'Chords can only be compared to other Chords')
+
+    # enharmonic equality:
+    def enharmonic_to(self, other):
+        """Compares enharmonic equivalence across Chords,
+        i.e. whether they contain the exact same notes (but not necessarily in the same order),
+        or with Chord and AbstractChord, i.e. do they contain the same intervals"""
+        if isinstance(other, Chord):
+            matching_notes = 0
+            for note in self.notes:
+                if note in other.notes:
+                    matching_notes += 1
+            if matching_notes == len(self.notes) and len(self.notes) == len(other.notes):
+                return True
+            else:
+                return False
+        elif isinstance(other, AbstractChord):
+            return self.intervals == other.intervals
+        else:
+            raise TypeError(f'Enharmonic equivalence operator & not defined between Chord and: {type(other)}')
+
+    # enharmonic comparison operator:
+    def __and__(self, other):
+        return self.enharmonic_to(other)
+
+    ### relative majors/minors are not very well-defined for chords (as opposed to keys), but we can have them anyway:
     @property
     def relative_minor(self):
         # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
         assert self.quality.major, f'{self} is not major, and therefore has no relative minor'
-        rm_tonic = relative_minors[self.root.name]
-        return Chord(rm_tonic, 'minor')
+        rel_root = relative_majors[self.root.name]
+        new_factors = ChordFactors(self.factors)
+        new_factors[3] -= 1 # flatten third
+        return Chord(factors=new_factors, root=rel_root, inversion=self.inversion)
 
     @property
     def relative_major(self):
         # assert not self.major, f'{self} is already major, and therefore has no relative major'
         assert self.quality.minor, f'{self} is not minor, and therefore has no relative major'
-        rm_tonic = relative_majors[self.root.name]
-        return Chord(rm_tonic)
+        rel_root = relative_majors[self.root.name]
+        new_factors = ChordFactors(self.factors)
+        new_factors[3] += 1 # raise third
+        return Chord(factors=new_factors, root=rel_root, inversion=self.inversion)
 
     @property
     def relative(self):
         if self.quality.major:
-            return self.relative_minor()
+            return self.relative_minor
         elif self.quality.minor:
-            return self.relative_major()
+            return self.relative_major
         else:
             raise Exception(f'Chord {self} is neither major or minor, and therefore has no relative')
+
+    def __invert__(self):
+        """inversion operator on Chords returns the relative major or minor"""
+        return self.relative
+
+    def _get_flags(self):
+        """Returns a list of the boolean flags associated with this object"""
+        flags_names = {
+                       'inverted': self.inverted,
+                       'minor': self.minor,
+                       'major': self.major,
+                       'suspended': self.suspended,
+                       'diminished': self.diminished,
+                       'augmented': self.augmented,
+                       'indeterminate': self.indeterminate,
+                       'fifth chord': self.fifth_chord,
+                       'extended': self.extended,
+
+                       }
+        return [string for string, attr in flags_names.items() if attr]
+
+    #### useful properties:
+
+    @property
+    def properties(self):
+        flags = ', '.join(self._get_flags())
+        return f"""
+        {str(self)}
+        Type:           {type(self)}
+
+        Name:           {self.name}
+        Root:           {self.root}
+        Intervals:      {self.intervals}
+        Notes:          {self.notes}
+
+        Factors:        {self.factors}
+        Inversion:      {self.inversion}
+          (bass note):  {self.bass}
+
+        Suffix:         {self.suffix}
+        Quality:        {self.quality}
+
+        SharpPref:      {self.prefer_sharps}
+
+        Flags:          {flags}
+        ID:             {id(self)}"""
+
+    def summary(self):
+        print(self.properties)
+
+
+    #### audio methods:
+
+    # wrappers for the NoteList audio methods of self.notes:
+    def _waves(self, *args, **kwargs):
+        return self.notes._waves(*args, **kwargs)
+
+    def _chord_wave(self, *args, **kwargs):
+        return self.notes._chord_wave(*args, **kwargs)
+
+    def _melody_wave(self, *args, **kwargs):
+        return self.notes._melody_wave(*args, **kwargs)
+
+    def play(self, *args, **kwargs):
+        self.notes.play(*args, **kwargs)
+
 
 ################################################################################
 
@@ -424,60 +565,66 @@ class Chord(AbstractChord):
 additions = [k for k in qualities.chord_modifiers.keys() if 'add' in k]
 suspensions = [k for k in qualities.chord_modifiers.keys() if 'sus' in k]
 
-common_chord_names = [k for k, v in qualities.chord_types.items() if ('dim' not in k and isinstance(v, ChordQualifier))] + ['m7'] + suspensions
-uncommon_chord_names = [k for k, v in qualities.chord_types.items() if ('dim' in k or isinstance(v, list))] + ['mmaj7'] + additions
+# implicit concatenations must be accounted for here:
+extended_minor_chord_names = [f'm{d}' for d in (7,9,11,13)]
+minormajor_chord_names = [f'mmaj{d}' for d in (7,9,11,13)]
+
+common_chord_names = [k for k, v in qualities.chord_types.items() if ('dim' not in k and isinstance(v, ChordQualifier))] + suspensions + extended_minor_chord_names
+uncommon_chord_names = [k for k, v in qualities.chord_types.items() if ('dim' in k or isinstance(v, list))] + additions + minormajor_chord_names
+rare_chord_names = []
+very_rare_chord_names = []
+legendary_chord_names = []
 
 # pre-initialise AbstractChordFactors for chord name searching:
 factors_to_chordnames = {}
-rare_chord_names = []
-legendary_chord_names = []
-for chord_name in common_chord_names + uncommon_chord_names:
-    base_chord = AbstractChord(chord_name)
+# loop across chord names of a given rarity, modify them, and put them in the rarer list:
+for rarity, chord_names, rarer_list in zip(['common', 'uncommon'], [common_chord_names, uncommon_chord_names], [rare_chord_names, very_rare_chord_names]):
+    for chord_name in chord_names:
+        base_chord = AbstractChord(chord_name)
 
-    if base_chord.factors in factors_to_chordnames:
-        import pdb; pdb.set_trace()
-    factors_to_chordnames[base_chord.factors] = chord_name
+        if base_chord.factors in factors_to_chordnames:
+            print(f'Key clash: {chord_name} with factors {base_chord.factors} already in factors_to_chordnames, as: {factors_to_chordnames[base_chord.factors]}')
+        factors_to_chordnames[base_chord.factors] = chord_name
 
-    # this chord can be suspended if it isn't already suspended and is major:
-    if chord_name not in qualities.chord_modifiers:
-        if base_chord.quality.major: # minor chords can't be suspended
-            for suspension in suspensions:
-                suspension_qual = ChordQualifier(suspension)
-                if suspension_qual.valid_on(base_chord.factors):
-                    suspended_name = chord_name + suspension
-                    suspended_factors = base_chord.factors + suspension_qual
-                    if suspended_factors in factors_to_chordnames:
-                        import pdb; pdb.set_trace()
-                    factors_to_chordnames[suspended_factors] = suspended_name
-                    rare_chord_names.append(suspended_name)
-    # and any chord can be added to if the addition is valid:
-    # if chord_name not in qualities.chord_modifiers:
-        for addition in additions:
-            addition_qual = ChordQualifier(addition)
-            if addition_qual.valid_on(base_chord.factors):
-                added_name = chord_name + addition
-                added_factors = base_chord.factors + addition_qual
-                if added_factors in factors_to_chordnames:
-                    import pdb; pdb.set_trace()
-                factors_to_chordnames[added_factors] = added_name
-                rare_chord_names.append(added_name)
-
-    # apply BOTH to make legendary chords:
-    # if chord_name not in qualities.chord_modifiers:
-        # for addition in additions:
+        # this chord can be suspended if it is a standard chord type and is major:
+        if chord_name not in qualities.chord_modifiers:
+            if base_chord.quality.major: # minor chords can't be suspended
                 for suspension in suspensions:
                     suspension_qual = ChordQualifier(suspension)
-                    if suspension_qual.valid_on(added_factors) and base_chord.quality.major:
-                        legendary_factors = added_factors + suspension_qual
-                        if legendary_factors in factors_to_chordnames:
-                            import pdb; pdb.set_trace()
-                        legendary_name = added_name + suspension
-                        factors_to_chordnames[legendary_factors] = legendary_name
-                        legendary_chord_names.append(legendary_name)
+                    if suspension_qual.valid_on(base_chord.factors):
+                        suspended_name = chord_name + suspension
+                        suspended_factors = base_chord.factors + suspension_qual
+                        if suspended_factors in factors_to_chordnames:
+                            # import pdb; pdb.set_trace()
+                            print(f'Key clash: {suspended_name} with factors {suspended_factors} already in factors_to_chordnames, as: {factors_to_chordnames[suspended_factors]}')
+                        factors_to_chordnames[suspended_factors] = suspended_name
+                        rarer_list.append(suspended_name)
+        # standard chords can also have additions on them, if those additions are valid:
+            for addition in additions:
+                addition_qual = ChordQualifier(addition)
+                if addition_qual.valid_on(base_chord.factors):
+                    added_name = chord_name + addition
+                    added_factors = base_chord.factors + addition_qual
+                    if added_factors in factors_to_chordnames:
+                        import pdb; pdb.set_trace()
+                    factors_to_chordnames[added_factors] = added_name
+                    rarer_list.append(added_name)
+
+        # apply BOTH to make legendary chords:
+                    for suspension in suspensions:
+                        suspension_qual = ChordQualifier(suspension)
+                        if suspension_qual.valid_on(added_factors) and base_chord.quality.major:
+                            legendary_factors = added_factors + suspension_qual
+                            if legendary_factors in factors_to_chordnames:
+                                import pdb; pdb.set_trace()
+                            legendary_name = added_name + suspension
+                            factors_to_chordnames[legendary_factors] = legendary_name
+                            legendary_chord_names.append(legendary_name)
 
 chord_names_by_rarity = {'common': common_chord_names,
                          'uncommon': uncommon_chord_names,
                          'rare': rare_chord_names,
+                         'very_rare': very_rare_chord_names,
                          'legendary': legendary_chord_names}
 
 chordnames_to_factors = reverse_dict(factors_to_chordnames)
@@ -495,7 +642,7 @@ for rarity, chord_names in chord_names_by_rarity.items():
 
 
 
-
+### WIP, incomplete class
 class ChordVoicing(Chord):
     """a Chord built on a specific note of a specific pitch, whose members are OctaveNotes.
     unlike its parent classes, a ChordVoicing can have repeats of the same Note at multiple pitches.
@@ -507,6 +654,7 @@ class ChordVoicing(Chord):
 
         self.factors, self.intervals, self.inversion = self._parse_input(chord_name, factors, intervals, inversion, inversion_degree, qualifiers)
 
+        ### TBI: everything else
 
     @staticmethod
     def _parse_root_octave(name, root, octave):
@@ -543,3 +691,17 @@ class ChordVoicing(Chord):
                     octave = octave
                     root = Note(root).in_octave(octave)
             return root, octave, name
+
+
+def unit_test():
+    # test inversion by factor/bass, AbstractChord->Chord initialisation, and unusual note names:
+    test(Chord('E#m7/C'), AbstractChord('m7/2').root('F'))
+    # test correct production of root notes/intervals and inverted notes/intervals:
+    test(Chord('Am/C').root_notes, Chord('Am').root_notes)
+    test(Chord('Am/C').root_intervals, Chord('Am').root_intervals)
+    test(Chord('Am/C').notes, Chord('C6(no5)').notes)
+    test(Chord('Am/C').intervals, Chord('C6(no5)').intervals)
+
+
+if __name__ == '__main__':
+    unit_test()

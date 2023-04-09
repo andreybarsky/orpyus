@@ -73,6 +73,12 @@ class Quality:
         else:
             raise Exception(f'Quality object initialised using name arg, expected string (or Quality object) but got type: {type(name)}')
 
+    @property
+    def short_name(self):
+        if self.major_ish or self.perfect:
+            return self.name[0].upper()
+        elif self.minor_ish:
+            return self.name[0]
 
     def __invert__(self):
         """invert major to minor, aug to dim, or vice versa"""
@@ -349,8 +355,9 @@ class ChordQualifier:
 chord_types =  {'m': ChordQualifier(make={3: -1}),
                 '5': ChordQualifier(remove=3, verify={5:0}),
                 'dim': ChordQualifier(modify={3:-1, 5:-1}),
-                '+': ChordQualifier(modify={5:+1}, verify={3:0}),
+                '+': ChordQualifier(modify={5:+1}),
                 '6': ChordQualifier(add=6),
+
 
                 '7': ChordQualifier(make={7: -1}), # dominant 7th
                 'maj7': ChordQualifier(make={7: 0}),
@@ -359,17 +366,23 @@ chord_types =  {'m': ChordQualifier(make={3: -1}),
                 # note: m7 is an implicit concatenation of 'm' and '7'
                 # and mmaj7 is an implicit concatenation of 'm' and 'maj7'
 
-                # explicit concatenations:
+                # explicit concatenations: (for chords that ought to be recognised during chord name searching)
+                'm6': ['m', '6'],
                 'hdim7': ['dim', '7'],    # half diminished 7th (diminished triad with minor 7th)
                 '9': ['7', '♮9'],          # i.e. dominant 9th
-                'm9': ['m', '7', '♮9'],    # minor 9th
+                # 'm9': ['m', '7', '♮9'],    # minor 9th
                 'maj9': ['maj7', '♮9'],    # major 9th
                 'dm9': ['7', '♭9'],        # dominant minor 9th
                 'dim9': ['dim7', '♮9'],    # diminished 9th
 
-                '11': ['9', '♮11'],
-                'm11': ['m9', '♮11'],
-                'maj11': ['maj9', '♮11'],
+                '11': ['9', '♮11'],        # dominant 11th
+                # 'm11': ['m9', '♮11'],      # minor 11th
+                'maj11': ['maj9', '♮11'],  # major 11th
+
+                '13': ['11', '♮13'],              # dominant 13th
+                # 'm13': ['m11', '♮13'],            # minor 13th
+                'maj13': ['maj11', '♯11', '♮13'],        # major 13th ?? raised 11th??
+
                 }
 
 
@@ -380,6 +393,7 @@ chord_modifiers = {'(no5)': ChordQualifier(remove=5),
 
                     'add9': ChordQualifier(add={9:0}, verify={7: False}),
                     'add11': ChordQualifier(add=11, verify={9: False}),
+                    'add13': ChordQualifier(add=13, verify={11: False}),
                     # 'add4': ChordQualifier(add=4), # are these real? or just add11s
                     }
 
@@ -389,9 +403,12 @@ ops_accidentals = reverse_dict(accidental_ops)
 
 chord_alterations = {}
 for acc, val in accidental_ops.items():
-    for degree in range(2, 12):
+    for degree in range(2, 14):
         alteration_name = f'{acc}{degree}'
-        alteration_qual = ChordQualifier(make={degree:val})
+        if acc == '♮':
+            alteration_qual = ChordQualifier(add={degree:val})
+        else:
+            alteration_qual = ChordQualifier(make={degree:val})
         chord_alterations[alteration_name] = alteration_qual
 
 # union of them all:
@@ -407,17 +424,20 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      '+': ['aug','augmented'],
                      'hdim': ['ø', 'half diminished', 'half dim', 'half-diminished', 'half-dim'],
                      'add': ['added'],
+                     '(no5)': ['no5', '(omit5)'],
                      '': ['dominant', 'dom'], # bit of a kludge; but 'domX' always refers to an X chord so it works in practice
                      '♯': ['#', 'sharp', 'sharpened', 'raised'],
                      '♭': ['b', 'flat', 'flattened', 'lowered'],
                      '2': ['two', '2nd', 'second'],
                      '4': ['four', '4th', 'fourth'],
-                     '5': ['five', '5th', 'fifth'],
+                     '5': ['five', '5th', 'fifth', '(no 3)', 'power', 'power chord'],
                      '6': ['six', '6th', 'sixth', 'add6'], # no such thing as an add6!
                      '7': ['seven', '7th', 'seventh'],
                      '9': ['nine', '9th', 'ninth'],
                      '10': ['ten', '10th', 'tenth'],
                      '11': ['eleven', '11th', 'eleventh'],
+                     '12': ['twelve', '12th', 'twelfth'],
+                     '13': ['thirteen', '13th', 'thirteenth'],
                      }
 
 alias_qualifiers = unpack_and_reverse_dict(qualifier_aliases)
@@ -435,7 +455,7 @@ def parse_chord_qualifiers(qual_str, verbose=False, allow_note_names=False):
 
     # we need to catch a special case: 'major' as first qualifier NOT followed by an extended degree number
     major_in_front = (len(reduced_quals) >= 1 and reduced_quals[0] == 'maj')
-    followed_by_degree = (len(reduced_quals) >= 2 and reduced_quals[1] in ['7', '9', '11'])
+    followed_by_degree = (len(reduced_quals) >= 2 and reduced_quals[1] in ['7', '9', '11', '13'])
     if major_in_front:
         if not followed_by_degree:
             reduced_quals = reduced_quals[1:]
