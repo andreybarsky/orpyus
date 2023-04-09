@@ -7,79 +7,72 @@ import notes as notes
 import pdb
 
 
-class ScaleDegree:
-    """The degrees of a scale, with modulo arithmetic defined over them"""
+class ScaleDegree(int):
+    """The degrees of a scale. Subclass of int, but adds and subtracts according
+    to modulo arithmetic (beginning at 1, not 0)"""
 
-    def __init__(self, degree):
-        # accept re-casting:
-        if isinstance(degree, ScaleDegree):
-            self.value = degree.value
-        else:
-            assert isinstance(degree, int), f'ScaleDegree received invalid init arg, expected int but got: {degree}'
-            if (degree < 1) or (degree > 7):
-                degree = ((degree-1) % 7) + 1
-            self.value = degree
+    def __new__(cls, val):
+        # instantiate as int but mod into range(1,8)
+        if (val < 1) or (val > 7):
+            val = ((val-1) % 7) + 1
+        object = super().__new__(cls, val)
+        return object
 
     def __add__(self, other):
-        assert isinstance(other, (int, Interval))
-        other_val = int(other)
-        return ScaleDegree(self.value + other_val)
-        # # mod back to range 1-7
-        # new_degree = ((new_degree-1) % 7) + 1
+        assert isinstance(other, (int)), "ScaleDegrees can only be added or subtracted with ints"
+        # mod back to range(1,8)
+        new_degree = int(self) + int(other)
+        new_degree = ((new_degree-1) % 7) + 1
+        return ScaleDegree(new_degree)
 
     def __sub__(self, other):
-        assert isinstance(other, (int, Interval))
+        assert isinstance(other, (int)), "ScaleDegrees can only be added or subtracted with ints"
         return self + (-other)
 
+    def __mul__(self, other):
+        raise Exception(f'__mul__ undefined for ScaleDegrees')
+
+    def __div__(self, other):
+        raise Exception(f'__div__ undefined for ScaleDegrees')
+
     def __str__(self):
-        return f'{self.value}\u0302' # unicode circumflex character
+        return f'{str(int(self))}\u0302' # unicode circumflex character
 
     def __repr__(self):
         return str(self)
 
-    def __int__(self):
-        return self.value
-
-    def __eq__(self, other):
-        if isinstance(other, ScaleDegree):
-            return self.value == other.value
-        else:
-            raise TypeError(f'__eq__ not defined between ScaleDegree and {type(other)}')
-
-    def __hash__(self):
-        return hash(str(self))
-
     def fifth_distance(self, other):
-        return interval_distance(self, other, 4)
+        return interval_distance(self, other, 5)
 
     def fourth_distance(self, other):
-        return interval_distance(self, other, 3)
+        return interval_distance(self, other, 4)
 
     def third_distance(self, other):
-        return interval_distance(self, other, 2)
+        return interval_distance(self, other, 3)
 
     def second_distance(self, other):
-        return interval_distance(self, other, 1)
+        return self.distance(self, other, 2)
 
-
-
-def interval_distance(deg1, deg2, step_degree):
-    """distance between two scale-degrees, in degree-interval steps.
-    note that a fifth is 4 step_degrees, a third is 2 step_degrees, etc."""
-    assert step_degree in range(1,8), f'Invalid step degree for counting interval distance between ScaleDegrees: {step_degree}'
-    deg1 = ScaleDegree(deg1)
-    distance = 0
-    # count in two directions simultaneously, return the lowest:
-    pos_proxy = ScaleDegree(deg2)
-    neg_proxy = ScaleDegree(deg2)
-    while (pos_proxy != deg1) and (neg_proxy != deg1):
-        pos_proxy += step_degree
-        neg_proxy -= step_degree
-        distance += 1
-    if pos_proxy == deg1:
-        return -distance
-    elif neg_proxy == deg1:
-        return distance
+    @staticmethod
+    def distance(deg1, deg2, step_degree):
+        """distance between two scale-degrees, in degree-interval steps.
+        note that a fifth is 5 step_degrees but implicitly a step size of 4,
+        a third is 3 step_degrees but implicitly step size=2, etc."""
+        assert step_degree in range(2,8), f'Invalid step degree for counting interval distance between ScaleDegrees: {step_degree}'
+        deg1 = ScaleDegree(deg1)
+        step_size = step_degree - 1
+        distance = 0
+        # count in two directions simultaneously, return the lowest:
+        pos_proxy = ScaleDegree(deg2)
+        neg_proxy = ScaleDegree(deg2)
+        while (pos_proxy != deg1) and (neg_proxy != deg1):
+            pos_proxy += step_size
+            neg_proxy -= step_size
+            distance += 1
+        if pos_proxy == deg1:
+            return -distance
+        elif neg_proxy == deg1:
+            return distance
 
 ### TBI: should scales be able to be modified by ChordQualifiers or something similar, like ChordFactors can?
 class Scale:
@@ -88,19 +81,20 @@ class Scale:
     def __init__(self, scale_name: str, chromatic_intervals = None):
         self.name, self.intervals, self.base_scale, self.rotation = self._parse_input(scale_name)
 
-        assert len(self.intervals) == 7, f"{scale.name} is not diatonic: has {len(self.intervals)} intervals instead of 7"
 
         # build degrees dict that maps ScaleDegrees to this scale's intervals:
         self.degrees = {ScaleDegree(1): Unison}
         for d, i in enumerate(self.intervals):
-            degree = ScaleDegree(d+2)
-            self.degrees[degree] = i
+            scale_degree = ScaleDegree(d+2)
+            self.degrees[scale_degree] = i
             # sanity check: one interval on each degree
-            assert i.degree == degree.value, f'Interval degree {i.degree} does not equal expected scale degree: {degree.value}'
+            assert i.degree == scale_degree, f'Interval degree {i.degree} does not equal expected scale degree: {scale_degree}'
             # this will work once new_intervals is finished
 
+        assert len(self.degrees) == 7, f"{scale_name} is not diatonic: has {len(self.degrees)} degrees instead of 7"
+
         # determine quality by asking: is the third major or minor
-        self.quality = self.degrees[3].quality
+        self.quality = self[3].quality
 
         # add chromatic intervals (blues notes etc.)
         if chromatic_intervals is not None:
@@ -133,6 +127,9 @@ class Scale:
         else:
             raise TypeError(f'Scale.__contains__ not defined for items of type: {type(item)}')
 
+    def __getitem__(self, degree):
+        return self.degrees[degree]
+
     def _parse_input(self, inp):
         # if input is an existing scale, just keep it:
         if isinstance(inp, Scale):
@@ -162,8 +159,12 @@ class Scale:
             raise TypeError(f'Invalid input to Scale init: expected scale_name string, or iterable of intervals, or Scale object, but got: {type(inp)}')
 
     @staticmethod
-    def from_intervals(interval_key):
-        scale_name = interval_mode_names[interval_key][-1]
+    def from_intervals(intervals):
+        # ensure that these are interval objects, and ensure that it contains no unison interval (root, octave):
+        intervals = [Interval(i) for i in intervals if (i % 12) != 0]
+        print(f'Initializing from intervals: {intervals}')
+
+        scale_name = interval_mode_names[tuple(intervals)][-1]
         return Scale(scale_name)
 
     def __str__(self):
@@ -211,14 +212,25 @@ class Scale:
             hex_scale[3] = Interval(hex_scale[3].value-1, degree=4) # augmented fourth
         return hex_scale
 
-    def chord(self, degree, qualifiers=None):
-        """returns an AbstractChord as triad built on the chosen degree of this scale,
-        with some optional qualifiers afterward"""
+    def chord(self, degree, order=3, qualifiers=None):
+        """returns an AbstractChord built on a desired degree of this scale,
+        and of a desired order (where triads are order=3, tetrads are order=4, etc.).
+        optionally accepts chord qualifiers in addition, to modify the chord afterward"""
         root_degree = ScaleDegree(degree)
-        degree3, degree5 = root_degree+2, root_degree+4
-        chord_degrees = [root_degree, degree3, degree5]
+        # calculate chord degrees by successively applying thirds:
+        chord_degrees = [root_degree+(o*2) for o in range(1, order)] # e.g. third and fifth degrees for oder=3
         chord_intervals = [self[d] for d in chord_degrees]
         return AbstractChord(intervals=chord_intervals, qualifiers=qualifiers)
+
+    def triad(self, degree, qualifiers=None):
+        """wrapper for self.chord() to create a tetrad (i.e. 7-chord)
+        on the chosen degree of this scale"""
+        return self.chord(degree, order=3, qualifiers=qualifiers)
+
+    def tetrad(self, degree, qualifiers=None):
+        """wrapper for self.chord() to create a tetrad (i.e. 7-chord)
+        on the chosen degree of this scale"""
+        return self.chord(degree, order=4, qualifiers=qualifiers)
 
     def _add_chromatic_intervals(self, chromatic_intervals):
         assert isinstance(chromatic_intervals, (list, tuple)), f'chromatic_intervals must be an iterable of Interval objects'
@@ -232,12 +244,12 @@ class Scale:
 
 
 class Subscale(Scale):
-    """a scale that has fewer than the diatonic 7 intervals,
+    """a scale that contains a subset of the diatonic 7 intervals,
     such as a pentatonic or hexatonic scale.
     not all Scale operations are well-defined on it, but some will work fine.
 
     accepts an extra optional init argument, chromatic_degrees: None, or iterable.
-    should contain a list of Intervals that don't belong to the base scale, like blues notes.
+    if not None, should contain a list of Intervals that don't belong to the base scale, like blues notes.
     chords using those notes are valid, though they are never chord roots"""
 
     def __init__(self, base_scale_name=None, degrees=None, intervals=None, chromatic_intervals=None):
@@ -431,6 +443,12 @@ def unit_test():
 
     # test chords built on scaledegrees:
     print(Scale('major').chord(7))
+
+    # test scale init from intervals:
+    from chords import Chord
+    cmaj13_intervals = Chord('Cmaj13').intervals
+    print(f'cmaj13_intervals: {cmaj13_intervals}')
+    print(Scale.from_intervals(cmaj13_intervals))
 
 if __name__ == '__main__':
     unit_test()

@@ -22,6 +22,7 @@ note_names_natural_unicode = [n + '♮' if len(n)== 1 else n for n in note_names
 
 valid_note_names = set(note_names + note_names_flat + note_names_sharp +
                        note_names_flat_unicode + note_names_sharp_unicode +
+                       note_names_very_flat + note_names_very_sharp +
                        note_names_very_flat_unicode + note_names_very_sharp_unicode +
                        note_names_natural_unicode)
 

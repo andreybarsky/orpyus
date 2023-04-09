@@ -34,13 +34,14 @@ class TestSuite:
 test = TestSuite()
 
 # generically useful functions used across modules:
-def rotate_list(lst, num_steps):
+def rotate_list(lst, num_steps, N=None):
     """Accepts a list, and returns the wrapped-around list
     that begins num_steps up from the beginning of the original.
     used for inversions, i.e. the 2nd inversion of [0,1,2] is [1,2,0],
-    and for modes, which are rotations of scales. """
-
-    N = len(lst)
+    and for modes, which are rotations of scales.
+    N uses the length of the list by default,  """
+    if N is None:
+        N = len(lst)
     rotated_start_place = num_steps
     rotated_idxs = [(rotated_start_place + i) % N for i in range(N)]
     rotated_lst= [lst[i] for i in rotated_idxs]

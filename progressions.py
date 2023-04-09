@@ -285,6 +285,9 @@ class Progression:
             deg_interval = Interval.from_degree(deg_int, quality=deg_quality)
             self.intervals.append(deg_interval)
 
+    def __str__(self):
+        return '𝄡 ' ... #TBI
+
 class ChordProgression(Progression):
     """Progression subtype defined using specific chords, also acts as container class for Chord objects"""
     def __init__(self, chords):

@@ -1,22 +1,25 @@
 # python library for handling musical notes, intervals, and chords
 
-from intervals import Interval
-from parsing import note_names, parse_octavenote_name, is_flat, is_sharp, is_valid_note_name, parse_out_note_names
+from intervals import Interval, IntervalList
+from parsing import note_names, note_positions, parse_octavenote_name, is_flat, is_sharp, is_valid_note_name, parse_out_note_names
 import conversion as conv
 
-from util import log, test
+from util import log, test, rotate_list
 
 import math
 import pdb
 
-# relative values (positions within scale) with respect to C major, starting with 0=C:
-note_positions = {note_name:i for i, note_name in enumerate(note_names['generic'])}
-note_positions.update({note_name:i for i, note_name in enumerate(note_names['flat'])})
-note_positions.update({note_name:i for i, note_name in enumerate(note_names['sharp'])})
+### TBI: enharmonic equivalence operator? &? ^?
 
-note_positions.update({note_name:i for i, note_name in enumerate(note_names['flat_unicode'])})
-note_positions.update({note_name:i for i, note_name in enumerate(note_names['sharp_unicode'])})
-note_positions.update({note_name:i for i, note_name in enumerate(note_names['natural_unicode'])})
+
+# relative values (positions within scale) with respect to C major, starting with 0=C:
+# note_positions = {note_name:i for i, note_name in enumerate(note_names['generic'])}
+# note_positions.update({note_name:i for i, note_name in enumerate(note_names['flat'])})
+# note_positions.update({note_name:i for i, note_name in enumerate(note_names['sharp'])})
+#
+# note_positions.update({note_name:i for i, note_name in enumerate(note_names['flat_unicode'])})
+# note_positions.update({note_name:i for i, note_name in enumerate(note_names['sharp_unicode'])})
+# note_positions.update({note_name:i for i, note_name in enumerate(note_names['natural_unicode'])})
 
 # get note name string from position in octave:
 def accidental_note_name(pos, prefer_sharps=False):
@@ -508,31 +511,47 @@ class NoteList(list):
     def __add__(self, other):
         if isinstance(other, (int, Interval)):
             return NoteList([n + other for n in self])
-        elif isinstance(other, NoteList):
-            assert len(self) == len(other), "Can only add NoteLists of equal length"
-            return [self[i] + other[i] for i in range(len(self))]
+        elif isinstance(other, (list, tuple)):
+            assert len(self) == len(other), "Can only add NoteLists with scalars or with iterables of equal length"
+            assert not isinstance(other, NoteList), "NoteLists cannot be added to NoteLists"
+            # return a NoteList, since nothing but Intervals can be added to Notes, and the result is always a new Note
+            return NoteList([i + j for i,j in zip(self, other)])
         else:
             raise Exception(f"Can't add NoteList with {type(other)}")
 
     def __sub__(self, other):
         if isinstance(other, (int, Interval)):
             return NoteList([n - other for n in self])
-        elif isinstance(other, NoteList):
-            assert len(self) == len(other), "Can only subtract NoteLists of equal length"
-            return [self[i] - other[i] for i in range(len(self))]
+        elif isinstance(other, Note):
+            return IntervalList([n - other for n in self])
+        elif isinstance(other, (list, tuple)):
+            assert len(self) == len(other), "Can only subtract NoteLists with Notes, scalars, or with iterables of equal length"
+            out_list = [i - j for i,j in zip(self, other)]
+            if isinstance(other, IntervalList) or check_all(out_list, 'isinstance', Note):
+                # return a NoteList if we've ended up with only notes:
+                return NoteList(out_list)
+            elif isinstance(other, NoteList) or check_all(out_list, 'isinstance', (int, Interval)):
+                # or an IntervalList if we've ended up with only intervals:
+                return IntervalList(out_list)
+            else:
+                # else just return a plain list
+                return out_list
         else:
             raise Exception(f"Can't subtract {type(other)} from NoteList")
 
     def rotate(self, num_places):
-        """returns the rotated NoteList that egins num_steps up
+        """returns the rotated NoteList that begins num_steps up
         from the beginning of this one. used for inversions,
         i.e. the 2nd inversion of [0,1,2] is [1,2,0], (a rotation of 1 place in this case)
         and for modes, which are rotations of scales. """
 
-        rotated_start_place = num_places
-        rotated_idxs = [(rotated_start_place + i) % len(self) for i in range(len(self))]
-        rotated_lst= [self[i] for i in rotated_idxs]
-        return NoteList(rotated_lst)
+        # rotated_start_place = num_places
+        # rotated_idxs = [(rotated_start_place + i) % len(self) for i in range(len(self))]
+        # rotated_lst= [self[i] for i in rotated_idxs]
+        # return NoteList(rotated_lst)
+
+        return NoteList(rotate_list(self, num_places))
+
 
     def force_octave(self, start_octave=None, min_octave=1, max_octave=5):
         """returns another NoteList of ascending OctaveNotes corresponding to
@@ -612,6 +631,8 @@ class NoteList(list):
             wave = self._chord_wave(duration=duration, octave=octave, type=type, falloff=falloff, **kwargs)
         play_wave(wave, block=block)
 
+# quality-of-life alias:
+Notes = NoteList
 
 # predefined Note objects:
 A = Note('A')
