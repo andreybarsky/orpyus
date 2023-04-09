@@ -4,6 +4,8 @@ Dependencies: None (at least for now, until `audio` module is complete)
 Usage: Just clone and import:  
 - `from muse import Note, Chord, Key, Progression`  
 
+(this readme is deprecated - please await a new one)
+
 # Notes 
 
 The `notes.Note` class represents abstract musical notes not associated with a specific octave: C, C#, D, through to B.  
