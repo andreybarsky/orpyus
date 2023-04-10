@@ -99,7 +99,7 @@ class Interval:
             return '‹Rt›'
         else:
             sign_str = '-' if self.sign == -1 else ''
-            short_deg = f'{self.extended_degree}'
+            short_deg = f'{abs(self.extended_degree)}'
             return f'‹{sign_str}{self.quality.short_name}{short_deg}›'
 
     @property
@@ -237,6 +237,9 @@ class Interval:
         else:
             raise TypeError('Intervals can only be compared to integers or other Intervals')
 
+    def __le__(self, other):
+        return other >= self
+
     def __lt__(self, other):
         if isinstance(other, Interval):
             return self.value < other.value
@@ -244,6 +247,9 @@ class Interval:
             return self.value < other
         else:
             raise TypeError('Intervals can only be compared to integers or other Intervals')
+
+    def __gt__(self, other):
+        return other < self
 
     def __int__(self):
         return self.value
@@ -303,16 +309,43 @@ class IntervalList(list):
         else:
             raise TypeError(f'IntervalLists can only be added with ints, Intervals, or iterables of either, but got type: {type(other)}')
 
+    def __iadd__(self, other):
+        """add in place"""
+        if isinstance(other, (int, Interval)):
+            for i in self:
+                i += other
+            return self
+        elif isinstance(other, (list, tuple)):
+            assert len(other) == len(self), f'IntervalLists can only be added with scalars or with other iterables of the same length'
+            for i,j in zip(self, other):
+                i += j
+            return self
+        else:
+            raise TypeError(f'IntervalLists can only be added with ints, Intervals, or iterables of either, but got type: {type(other)}')
+
     def __sub__(self, other):
         """subtracts a scalar from each interval in this list,
-        or accepts an iterable and performs point-wise subtraction."""
-        if isinstance(other, (int, Interval)):
-            return IntervalList([i - other for i in self])
-        elif isinstance(other, (list, tuple)):
-            assert len(other) == len(self), f'IntervalLists can only be subtracted with scalars or with other iterables of the same length'
-            return IntervalList([i - j for i,j in zip(self, other)])
-        else:
-            raise TypeError(f'IntervalLists can only be subtracted with ints, Intervals, or iterables of either, but got type: {type(other)}')
+        or accepts an iterable of scalars and performs point-wise subtraction."""
+        # if isinstance(other, (int, Interval)):
+        #     return IntervalList([i - other for i in self])
+        # elif isinstance(other, (list, tuple)):
+        #     assert len(other) == len(self), f'IntervalLists can only be subtracted with scalars or with other iterables of the same length'
+        #     return IntervalList([i - j for i,j in zip(self, other)])
+        # else:
+        #     raise TypeError(f'IntervalLists can only be subtracted with ints, Intervals, or iterables of either, but got type: {type(other)}')
+        return self + (-other)
+
+    def __isub__(self, other):
+        self += (-other)
+        return self
+
+    def __neg__(self):
+        """pointwise negation"""
+        return IntervalList([-i for i in self])
+
+    def __hash__(self):
+        """IntervalLists hash as sorted tuples for the purposes of chord/key reidentification"""
+        return hash(tuple(self.sorted()))
 
     def sort(self):
         super().sort()
@@ -521,7 +554,7 @@ def unit_test():
     test(Interval(Interval(14)), Interval(14))
 
     # test interval lists:
-    test(IntervalList([M3, P5]).pad(), IntervalList([P1, M3, P5, P8]))
+    test(IntervalList([M3, P5]).pad(left=True, right=True), IntervalList([P1, M3, P5, P8]))
     test(IntervalList([M3, P5]), IntervalList([P1, M3, P5, P8]).strip())
     test(IntervalList([M2, M3, P5]), IntervalList([M3, P5, M9]).flatten())
 

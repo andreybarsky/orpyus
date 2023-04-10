@@ -31,7 +31,7 @@ class TestSuite:
         if not result and not self.graceful:
             raise Exception('Test failed')
 
-test = TestSuite()
+test = TestSuite(silent=True)
 
 # generically useful functions used across modules:
 def rotate_list(lst, num_steps, N=None):
@@ -130,17 +130,20 @@ def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True, inc
     if reverse:
         replacements = unpack_and_reverse_dict(aliases, force_list=force_list, include_keys=include_keys)
     else:
-        replacements = aliases
+        replacements = dict(aliases)
 
-
+        # 0.0160 / 3.795
     if strip:
-        # add whitespace to the front of every replacmeent in addition:
+        # add whitespace to the front of every replacement in addition:
         whitespaced_replacements = {f' {k}':v for k,v in replacements.items()}
         # as well as versions with stripped whitespace everywhere:
         stripped_replacements = {k.replace(' ', ''):v for k,v in replacements.items()}
 
         replacements.update(whitespaced_replacements)
-        replacements.update(stripped_replacements)
+        # replacements.update(stripped_replacements)
+
+    # cached key lengths for performance optimisation:
+    replacement_lengths = {k:len(k) for k in replacements.keys()}
 
     alias_lengths = [len(a) for a in replacements.keys()]
     max_alias_len = max(alias_lengths)
@@ -158,7 +161,7 @@ def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True, inc
         # iterate backward starting from the longest possible replacement here:
         found_match = False
         for cur_rep_len in range(start_length, 0, -1):
-            cur_len_replacements = {k:v for k,v in replacements.items() if len(k) == cur_rep_len}
+            cur_len_replacements = {k:v for k,v in replacements.items() if replacement_lengths[k] == cur_rep_len}
             substring = inp[cur_input_idx : cur_input_idx + cur_rep_len]
             if substring in cur_len_replacements.keys():
                 # found a replacement:
@@ -166,9 +169,7 @@ def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True, inc
                 output.append(rep)
                 cur_input_idx += cur_rep_len
                 found_match = True
-                if verbose:
-                    print(f'Replacing {substring} with {rep} at original index={cur_input_idx-cur_rep_len}. New index is {cur_input_idx}, current replacement is: {output}')
-                    import pdb; pdb.set_trace()
+                log(f'Replacing {substring} with {rep} at original index={cur_input_idx-cur_rep_len}. New index is {cur_input_idx}, current replacement is: {output}')
                 break
         if not found_match:
             # no replacement at this character, advance forward by one character

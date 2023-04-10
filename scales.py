@@ -200,17 +200,18 @@ class Scale:
             pent_scale = self.subscale([1,3,4,5,7])
         return pent_scale
 
-    @property
-    def blues(self):
-        """returns the hexatonic blues scale, assuming this is a natural major or minor scale"""
-        if self.quality.major:
-            hex_scale = self.subscale([1, 2, 3, 3, 5, 6])
-            hex_scale[2] = Interval(hex_scale[2].value-1, degree=3) # flattened third
-            hex_scale[3] = Interval(hex_scale[3].value, degree=4) # fourth is diminished
-        elif self.quality.minor:
-            hex_scale = self.subscale([1, 3, 4, 5, 5, 7])
-            hex_scale[3] = Interval(hex_scale[3].value-1, degree=4) # augmented fourth
-        return hex_scale
+    # @property
+    # def blues(self):
+    #     """returns the hexatonic blues scale, assuming this is a natural major or minor scale"""
+    #     if self.quality.major:
+    #         hex_scale = self.subscale([1, 2, 3, 3, 5, 6])
+    #         hex_scale[2] = Interval(hex_scale[2].value-1, degree=3) # flattened third
+    #         hex_scale[3] = Interval(hex_scale[3].value, degree=4) # fourth is diminished
+    #     elif self.quality.minor:
+    #         hex_scale = self.subscale([1, 3, 4, 5, 5, 7])
+    #         hex_scale[3] = Interval(hex_scale[3].value-1, degree=4) # augmented fourth
+    #     return hex_scale
+    # really these should be pre-initialised major_blues and minor_blues Subscale objects
 
     def chord(self, degree, order=3, qualifiers=None):
         """returns an AbstractChord built on a desired degree of this scale,

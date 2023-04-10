@@ -116,8 +116,8 @@ class Note:
 
     def __sub__(self, other):
         """if 'other' is an integer, returns a new Note that is shifted down by that many semitones.
-        if 'other' is another Note, return the directional (but unsigned) interval distance between them,
-        with other as the root."""
+        if 'other' is another Note, return the unsigned, symmetric interval distance between them,
+        with other as the root. i.e. how many steps LEFT do you have to go to find other?"""
 
         if isinstance(other, (int, Interval)): # construct Note
             new_pos = (self.position - other) % 12
@@ -476,9 +476,9 @@ class NoteList(list):
                 arg = parse_out_note_names(arg)
 
             # now either way we should have an iterable of note-likes:
-            if isinstance(arg, (list, tuple)):
+            try:
                 note_items = self._cast_notes(arg)
-            else:
+            except:
                 raise Exception(f'Unexpected type passed to NoteList init, expected iterable but got: {type(arg)}')
 
         else:
@@ -552,6 +552,12 @@ class NoteList(list):
 
         return NoteList(rotate_list(self, num_places))
 
+    def ascending_intervals(self):
+        """sorts notes into ascending order from root (which is first note)"""
+        # wrap around first octave and calculate intervals from root:
+        octaved_notes = self.force_octave(1)
+        root = octaved_notes[0]
+        return IntervalList([o - root for o in octaved_notes])
 
     def force_octave(self, start_octave=None, min_octave=1, max_octave=5):
         """returns another NoteList of ascending OctaveNotes corresponding to
@@ -653,9 +659,11 @@ chromatic_scale = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
 
 # case by case tests:
 if __name__ == '__main__':
+    unit_test()
+
+def unit_test():
     ### magic method tests:
     # Notes:
-
     test(C+2, D)
     test(D-2, C)
     test(D-C, 2)

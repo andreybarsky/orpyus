@@ -9,7 +9,6 @@ import qualities
 from qualities import Quality, ChordQualifier, parse_chord_qualifiers
 
 from collections import defaultdict
-from copy import deepcopy
 
 import pdb
 
@@ -57,8 +56,17 @@ class ChordFactors(dict):
         return list(self.keys())
 
     @property
-    def intervals(self):
+    def offsets(self):
         return list(self.values())
+
+    def to_intervals(self, as_dict=False):
+        """translates these ChordFactors into an IntervalList
+        or, if as_dict, into a factor_intervals dict mapping degrees to intervals"""
+        if not as_dict:
+            return IntervalList([Interval.from_degree(d, offset=o) for d, o in self.items()]).sorted()
+        elif as_dict:
+            return {d:Interval.from_degree(d, offset=o) for d, o in self.items()}
+
 
     def __add__(self, other):
         """modifies these factors by the alterations in a ChordQualifier,
@@ -130,7 +138,7 @@ class AbstractChord:
         self.factors, self.root_intervals, self.inversion = self._parse_input(name, factors, intervals, inversion, inversion_degree, qualifiers)
 
         # dict mapping chord factors to intervals from tonic:
-        self.factor_intervals = {i.degree: i for i in self.root_intervals}
+        self.factor_intervals = {i.extended_degree: i for i in self.root_intervals}
 
         if self.inversion is not None: # list of self.intervals is with respect to this chord's inversion
             self.intervals = self.root_intervals.invert(self.inversion)
@@ -148,6 +156,20 @@ class AbstractChord:
         if name is not None:
             assert factors is None and intervals is None
             # sometimes backslashes are used for inversions instead of forward slashes:
+
+            # if '/' in name:
+            #     inv_sep = '/'
+            # elif '\\' in name:
+            #     inv_sep = '\\'
+            # else:
+            #     inv_sep = None
+            #
+            # if inv_sep is not None:
+            #     assert inversion is None and inversion_degree is None, 'Parsed slash chord as denoting inversion, but received mutually exclusive inversion arg'
+            #     # parse inversion from name
+            #     name, inversion_str = name.split(inv_sep)
+
+
             name = name.replace('\\', '/')
             if '/' in name:
                 assert inversion is None and inversion_degree is None, 'Parsed slash chord as denoting inversion, but received mutually exclusive inversion arg'
@@ -173,11 +195,6 @@ class AbstractChord:
             # sanitise interval list input, expect root to be provided:
             intervals = IntervalList(intervals).pad(left=True, right=False)
             assert len(intervals) == len(set(intervals)), f'Interval list supplied to AbstractChord init contains repeated intervals: {intervals}'
-
-            ### now we do not pad
-            # if intervals[0].value != 0:
-            #     # add Unison interval if it is not present
-            #     intervals = [Interval(0)] + intervals
 
             # build factors by looping through intervals:
             factors = ChordFactors({1:0})
@@ -276,33 +293,55 @@ class Chord(AbstractChord):
     """a Chord built on a note of the chromatic scale, but in no particular octave,
     whose members are Notes.
     a Chord is fully identified by its Root, its Factors, and its Inversion"""
-    def __init__(self, name=None, root=None, factors=None, intervals=None, inversion=None, inversion_degree=None, bass=None, qualifiers=None, in_key=None):
+    def __init__(self, name=None,
+                       root=None, factors=None, intervals=None,
+                       notes=None,
+                       inversion=None, inversion_degree=None, bass=None,
+                       qualifiers=None,
+                       in_key=None,
+                       move_above=False):
         """initialised in the same way as an AbstractChord, with two differences:
-        if 'name' arg is supplied, we required it to lead with the name of the chord root.
+        if 'notes' arg is supplied, we try to construct a Chord object from those notes
+            and ignore name/root/factors/intervals keywords. (but still allow inversion? and qualifiers)
+
+        elif 'name' arg is supplied, we treat it as in AbstractChord but require it to lead with the name of the chord root.
             i.e. 'Bbmmaj7' is parsed as having root 'Bb', and passes 'mmaj7' to AbstractChord init.
-        otherwise, if name is not supplied, we parse keyword args in the same way as AbstractChord,
+
+        otherwise, if neither is supplied, we parse keyword args in the same way as AbstractChord,
             with the additional requirement that 'root' keyword arg is also supplied, as a Note
             or object that casts to Note.
 
-        finally, we accept the optional 'in_key' argument, which specifies that this Chord is
-        in a specific Key, affecting its sharp preference and arithmetic behaviours."""
+        we also accept the optional 'in_key' argument, instead of AbstractChord's 'in_scale',
+        which specifies that this Chord is to be regarded as in a specific Key,
+        affecting its sharp preference and arithmetic behaviours."""
+
+        if notes is not None: # initialise from ascending note list by casting notes as intervals from root
+            # ignore intervals/factors/root inputs
+            assert root is None and factors is None and intervals is None
+            assert name is None # but allow inversions
+            note_list = NoteList(notes)
+            # recover intervals and root, and continue to init as normal:
+            intervals = NoteList(notes).ascending_intervals()
+            root = note_list[0]
 
         self.root, chord_name = self._parse_root(name, root)
 
+        # recover factor offsets, intervals from root, and inversion position from input args:
         self.factors, self.root_intervals, inversion = self._parse_input(chord_name, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=True)
         # note that while self.inversion in AbstratChord comes out as strictly int or None
         # here we allow it to be a string denoting the bass note, which we'll correct in a minute
 
         # mapping of chord factors to intervals from tonic:
-        self.factor_intervals = {i.degree: i for i in self.root_intervals}
+        self.factor_intervals = {i.extended_degree: i for i in self.root_intervals}
         # mapping of chord factors to notes:
         self.factor_notes = {degree: (self.root + i) for degree, i in self.factor_intervals.items()}
 
         # list of notes inside this chord, in root position:
-        self.root_notes = NoteList([self.root + i for i in self.root_intervals])
+        # self.root_notes = NoteList([self.root + i for i in self.root_intervals])
+        self.root_notes = NoteList(self.factor_notes.values())
 
         # discover the correct inversion parameters, as well as inverted notes / intervals if they differ from root position:
-        inv_params, self.notes, self.intervals = self._parse_inversion(inversion)
+        inv_params, self.notes, self.intervals = self._parse_inversion(inversion, move_above=move_above)
 
         self.inversion, self.inversion_degree, self.bass = inv_params
 
@@ -326,7 +365,8 @@ class Chord(AbstractChord):
             chord_name = name
         return root, chord_name
 
-    def _parse_inversion(self, inversion):
+
+    def _parse_inversion(self, inversion, move_above=False):
         """given an inversion as int (Xth inversion) or string (bass note),
         return canonical forms: (inversion, inversion_degree, bass)
         with respect to already-defined self.root_notes"""
@@ -346,25 +386,69 @@ class Chord(AbstractChord):
         elif isinstance(inversion, (Note, str)):
             bass = Note(inversion)
 
+            ####################################################################
+
             ### here we catch a special case: inversion over a bass note that is not in the specified chord.
             # e.g. something like Chord('D/C#') - it is not really a D major chord,
-            # but a voicing of Dmaj7 or
+            # but a voicing of Dmaj7 or something
 
-            assert bass in self.factor_notes.values(), f"Chord initialised with inversion over {bass}, but {bass} is not in this chord's notes: {self.factor_notes}"
+            if bass not in self.factor_notes.values():
+                print(f"    Chord initialised with inversion over {bass}, \n    but {bass} is not in this chord's notes: {list(self.factor_notes.values())}")
+                print(f"    Decomposing and reidentifying using recursive init")
+                print(f'     Existing root intervals: {self.root_intervals}')
+                bass_distance_from_root = bass - self.root
+
+                if bass_distance_from_root < self.root_intervals[-1]:
+                    ### e.g. for Am/C case
+                    if move_above:
+                        print('     Bass note above root would not be above the highest interval in this chord, ')
+                        print('      so we shift it up an octave and call it an inversion')
+                        bass_distance_from_root += 12  # raise bass-note interval by an octave
+                        new_intervals = IntervalList(list(self.root_intervals) + [bass_distance_from_root]) # add bass note to top of chord
+                        # recursively re-initialise:
+                        self.__init__(intervals=new_intervals, root=self.root, bass=bass)
+                        return self._parse_inversion(bass.name)
+                    else:
+                        ### should this trigger chord re-identification by notes instead?
+                        print('     Bass note above root would not be above the highest interval in this chord,')
+                        print('      so we move it below instead (and shift everything up)')
+                        new_intervals = IntervalList([~bass_distance_from_root] + self.root_intervals) # add bass note below the root
+                        print(f' new_intervals before transposition: {new_intervals}')
+                        new_intervals = new_intervals - ~bass_distance_from_root # transpose interval list upward so that bass is the new root
+                        print(f' new_intervals after transposition: {new_intervals}')
+                        # recursively re-initialise:
+                        self.__init__(intervals=new_intervals, root=bass)
+                        # this is now NOT an inversion:
+                        return self._parse_inversion(None)
+                else:
+                    ### e.g. for D/C# case
+                    print('     Throwing bass note on top of this chord and calling it an inversion')
+                    new_intervals = IntervalList(list(self.root_intervals) + [bass_distance_from_root])
+                assert new_intervals == new_intervals.sorted()
+                print(f'    New intervals: {new_intervals}')
+                # recursively re-initialise:
+                self.__init__(intervals=new_intervals, root=self.root, bass=bass)
+                return self._parse_inversion(bass.name)
+
+            ####################################################################
+
             inversion_degree = [k for k,v in self.factor_notes.items() if v == bass][0]
             # get inversion from inversion_degree:
             for x, deg in enumerate(sorted(self.factors.keys())):
                 if inversion_degree == deg:
                     inversion = x
                     break
+            if isinstance(inversion, str):
+                pdb.set_trace()
 
         # infer inverted note order by finding the bass's place in our root_notes notelist:
         bass_place = [i for i, n in enumerate(self.root_notes) if n == bass][0]
         assert inversion == bass_place ### is this always true?
         # and rearranging the notes by rotation, e.g. from ordering [0,1,2] to [1,2,0]:
-        inverted_notes = self.root_notes.rotate(bass_place)
+        # inverted_notes = self.root_notes.rotate(bass_place)
         # inverted_intervals = [Interval(0)] + [n - bass for n in inverted_notes[1:]]
         inverted_intervals = self.root_intervals.invert(bass_place)
+        inverted_notes = [bass + i for i in inverted_intervals]
 
         inv_params = (inversion, inversion_degree, bass)
         return (inv_params), inverted_notes, inverted_intervals
@@ -429,7 +513,21 @@ class Chord(AbstractChord):
         # interval_short_names = ['Root'] + [i.short_name for i in self.intervals[1:]]
         # intervals_str = ', '.join(interval_short_names)
         # return f'♫ {self.name}  | {intervals_str} |'
-        notes_str = ', '.join([str(n) for n in self.notes])
+        notes_str = [] # notes are annotated with accent marks depending on which octave they're in wrt root
+        for i, n in zip(self.intervals, self.notes):
+            assert (self.bass + i) == n, f'bass ({self.bass}) + interval ({i}) should be {n}, but is {self.bass + i}'
+            if i < -12:
+                notes_str.append(f'{n}\u0324') # lower diaresis
+            elif i < 0:
+                notes_str.append(f'{n}\u0323') # lower dot
+            elif i < 12:
+                notes_str.append(str(n))
+            elif i < 24:
+                notes_str.append(f'{n}\u0307') # upper dot
+            else:
+                notes_str.append(f'{n}\u0308') # upper diaresis
+        notes_str = ', '.join(notes_str)
+
         return f'♬ {self.name} [ {notes_str} ]'
 
     def __repr__(self):
@@ -702,6 +800,9 @@ def unit_test():
     test(Chord('Am/C').notes, Chord('C6(no5)').notes)
     test(Chord('Am/C').intervals, Chord('C6(no5)').intervals)
 
+    # test recursive init:
+    print(Chord('D/C#'))
+    print(Chord('Amaj7/B'))
 
 if __name__ == '__main__':
     unit_test()

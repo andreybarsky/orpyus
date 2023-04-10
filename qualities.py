@@ -1,7 +1,7 @@
 # OOP representation of major/minor quality that is invertible and has a null (indeterminate) value
 from util import reverse_dict, unpack_and_reverse_dict, reduce_aliases, test, log
 from parsing import degree_names, is_valid_note_name
-from copy import deepcopy
+
 import pdb
 
 # TBI: double dim/aug qualities?
@@ -273,7 +273,8 @@ class ChordQualifier:
 
     def valid_on(self, other):
         """returns True if this is a valid qualifier to apply to a given ChordFactors object, and false otherwise"""
-        proxy = deepcopy(other)
+        from chords import ChordFactors # lazy import to avoid circular dependencies
+        proxy = ChordFactors(other)
         try:
             self.apply(proxy)
         except:
