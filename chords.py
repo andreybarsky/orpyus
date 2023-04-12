@@ -216,8 +216,7 @@ class AbstractChord:
         # quality of a chord is the quality of its third:
         self.quality = qualities.Perfect if 3 not in self.factors else self.factor_intervals[3].quality
 
-    @staticmethod
-    def _parse_input(name, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=False):
+    def _parse_input(self, name, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=False):
         """takes valid inputs to AbstractChord and parses them into factors, intervals and inversion.
         (see docstring for AbstractChord.__init__)"""
 
@@ -240,7 +239,7 @@ class AbstractChord:
                     assert allow_note_name, f'String inversions only allowed for non-AbstractChords'
                     inversion = inversion_str
 
-            # detect major chord:
+            # detect if name refers to a major chord:
             if name == '' or name in ((qualities.qualifier_aliases['maj']) + ['maj']):
                 factors = ChordFactors() # major triad by default
             else:
@@ -255,11 +254,22 @@ class AbstractChord:
             intervals = IntervalList(intervals).pad(left=True, right=False)
             assert len(intervals) == len(set(intervals)), f'Interval list supplied to AbstractChord init contains repeated intervals: {intervals}'
 
+            # search for possible inversions, and adopt them if they are less rare than what we've been given:
+            supplied_interval_name = intervals_to_chord_names[intervals]
+            supplied_rarity = chord_name_rarities[supplied_interval_name]
+            possible_inversions = AbstractChord.inversions_from_intervals(intervals)
+            if len(possible_inversions) > 0 and possible_inversions[0].rarity < supplied_rarity:
+                # adopt the inverted chord's root intervals and inversion instead
+                intervals = possible_inversions[0].root_intervals
+                inversion = possible_inversions[0].inversion
+                # and one last change (bit of a kludge): if this is a Chord, intercept and change the root:
+                if isinstance(self, Chord):
+                    self.root -= intervals[inversion]
+
             # build factors by looping through intervals:
             factors = ChordFactors({1:0}) # note: NOT a major triad
-            for i in intervals: # parse interval degree and quality
-                # catch special case: do not record perfect octaves
-                if i.mod != 0:
+            for i in intervals: # parse interval degree and quality into factors dict
+                if i.mod != 0: # catch special case: do not record perfect octaves
                     factors[i.extended_degree] = i.offset_from_default
 
         if qualifiers is not None:
@@ -276,6 +286,8 @@ class AbstractChord:
             factors = factors + qualifiers
 
         if intervals is None: # i.e. if we have defined factors from name or factor kwarg
+            # in this case we trust them and do not insist that this is an inversion
+            # i.e. we keep 6(no5) instead of casting to m/2
             intervals = []
             for deg, offset in factors.items():
                 # note that interval list always includes Unison as root
@@ -329,12 +341,40 @@ class AbstractChord:
             return f'(?){inv_string}'
 
     @property
+    def rarity(self):
+        return chord_name_rarities[factors_to_chord_names[self.factors]]
+
+    def identify_inversion(self):
+        """searches all of this chord's possible inversions to see if one of them
+        matches an existing chord, and returns that chord's inversion as a new object"""
+        return self.inversions_from_intervals(self.intervals)
+
+    @staticmethod
+    def inversions_from_intervals(intervals):
+        candidates = []
+        for inversion_place in range(1, len(intervals)):
+            inverted_intervals = intervals.invert(-inversion_place)
+            if inverted_intervals in intervals_to_chord_names:
+                that_chord_name = intervals_to_chord_names[inverted_intervals]
+                candidates.append(AbstractChord(that_chord_name, inversion=inversion_place))
+        candidates.sort(key = lambda x: x.rarity)
+        return candidates
+
+    @property
     def name(self):
         return f'{self.suffix} chord'
 
     def root(self, root_note):
         """constructs a Chord object from this AbstractChord with respect to a desired root"""
         return Chord(root=root_note, factors=self.factors, inversion=self.inversion)
+
+    def __len__(self):
+        """this chord's order, i.e. the number of notes/factors"""
+        return len(self.factors)
+
+    @property
+    def order(self):
+        return len(self)
 
     def __str__(self):
         # note that intervals are presented with respect to inversion
@@ -391,10 +431,15 @@ class Chord(AbstractChord):
 
         self.root, chord_name = self._parse_root(name, root)
 
+        assert self.root is not None
+
         # recover factor offsets, intervals from root, and inversion position from input args:
         self.factors, self.root_intervals, inversion = self._parse_input(chord_name, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=True)
         # note that while self.inversion in AbstratChord comes out as strictly int or None
         # here we allow it to be a string denoting the bass note, which we'll correct in a minute
+
+        # if inversion is not None:
+        #     pdb.set_trace()
 
         # mapping of chord factors to intervals from tonic:
         self.factor_intervals = {i.extended_degree: i for i in self.root_intervals}
@@ -784,7 +829,7 @@ for rarity, chord_names in chord_names_by_rarity.items():
                     altered_intervals = altered_factors.to_intervals()
                     # avoid double counting: e.g. this ensures that '9sus4' and 'm9sus4' are treated as one chord, '9sus4', despite both being a valid chord init
                     if altered_factors not in factors_to_chord_names and altered_intervals not in intervals_to_chord_names:
-                        factors_to_chord_names[altered_name] = altered_factors
+                        factors_to_chord_names[altered_factors] = altered_name
 
                         intervals_to_chord_names[altered_intervals] = altered_name
 
@@ -805,7 +850,7 @@ for rarity, chord_names in chord_names_by_rarity.items():
                                     altered2_intervals = altered2_factors.to_intervals()
                                     # avoid the lower triangular: (e.g. m(no5)add9 vs madd9(no5))
                                     if altered2_factors not in factors_to_chord_names and altered2_intervals not in intervals_to_chord_names:
-                                        factors_to_chord_names[altered2_name] = altered2_factors
+                                        factors_to_chord_names[altered2_factors] = altered2_name
                                         intervals_to_chord_names[altered2_intervals] = altered2_name
 
                                         # these are all rarity 7, the 'legendary chords'
@@ -883,9 +928,12 @@ def unit_test():
     # test chord factor init by strings and lists:
     test(ChordFactors('1-♭3-b5'), ChordFactors(['1', '♭3', 'b5']))
 
+    # test chord inversion identification from intervals:
+    test(AbstractChord(intervals=[0, 4, 9]), AbstractChord('m/1'))
+
     # test recursive init:
-    print(Chord('D/C#'))
-    print(Chord('Amaj7/B'))
+    test(Chord('D/C#'), Chord('Dmaj7/C#'))
+    test(Chord('Amaj7/B'), Chord('Amaj9/B'))
 
 if __name__ == '__main__':
     unit_test()
