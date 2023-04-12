@@ -7,7 +7,7 @@ from util import reverse_dict, unpack_and_reverse_dict, log, test
 # map semitone offset values to accidental character aliases:
 offset_accidentals = {-2: ['𝄫', '♭♭', 'bb'],
                 -1: ['♭', 'b'],
-                 0: ['♮', ''],
+                 0: ['', '♮'],
                  1: ['♯', '#'],
                  2: ['𝄪', '♯♯', '##']}
 # map accidental aliases to offsets:
@@ -257,39 +257,50 @@ def note_split(name, graceful_fail=False):
         if graceful_fail:
             return False
         else:
-            raise ValueError(f'No valid note name found in first two characters of: {name}')
+            raise ValueError(f'No valid note name found in first 3 characters of: {name}')
     note_name, remainder = name[:note_idx], name[note_idx:]
     return note_name, remainder
 
-def parse_octavenote_name(name):
+def parse_octavenote_name(name, case_sensitive=True):
     """Takes the name of an OctaveNote as a string,
     for example 'C4' or 'A#3' or 'Gb1',
     and extracts the note and octave components."""
-    note_letter = name[0].upper()
-    if (len(name) > 1) and is_accidental(name[1]): # check for accidental
-        # check string validity:
-        accidental = parse_accidental(name[1])
-        note_name = note_letter + accidental
-        assert note_name in valid_note_names, f"Invalid note name: {note_letter}"
+    numbers = [n for n in name if n.isnumeric()]
+    numbers_str = ''.join(numbers)
+    note_name = name[:-len(numbers)]
+    assert numbers_str == name[len(numbers):], f'Could not parse OctaveNote name: {name}, the numbers seem to be in weird places'
+    octave = int(numbers_str)
 
-        if len(name) == 2: # default to 4th octave if not specified
-            octave = 4
-        elif len(name) == 3:
-            octave = int(name[2])
-        else:
-            raise ValueError(f'Provided note name is too long: {name}')
-    else: # assume natural note
-        # check string validity:
-        assert note_letter in valid_note_names, f"Invalid note name: {note_letter}"
-        note_name = note_letter
+    if not case_sensitive:
+        note_name = note_name.capitalize()
 
-        if len(name) == 1: # default to 4th octave if not specified
-            octave = 4
-        elif len(name) == 2:
-            octave = int(name[1])
-        else:
-            raise ValueError(f'Provided note name is too long: {name}')
-    return note_name, octave
+    if is_valid_note_name(note_name):
+        return note_name, octave
+
+    # if (len(name) > 1) and is_accidental(name[1]): # check for accidental
+    #     # check string validity:
+    #     accidental = parse_accidental(name[1])
+    #     note_name = note_letter + accidental
+    #     assert note_name in valid_note_names, f"Invalid note name: {note_letter}"
+    #
+    #     if len(name) == 2: # default to 4th octave if not specified
+    #         octave = 4
+    #     elif len(name) == 3:
+    #         octave = int(name[2])
+    #     else:
+    #         raise ValueError(f'Provided note name is too long: {name}')
+    # else: # assume natural note
+    #     # check string validity:
+    #     assert note_letter in valid_note_names, f"Invalid note name: {note_letter}"
+    #     note_name = note_letter
+    #
+    #     if len(name) == 1: # default to 4th octave if not specified
+    #         octave = 4
+    #     elif len(name) == 2:
+    #         octave = int(name[1])
+    #     else:
+    #         raise ValueError(f'Provided note name is too long: {name}')
+    # return note_name, octave
 
 
 def parse_alteration(alteration):

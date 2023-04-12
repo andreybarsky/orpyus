@@ -187,6 +187,7 @@ class Interval:
         else:
             raise TypeError('Intervals can only be compared to integers or other Intervals')
 
+
     def __and__(self, other):
         """Enharmonic equivalence comparison for intervals - returns True if both have
         same mod attr (but disregard degree and signed distance value)"""

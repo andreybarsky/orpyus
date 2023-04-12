@@ -251,6 +251,20 @@ class AbstractChord:
         elif intervals is not None:
             assert name is None and factors is None
             # sanitise interval list input, expect root to be provided:
+
+            # if it is a list of ints, catch common thirds/fifths:
+            if isinstance(intervals, (tuple, list)) and check_all(intervals, 'isinstance', int):
+                sanitised_intervals = []
+                for i in intervals:
+                    if i in {3,4}: # could this be a major/minor third?
+                        sanitised_intervals.append(Interval(i, degree=3))
+                    elif i in {6,7,8}: # could this be a dim/perf/aug fifth?
+                        sanitised_intervals.append(Interval(i, degree=5))
+                    else:
+                        sanitised_intervals.append(i)
+                intervals = sanitised_intervals
+
+            # cast to IntervalList object, pad to canonical chord intervals form with left bass root but not upper octave root
             intervals = IntervalList(intervals).pad(left=True, right=False)
             assert len(intervals) == len(set(intervals)), f'Interval list supplied to AbstractChord init contains repeated intervals: {intervals}'
 
@@ -435,7 +449,7 @@ class Chord(AbstractChord):
         affecting its sharp preference and arithmetic behaviours."""
 
         # re-parse args to detect if 'name' is a list of notes, a list of intervals, or a dict of chordfactors:
-        name, root, factors, intervals, notes
+        name, root, factors, intervals, notes = self._reparse_args(name, root, factors, intervals, notes)
 
         if notes is not None: # initialise from ascending note list by casting notes as intervals from root
             # ignore intervals/factors/root inputs
@@ -479,6 +493,31 @@ class Chord(AbstractChord):
         # set sharp preference based on root note:
         self._set_sharp_preference()
 
+    @staticmethod
+    def _reparse_args(name, root, factors, intervals, notes):
+        """re-parse args to detect if 'name' is a list of notes, a list of intervals, or a dict of chordfactors,
+        and returns the appropriate 'corrected' args if so."""
+        # is name an IntervalList, or a list that contains only Intervals/ints:
+        if isinstance(name, IntervalList) or (isinstance(name, (list, tuple)) and check_all(name, 'isinstance', (int, Interval))):
+            assert intervals is None, f'list of Intervals was passed as first input to Chord init, but intervals arg was also given'
+            intervals = name
+            name = None
+        # is name a NoteList, or a list that contains only Notes/strings:
+        elif isinstance(name, NoteList) or (isinstance(name, (list, tuple)) and check_all(name, 'isinstance', (str, Note))):
+            assert notes is None, f'list of Notes was passed as first input to Chord init, but notes arg was also given'
+            notes = name
+            name = None
+        elif isinstance(name, str):
+            ### here we must distinguish if name is a potential note_string, of the kind we can parse out
+            parse_result = parsing.parse_out_note_names(name, graceful_fail=True)
+            if parse_result is not False and len(parse_result) >= 3: # we don't allow note_strings for chord init unless they contain 3 or more notes
+                notes = parse_result
+                name = None
+            else:
+                # this is not a note_string, so just return the args as they came
+                pass
+
+        return name, root, factors, intervals, notes
 
     @staticmethod
     def _parse_root(name, root):
@@ -951,9 +990,17 @@ def unit_test(verbose=False):
     # test chord inversion identification from intervals:
     test(AbstractChord(intervals=[0, 4, 9]), AbstractChord('m/1'))
 
-    # test recursive init:
+    # test recursive init for non-existent bass note inversions:
     test(Chord('D/C#'), Chord('Dmaj7/C#'))
     test(Chord('Amaj7/B'), Chord('Amaj9/B'))
+
+    # test arg re-parsing
+    test(Chord('CEA'), Chord(notes='CEA'))
+
+    test(Chord([4,8], root='C'), Chord('C+'))
+
+    from intervals import Maj3, Aug5
+    test(Chord([Maj3,Aug5], root='C'), Chord('C+'))
 
     log.verbose = False
 
