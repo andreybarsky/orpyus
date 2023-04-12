@@ -1,7 +1,8 @@
 # python library for handling musical notes, intervals, and chords
 
 from intervals import Interval, IntervalList
-from parsing import note_names, note_positions, parse_octavenote_name, is_flat, is_sharp, is_valid_note_name, parse_out_note_names
+import parsing
+# from parsing import parsing.note_positions, preferred_note_names, parse_octavenote_name, is_flat, is_sharp, is_valid_note_name, parse_out_note_names
 import conversion as conv
 
 from util import log, test, rotate_list
@@ -13,22 +14,22 @@ import pdb
 
 
 # relative values (positions within scale) with respect to C major, starting with 0=C:
-# note_positions = {note_name:i for i, note_name in enumerate(note_names['generic'])}
-# note_positions.update({note_name:i for i, note_name in enumerate(note_names['flat'])})
-# note_positions.update({note_name:i for i, note_name in enumerate(note_names['sharp'])})
+# parsing.note_positions = {note_name:i for i, note_name in enumerate(note_names['generic'])}
+# parsing.note_positions.update({note_name:i for i, note_name in enumerate(note_names['flat'])})
+# parsing.note_positions.update({note_name:i for i, note_name in enumerate(note_names['sharp'])})
 #
-# note_positions.update({note_name:i for i, note_name in enumerate(note_names['flat_unicode'])})
-# note_positions.update({note_name:i for i, note_name in enumerate(note_names['sharp_unicode'])})
-# note_positions.update({note_name:i for i, note_name in enumerate(note_names['natural_unicode'])})
+# parsing.note_positions.update({note_name:i for i, note_name in enumerate(note_names['flat_unicode'])})
+# parsing.note_positions.update({note_name:i for i, note_name in enumerate(note_names['sharp_unicode'])})
+# parsing.note_positions.update({note_name:i for i, note_name in enumerate(note_names['natural_unicode'])})
 
 # get note name string from position in octave:
-def accidental_note_name(pos, prefer_sharps=False):
+def preferred_name(pos, prefer_sharps=False):
     """Gets the note name for a specific position according to preferred sharp/flat notation,
     or just the natural note name if a a white note"""
     # if we've accidentally been given an Interval object for position, we quietly parse it:
     if isinstance(pos, Interval):
         pos = pos.value
-    name = note_names['flat'][pos] if not prefer_sharps else note_names['sharp'][pos]
+    name = parsing.preferred_note_names['b'][pos] if not prefer_sharps else parsing.preferred_note_names['#'][pos]
     return name
 
 
@@ -36,19 +37,19 @@ class Note:
     """a note/chroma/pitch-class defined in the abstract,
     i.e. not associated with a specific note inside an octave,
     such as: C or D#"""
-    def __init__(self, name=None, position=None, prefer_sharps=None):
+    def __init__(self, name=None, position=None, prefer_sharps=None, case_sensitive=True):
         # set main object attributes from init args:
-        self.name, self.position, self.prefer_sharps = self._parse_input(name, position, prefer_sharps)
+        self.name, self.position, self.prefer_sharps = self._parse_input(name, position, prefer_sharps, case_sensitive)
 
         # string denoting pitch class: ('C#', 'Db', 'E', etc.)
         self.chroma = self.name # these two are the same for Note class, but may be different for OctaveNote subclass
 
-        self.sharp_name = accidental_note_name(self.position, prefer_sharps=True)
-        self.flat_name = accidental_note_name(self.position, prefer_sharps=False)
+        self.sharp_name = preferred_name(self.position, prefer_sharps=True)
+        self.flat_name = preferred_name(self.position, prefer_sharps=False)
 
     #### main input/arg-parsing private method:
     @staticmethod
-    def _parse_input(name, position, prefer_sharps):
+    def _parse_input(name, position, prefer_sharps, case_sensitive):
         # check that exactly one has been provided:
         assert ((name is not None) + (position is not None) == 1), "Argument to init must include exactly one of: name or position"
         if isinstance(name, int):
@@ -66,41 +67,39 @@ class Note:
                 raise TypeError(f'expected str or int but received {type(name)} to initialise Note object')
             # log(f'Initialising Note with name: {name}')
 
+            # name is definitely a string now
+
             # detect if sharp or flat:
             if prefer_sharps is None:
                 # if no preference is set then we infer from the name argument supplied
-                if is_sharp(name[-1]):
+                if parsing.is_sharp_ish(name[1:]):
                     prefer_sharps = True
-                elif len(name) == 2 and is_flat(name[-1]):
+                elif parsing.is_flat_ish(name[1:]):  # len(name) == 2 and
                     prefer_sharps = False
                 else: # fallback on global default
                     prefer_sharps = False
             else:
                 prefer_sharps = prefer_sharps
 
-            # cast to correct case:
-            if len(name) == 1:
-                name = name.upper()
-            elif len(name) == 2:
-                name = name[0].upper() + name[1].lower()
-            else:
-                raise ValueError(f'{name} is too long to be a valid Note')
+            if not case_sensitive:
+            # cast to proper case:
+                name = name.capitalize()
 
-            position = note_positions[name]
-            name = accidental_note_name(position, prefer_sharps=prefer_sharps)
+            position = parsing.note_positions[name]
+            name = preferred_name(position, prefer_sharps=prefer_sharps)
         elif position is not None:
             if prefer_sharps is None:
                 prefer_sharps = False # default
 
             # log(f'Initialising Note with position: {position}')
-            name = accidental_note_name(position, prefer_sharps=prefer_sharps)
+            name = preferred_name(position, prefer_sharps=prefer_sharps)
         return name, position, prefer_sharps
 
     ## private utility functions:
     def _set_sharp_preference(self, prefer_sharps):
         """modify sharp preference in place"""
         self.prefer_sharps = prefer_sharps
-        self.name = accidental_note_name(self.position, prefer_sharps=self.prefer_sharps)
+        self.name = preferred_name(self.position, prefer_sharps=self.prefer_sharps)
 
     #### magic methods and note constructors:
     def __add__(self, interval):
@@ -150,7 +149,7 @@ class Note:
         C4 is equal to C5 because they are enharmonic.
         to compare OctaveNote value, use C4.value == C5.value explicitly"""
 
-        if isinstance(other, str) and is_valid_note_name(other):
+        if isinstance(other, str) and parsing.is_valid_note_name(other):
             # cast to Note if possible
             other = Note(other)
         if isinstance(other, Note):
@@ -273,15 +272,15 @@ class OctaveNote(Note):
         ### the following block defines: chroma, value, and pitch
         if name is not None:
             log(f'Initialising OctaveNote with name: {name}')
-            chroma, octave = parse_octavenote_name(name)
-            position = note_positions[chroma]
+            chroma, octave = parsing.parse_octavenote_name(name)
+            position = parsing.note_positions[chroma]
             value = conv.oct_pos_to_value(octave, position)
             pitch = conv.value_to_pitch(value)
         if value is not None:
             log(f'Initialising OctaveNote with value: {value}')
             value = value
             octave, position = conv.oct_pos(value)
-            chroma = accidental_note_name(position, prefer_sharps=prefer_sharps)
+            chroma = preferred_name(position, prefer_sharps=prefer_sharps)
             pitch = conv.value_to_pitch(value)
         if pitch is not None:
             log(f'Initialising OctaveNote with pitch: {pitch}')
@@ -289,14 +288,14 @@ class OctaveNote(Note):
             assert pitch > 0, "Pitch must be greater than 0"
             value = conv.pitch_to_value(pitch, nearest=True)
             octave, position = conv.oct_pos(value)
-            chroma = accidental_note_name(position, prefer_sharps=prefer_sharps)
+            chroma = preferred_name(position, prefer_sharps=prefer_sharps)
         return chroma, value, pitch
 
     ## private utility function:
     def _set_sharp_preference(self, preference):
         """modify sharp preference in place"""
         self.prefer_sharps = preference
-        self.chroma = accidental_note_name(self.position, prefer_sharps=self.prefer_sharps)
+        self.chroma = preferred_name(self.position, prefer_sharps=self.prefer_sharps)
         self.name = f'{self.chroma}{self.octave}'
 
     #### operators & magic methods:
@@ -473,13 +472,13 @@ class NoteList(list):
             arg = items[0]
             # if we have been passed a single string as arg, parse it out as a series of notes:
             if isinstance(arg, str):
-                arg = parse_out_note_names(arg)
+                arg = parsing.parse_out_note_names(arg)
 
             # now either way we should have an iterable of note-likes:
             try:
                 note_items = self._cast_notes(arg)
             except:
-                raise Exception(f'Unexpected type passed to NoteList init, expected iterable but got: {type(arg)}')
+                raise Exception(f'Could not parse NoteList input as a series of notes: {arg}')
 
         else:
             # we've been passed a series of items that we can unpack
@@ -494,7 +493,7 @@ class NoteList(list):
             if isinstance(item, Note):
                 # add note
                 note_items.append(item)
-            elif is_valid_note_name(item):
+            elif parsing.is_valid_note_name(item):
                 # cast string to note
                 note_items.append(Note(item))
             elif item[-1].isdigit():
@@ -558,6 +557,10 @@ class NoteList(list):
         octaved_notes = self.force_octave(1)
         root = octaved_notes[0]
         return IntervalList([o - root for o in octaved_notes])
+
+    @property
+    def intervals(self):
+        return self.ascending_intervals()
 
     def force_octave(self, start_octave=None, min_octave=1, max_octave=5):
         """returns another NoteList of ascending OctaveNotes corresponding to
@@ -657,9 +660,6 @@ Ab = Note('Ab')
 # all chromatic pitch classes:
 chromatic_scale = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
 
-# case by case tests:
-if __name__ == '__main__':
-    unit_test()
 
 def unit_test():
     ### magic method tests:
@@ -677,3 +677,11 @@ def unit_test():
     test(NoteList('CEG'), NoteList('C', 'E', 'G'))
 
     nl = NoteList('CEG')
+
+    # test double sharps and double flats:
+
+    test(Note('Ebb'), Note('C𝄪'))
+    test(Note('E𝄫'), Note('C##'))
+
+if __name__ == '__main__':
+    unit_test()

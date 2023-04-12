@@ -1,51 +1,137 @@
 #### string parsing functions
 from collections import defaultdict
-from util import reverse_dict, unpack_and_reverse_dict
+from util import reverse_dict, unpack_and_reverse_dict, log, test
 
-# note name lookups
-note_names = ['C', 'C# / Db', 'D', 'D# / Eb', 'E', 'F', 'F# / Gb', 'G', 'G# / Ab', 'A', 'A# / Bb', 'B', ]
+######################################## accidentals
+
+# map semitone offset values to accidental character aliases:
+offset_accidentals = {-2: ['𝄫', '♭♭', 'bb'],
+                -1: ['♭', 'b'],
+                 0: ['♮', ''],
+                 1: ['♯', '#'],
+                 2: ['𝄪', '♯♯', '##']}
+# map accidental aliases to offsets:
+accidental_offsets = unpack_and_reverse_dict(offset_accidentals)
+
+def accidental_value(acc):
+    return accidental_offsets[acc]
+
+# mapping of accidental aliases to canonical ascii strings (i.e. #, ##, b, bb)
+accidentals_to_ascii = {char: chars[-1] for chars in offset_accidentals.values() for char in chars}
+
+# string checking/cleaning for accidental unicode characters:
+def is_sharp(char):
+    """returns True for accidentals that parse as sharps"""
+    assert len(char) == 1, f'is_sharp should not be called on non-char strings'
+    return (char in offset_accidentals[1])
+def is_flat(char):
+    """returns True for accidentals that parse as flats"""
+    assert len(char) == 1, f'is_flat should not be called on non-char strings'
+    return (char in offset_accidentals[-1])
+def is_sharp_ish(char):
+    """returns True for sharps and double sharps"""
+    return (accidental_value(char) >= 1)
+def is_flat_ish(char):
+    """returns True for flats and double flats"""
+    return (accidental_value(char) >= 1)
+def is_accidental(char):
+    if len(char) == 0:
+        raise ValueError("'' is technically not an accidental but this is an edge case")
+    return (char in accidental_offsets.keys())
+def parse_accidental(acc, max_len=1):
+    """reads what might be unicode accidentals and casts to ascii '#' or 'b' if required"""
+    assert isinstance(acc, str) and len(acc) <= max_len, f'Invalid input to parse_accidental: {acc} (where max_len={max_len})'
+    if acc in accidentals_to_ascii:
+        return accidentals_to_ascii[acc]
+    else:
+        return None
+
+
+######################################## note names
+generic_note_names = ['C', 'C# / Db', 'D', 'D# / Eb', 'E', 'F', 'F# / Gb', 'G', 'G# / Ab', 'A', 'A# / Bb', 'B']
 natural_note_names = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
 
-note_names_flat = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
-note_names_sharp = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+# map note names to keyboard positions (where C is 0)
+note_positions = {note_name:i for i, note_name in enumerate(generic_note_names)} # surjective mapping of all possible note names
+note_names_by_accidental = {c: {} for c in accidental_offsets.keys()} # dict of acc: (dict of position: name of the note in that position by that acc), of length 7
 
-# for keys with 7 sharps / flats
-note_names_very_flat = ['C', 'Db', 'D', 'Eb', 'Fb', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'Cb']
-note_names_very_sharp = ['B#', 'C#', 'D', 'D#', 'E', 'E#', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+# build sharps, flats, double sharps and double flats:
+for n in natural_note_names:
+    for offset, accidentals in offset_accidentals.items():
+        for acc in accidentals:
+            acc_note_name = f'{n}{acc}' # e.g C# or D𝄫
+            acc_position = (note_positions[n] + offset) % 12
+            note_positions[acc_note_name] = acc_position
+            note_names_by_accidental[acc][acc_position] = acc_note_name
+# sort the latter dict:
+for c in accidental_offsets.keys():
+    pos_dict = note_names_by_accidental[c]
+    note_names_by_accidental[c] = {p : pos_dict[p] for p in sorted(pos_dict.keys())}
 
-# detect unicode notes too:
-note_names_flat_unicode = [n.replace('b', '♭') for n in note_names_flat]
-note_names_sharp_unicode = [n.replace('#', '♯') for n in note_names_sharp]
-note_names_very_flat_unicode = [n.replace('b', '♭') for n in note_names_very_flat]
-note_names_very_sharp_unicode = [n.replace('#', '♯') for n in note_names_very_sharp]
-note_names_natural_unicode = [n + '♮' if len(n)== 1 else n for n in note_names]
+natural_note_positions = set(note_positions[n] for n in natural_note_names)
+valid_note_names = set(note_positions.keys())
 
-valid_note_names = set(note_names + note_names_flat + note_names_sharp +
-                       note_names_flat_unicode + note_names_sharp_unicode +
-                       note_names_very_flat + note_names_very_sharp +
-                       note_names_very_flat_unicode + note_names_very_sharp_unicode +
-                       note_names_natural_unicode)
-
-note_names = {'generic':            note_names,
-              'flat':               note_names_flat,
-              'very_flat':          note_names_very_flat,
-              'very_flat_unicode':  note_names_very_flat_unicode,
-              'flat_unicode':       note_names_flat_unicode,
-              'sharp':              note_names_sharp,
-              'very_sharp':         note_names_very_sharp,
-              'sharp_unicode':      note_names_sharp_unicode,
-              'very_sharp_unicode': note_names_very_sharp_unicode,
-              'natural_unicode':    note_names_natural_unicode,
-              }
-              # 'valid':              valid_note_names}
+# now the preferred name of each note by preference:
+preferred_note_names = {}
+for preference in 'b', '#':
+    acc_notes = note_names_by_accidental[preference]
+    nat_notes = note_names_by_accidental[''] # all the white notes
+    # use natural names for white notes, and the preferred accidental for black notes:
+    names = [nat_notes[p] if p in nat_notes else acc_notes[p] for p in range(12)]
+    preferred_note_names[preference] = names
+preferred_note_names['generic'] = generic_note_names # in rare cases where we want neither preference
 
 
-# map any note name to its position:
-note_positions = {note_name:i for i, note_name in enumerate(note_names['generic'])}
-note_positions = {}
-for note_list in note_names.values():
-    note_positions.update({note_name:i for i, note_name in enumerate(note_list)})
+#
+# note_names = {  # all the notes ordered from C to B, under various aliases
+#
+#   'flat':         ['C',  'Db', 'D',  'Eb', 'E',  'F',  'Gb', 'G',  'Ab', 'A',  'Bb', 'B'  ],
+#   'sharp':        ['C',  'C#', 'D',  'D#', 'E',  'F',  'F#', 'G',  'G#', 'A',  'A#', 'B'  ],
+#   'very flat':    ['C',  'Db', 'D',  'Eb', 'Fb', 'F',  'Gb', 'G',  'Ab', 'A',  'Bb', 'Cb' ],  # for key signatures with 7 flats
+#   'very sharp':   ['B#', 'C#', 'D',  'D#', 'E',  'E#', 'F#', 'G',  'G#', 'A',  'A#', 'B'  ],  # or 7 sharps
+#   'double flat':  ['Dbb','Db', 'Ebb','Eb', 'Fb', 'Gbb','Gb', 'Abb','Ab', 'Bbb','Bb', 'Cbb'],
+#   'double sharp': ['B#', 'B##', 'C##','D#', 'D##','E#','E##',]
+#
+# }
 
+# note_names
+#
+# # detect unicode notes too:
+# note_names_flat_unicode = [n.replace('b', '♭') for n in note_names_flat]
+# note_names_sharp_unicode = [n.replace('#', '♯') for n in note_names_sharp]
+# note_names_very_flat_unicode = [n.replace('b', '♭') for n in note_names_very_flat]
+# note_names_very_sharp_unicode = [n.replace('#', '♯') for n in note_names_very_sharp]
+# note_names_natural_unicode = [n + '♮' if len(n)== 1 else n for n in note_names]
+#
+# valid_note_names = set(note_names + note_names_flat + note_names_sharp +
+#                        note_names_flat_unicode + note_names_sharp_unicode +
+#                        note_names_very_flat + note_names_very_sharp +
+#                        note_names_very_flat_unicode + note_names_very_sharp_unicode +
+#                        note_names_natural_unicode)
+#
+# note_names = {'generic':            note_names,
+#               'flat':               note_names_flat,
+#               'very_flat':          note_names_very_flat,
+#               'very_flat_unicode':  note_names_very_flat_unicode,
+#               'flat_unicode':       note_names_flat_unicode,
+#               'sharp':              note_names_sharp,
+#               'very_sharp':         note_names_very_sharp,
+#               'sharp_unicode':      note_names_sharp_unicode,
+#               'very_sharp_unicode': note_names_very_sharp_unicode,
+#               'natural_unicode':    note_names_natural_unicode,
+#               }
+#               # 'valid':              valid_note_names}
+#
+#
+# # map any note name to its position:
+#
+# note_positions = {}
+# for note_list in note_names.values():
+#     note_positions.update({note_name:i for i, note_name in enumerate(note_list)})
+#
+
+
+######################################## natural language names for numerical interval/scale degrees
 
 num_suffixes = defaultdict(lambda: 'th', {1: 'st', 2: 'nd', 3: 'rd', 4: 'th', 5: 'th', 6: 'th', 7: 'th'})
 
@@ -53,63 +139,54 @@ numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII'}
 roman_numerals = reverse_dict(numerals_roman)
 
 degree_names = {1: 'unison',  2: 'second', 3: 'third',
-                4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh',
-                8: 'octave', 9: 'ninth', 10: 'tenth',
-                11: 'eleventh', 12: 'twelfth', 13: 'thirteenth'}
+                4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh', 8: 'octave',
+                9: 'ninth', 10: 'tenth',
+                11: 'eleventh', 12: 'twelfth', 13: 'thirteenth',  16: 'double octave'}
 
-offset_accidentals = {-2: ['𝄫', '♭♭', 'bb'],
-                -1: ['♭', 'b'],
-                 0: ['', '♮'],
-                 1: ['♯', '#'],
-                 2: ['𝄪', '♯♯', '##']}
-accidental_offsets = unpack_and_reverse_dict(offset_accidentals)
+
+
 
 #### note name parsing functions:
 
-# string checking/cleaning for accidental unicode characters:
-def is_sharp(char):
-    return (char in ['#', '♯'])
-def is_flat(char):
-    return (char in ['b', '♭'])
-def is_accidental(char):
-    return (char in ['#', 'b', '♯', '♭'])
-def parse_accidental(acc):
-    """reads what might be unicode accidentals and casts to '#' or 'b' if required"""
-    assert len(acc) == 1
-    if acc == '♭':
-        return 'b'
-    elif acc == '♯':
-        return '#'
-    elif acc in ['#', 'b']:
-        return acc
-    else:
-        return None
-        # raise ValueError(f'{acc} is not an accidental')
-
-def is_valid_note_name(name: str, case_sensitive=False):
+def is_valid_note_name(name: str, case_sensitive=True):
     """returns True if string can be cast to a Note,
     and False if it cannot (in which case it must be something else, like a Note)"""
-    if not isinstance(name, str):
+    if not isinstance(name, str) or not (0 < len(name) < 4):
         return False
-    # force to upper case, in case we've been given e.g. lowercase 'c', still valid
-    if len(name) == 1:
-        if not case_sensitive:
-            return name.upper() in valid_note_names
-        else:
-            return name in valid_note_names
-    elif len(name) == 2:
-        if not case_sensitive:
-            # force to upper+lower case, in case we've been given e.g. 'eb', still valid
-            name2 = name[0].upper() + name[1].lower()
-        else:
-            name2 = name[:2]
-        return name2 in valid_note_names
-    else:
-        return False
+    if not case_sensitive:
+        # force first char to upper case and rest to lower, in case we've been
+        # given e.g. lowercase 'c' or 'eb', or 'bbb', which are all valid if not case_sensitive
+        name = name[0].upper() + name[1:].lower()
+    return name in note_positions
+    #
+    # if len(name) == 1:
+    #     if not case_sensitive:
+    #         return name.upper() in valid_note_names
+    #     else:
+    #         return name in valid_note_names
+    # elif len(name) == 2:
+    #     if not case_sensitive:
+    #         # force to upper+lower case, in case we've been given e.g. 'eb', still valid
+    #         name2 = name[0].upper() + name[1].lower()
+    #     else:
+    #         name2 = name[:2]
+    #     return name2 in valid_note_names
+    # elif len(name) == 3:
+    #     if not case_sensitive:
+    #         # force 'ebb' to 'Ebb', still valid
+    #         name3 = name[0].upper() + name[1:3].lower()
+    #     else:
+    #         name3 = name[:3]
+    #     return name3 in valid_note_names
+    # else:
+    #     return False
 
 def begins_with_valid_note_name(name: str):
     """checks if a string contains a valid note name in its first two characters.
     returns 2 for a two-character note name, 1 for a one-character name, and False if neither."""
+    if len(name) >= 3 and is_valid_note_name(name[:2], case_sensitive=True) and is_accidental(name[1:3]):
+        # three-character note (e.g. E## or Gbb)
+        return 3
     if len(name) >= 2 and is_valid_note_name(name[:2]):
         # two-character note
         return 2
@@ -118,48 +195,69 @@ def begins_with_valid_note_name(name: str):
     else:
         return False
 
-
-def parse_out_note_names(note_string):
+def parse_out_note_names(note_string, graceful_fail=False):
     """for some string of valid note letters, of undetermined length,
     such as e.g.: 'CAC#ADbGbE', parse out the individual notes and return
-    a list of corresponding Note objects"""
+    a list of corresponding Note objects.
+    if graceful_fail, returns False upon failure to parse, instead of error."""
 
     # TBI: this could be rewritten using recursive note_split?
 
     assert isinstance(note_string, str), f'parse_out_note_names expected str input but got: {type(note_string)}'
 
-    first_note_fragment = note_string[:2]
-    if is_accidental(first_note_fragment[-1]):
-        letter, accidental = first_note_fragment
-        first_note = letter + parse_accidental(accidental)
-        next_idx = 2
-    else:
-        first_note = first_note_fragment[0]
-        next_idx = 1
+    note_list = []
 
-    assert is_valid_note_name(first_note), f'{first_note} is not a valid note name'
-    note_list = [first_note]
+    # use recursive note_split to break the string apart note-by-note:
+    rest = note_string
+    while len(rest) > 0:
+        result = note_split(rest, graceful_fail=True)
+        # catch failure:
+        if result is False:
+            if graceful_fail:
+                return False
+            else:
+                raise ValueError(f'Error while parsing out note names from {note_string}: No valid note names found in {rest} (note names found so far: {note_list})')
 
-    while next_idx < len(note_string):
-        next_note_fragment = note_string[next_idx : next_idx+2]
-        if is_accidental(next_note_fragment[-1]):
-            letter, accidental = next_note_fragment
-            next_note = letter + parse_accidental(accidental)
-            next_idx += 2
-        else:
-            next_note = next_note_fragment[0]
-            next_idx += 1
-        note_list.append(next_note)
+        note_name, rest = result
+        note_list.append(note_name)
     return note_list
 
-def note_split(name):
+    # first_note_fragment = note_string[:2]
+    # if is_accidental(first_note_fragment[-1]):
+    #     letter, accidental = first_note_fragment
+    #     first_note = letter + parse_accidental(accidental)
+    #     next_idx = 2
+    #
+    # else:
+    #     first_note = first_note_fragment[0]
+    #     next_idx = 1
+    #
+    # assert is_valid_note_name(first_note), f'{first_note} is not a valid note name'
+    # note_list = [first_note]
+    #
+    # while next_idx < len(note_string):
+    #     next_note_fragment = note_string[next_idx : next_idx+2]
+    #     if is_accidental(next_note_fragment[-1]):
+    #         letter, accidental = next_note_fragment
+    #         next_note = letter + parse_accidental(accidental)
+    #         next_idx += 2
+    #     else:
+    #         next_note = next_note_fragment[0]
+    #         next_idx += 1
+    #     note_list.append(next_note)
+    return note_list
+
+def note_split(name, graceful_fail=False):
     """takes a string that contains a note in its first one or two characters
     (like the name of a chord, e.g. F#sus4)
     splits out the note name, and returns it along with the remaining substring
     as a (note_name, remainder) tuple"""
     note_idx = begins_with_valid_note_name(name)
     if note_idx is False:
-        raise ValueError(f'No valid note name found in first two characters of: {name}')
+        if graceful_fail:
+            return False
+        else:
+            raise ValueError(f'No valid note name found in first two characters of: {name}')
     note_name, remainder = name[:note_idx], name[note_idx:]
     return note_name, remainder
 
@@ -195,10 +293,20 @@ def parse_octavenote_name(name):
 
 
 def parse_alteration(alteration):
-    """accepts an alteration string like '#5' or 'b11' and parses it into a dict
-    that keys degree to offset, such as: {5:1} or {11:-1}"""
+    """accepts an alteration string like 'b5' or '#11' or '7' and parses it into a dict
+    that keys degree to offset, such as: {5:-1} or {11:1} or {7:0}"""
     degree_chars = [c for c in alteration if c.isnumeric()]
     degree = int(''.join(degree_chars))
     offset_str = alteration[:-len(degree_chars)]
     offset = accidental_offsets[offset_str]
     return {degree: offset}
+
+
+def unit_test():
+    test(parse_out_note_names('CbbBbAGbE##C'), ['Cbb', 'Bb', 'A', 'Gb', 'E##', 'C'])
+    test(parse_alteration('b5'), {5:-1})
+    test(parse_alteration('#11'), {11:+1})
+    test(parse_alteration('7'), {7:0})
+
+if __name__ == '__main__':
+    unit_test()

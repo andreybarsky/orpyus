@@ -442,12 +442,12 @@ Intervals = IntervalList
 #     return tonic_intervals
 
 # which intervals are considered perfect/major:
-perfect_intervals = [0, 5, 7]
-major_intervals = [2, 4, 9, 11]
+perfect_intervals = {0, 5, 7}
+major_intervals = {2, 4, 9, 11}
 # minor_intervals = [1, 3, 8, 10]
 
 # which degrees are considered perfect:
-perfect_degrees = [1, 4, 5]
+perfect_degrees = {1, 4, 5}
 
 # how many whole tones does each semitone interval correspond to (by default):
 default_interval_degrees = {

@@ -1,14 +1,25 @@
 import string
+import time
+import inspect
+import pdb
 
 VERBOSE = False
 
 class Log:
+    """logging class for detailed info from nested function execution"""
     def __init__(self, verbose=VERBOSE):
         self.verbose=verbose
 
+        self.init_time = time.time()
+
     def __call__(self, msg):
         if self.verbose:
-            print(msg)
+            cur_frame = inspect.currentframe()
+            call_frame = inspect.getouterframes(cur_frame, 2)
+            wall_time = time.time() - self.init_time
+
+            context = f'[{wall_time:.06f}]({call_frame[1][3]}) '
+            print(context + msg)
 
 log = Log()
 

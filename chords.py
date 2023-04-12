@@ -254,9 +254,16 @@ class AbstractChord:
             intervals = IntervalList(intervals).pad(left=True, right=False)
             assert len(intervals) == len(set(intervals)), f'Interval list supplied to AbstractChord init contains repeated intervals: {intervals}'
 
-            # search for possible inversions, and adopt them if they are less rare than what we've been given:
-            supplied_interval_name = intervals_to_chord_names[intervals]
-            supplied_rarity = chord_name_rarities[supplied_interval_name]
+            # check if this is an inversion of some common chord
+
+            if intervals in intervals_to_chord_names:
+                # (we'll use the inversion only if it's less rare than the root intervals)
+                supplied_interval_name = intervals_to_chord_names[intervals]
+                supplied_rarity = chord_name_rarities[supplied_interval_name]
+            else:
+                supplied_rarity = 10 # max possible
+
+                # search for possible inversions, and adopt them if they are less rare than what we've been given:
             possible_inversions = AbstractChord.inversions_from_intervals(intervals)
             if len(possible_inversions) > 0 and possible_inversions[0].rarity < supplied_rarity:
                 # adopt the inverted chord's root intervals and inversion instead
@@ -265,6 +272,10 @@ class AbstractChord:
                 # and one last change (bit of a kludge): if this is a Chord, intercept and change the root:
                 if isinstance(self, Chord):
                     self.root -= intervals[inversion]
+            else:
+                # we've failed to find an inversion, so just use the intervals and root as they are
+                if intervals not in intervals_to_chord_names:
+                    print(f'Failed to find a matching chord or inversion for intervals: {intervals}')
 
             # build factors by looping through intervals:
             factors = ChordFactors({1:0}) # note: NOT a major triad
@@ -399,8 +410,7 @@ class Chord(AbstractChord):
     whose members are Notes.
     a Chord is fully identified by its Root, its Factors, and its Inversion"""
     def __init__(self, name=None,
-                       root=None, factors=None, intervals=None,
-                       notes=None,
+                       root=None, factors=None, intervals=None, notes=None,
                        inversion=None, inversion_degree=None, bass=None,
                        qualifiers=None,
                        in_key=None,
@@ -416,9 +426,16 @@ class Chord(AbstractChord):
             with the additional requirement that 'root' keyword arg is also supplied, as a Note
             or object that casts to Note.
 
-        we also accept the optional 'in_key' argument, instead of AbstractChord's 'in_scale',
+        if a NoteList, or IntervalList, or ChordFactors object is fed as first arg (name),
+            we'll try to detect that and re-parse the args appropriately. we'll even check
+            if name is a STRING of valid notes, like Chord('CEA').
+
+        we also accept the optional 'in_key' argument (TBI), instead of AbstractChord's 'in_scale',
         which specifies that this Chord is to be regarded as in a specific Key,
         affecting its sharp preference and arithmetic behaviours."""
+
+        # re-parse args to detect if 'name' is a list of notes, a list of intervals, or a dict of chordfactors:
+        name, root, factors, intervals, notes
 
         if notes is not None: # initialise from ascending note list by casting notes as intervals from root
             # ignore intervals/factors/root inputs
@@ -429,12 +446,13 @@ class Chord(AbstractChord):
             intervals = NoteList(notes).ascending_intervals()
             root = note_list[0]
 
-        self.root, chord_name = self._parse_root(name, root)
+        # if name is a proper chord name like 'C' or 'Amaj' or 'D#sus2', separate it out into root and suffix components:
+        self.root, suffix = self._parse_root(name, root)
 
         assert self.root is not None
 
         # recover factor offsets, intervals from root, and inversion position from input args:
-        self.factors, self.root_intervals, inversion = self._parse_input(chord_name, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=True)
+        self.factors, self.root_intervals, inversion = self._parse_input(suffix, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=True)
         # note that while self.inversion in AbstratChord comes out as strictly int or None
         # here we allow it to be a string denoting the bass note, which we'll correct in a minute
 
@@ -505,16 +523,16 @@ class Chord(AbstractChord):
             # but a voicing of Dmaj7 or something
 
             if bass not in self.factor_notes.values():
-                print(f"    Chord initialised with inversion over {bass}, \n    but {bass} is not in this chord's notes: {list(self.factor_notes.values())}")
-                print(f"    Decomposing and reidentifying using recursive init")
-                print(f'     Existing root intervals: {self.root_intervals}')
+                log(f"    Chord initialised with inversion over {bass}, \n    but {bass} is not in this chord's notes: {list(self.factor_notes.values())}")
+                log(f"    Decomposing and reidentifying using recursive init")
+                log(f'     Existing root intervals: {self.root_intervals}')
                 bass_distance_from_root = bass - self.root
 
                 if bass_distance_from_root < self.root_intervals[-1]:
                     ### e.g. for Am/C case
                     if move_above:
-                        print('     Bass note above root would not be above the highest interval in this chord, ')
-                        print('      so we shift it up an octave and call it an inversion')
+                        log('     Bass note above root would not be above the highest interval in this chord, ')
+                        log('      so we shift it up an octave and call it an inversion')
                         bass_distance_from_root += 12  # raise bass-note interval by an octave
                         new_intervals = IntervalList(list(self.root_intervals) + [bass_distance_from_root]) # add bass note to top of chord
                         # recursively re-initialise:
@@ -523,12 +541,12 @@ class Chord(AbstractChord):
                     else:
                         raise Exception
                         ### should this trigger chord re-identification by notes instead?
-                        print('     Bass note above root would not be above the highest interval in this chord,')
-                        print('      so we move it below instead (and shift everything up)')
+                        log('     Bass note above root would not be above the highest interval in this chord,')
+                        log('      so we move it below instead (and shift everything up)')
                         new_intervals = IntervalList([~bass_distance_from_root] + self.root_intervals) # add bass note below the root
-                        print(f' new_intervals before transposition: {new_intervals}')
+                        log(f' new_intervals before transposition: {new_intervals}')
                         new_intervals = new_intervals - ~bass_distance_from_root # transpose interval list upward so that bass is the new root
-                        print(f' new_intervals after transposition: {new_intervals}')
+                        log(f' new_intervals after transposition: {new_intervals}')
                         # recursively re-initialise:
                         self.__init__(intervals=new_intervals, root=bass)
                         # this is now NOT an inversion:
@@ -805,11 +823,11 @@ chord_name_rarities = unpack_and_reverse_dict(chord_names_by_rarity)
 new_rarities = {i: [] for i in range(8)}
 
 for rarity, chord_names in chord_names_by_rarity.items():
-    print(f'Handling rarity={rarity}, chords={chord_names}')
+    log(f'Handling rarity={rarity}, chords={chord_names}')
 
     for chord_name in chord_names:
         base_chord = AbstractChord(chord_name)
-        print(f'Handling base chord: r:{rarity} {chord_name}')
+        log(f'Handling base chord: r:{rarity} {chord_name}')
 
         if base_chord.factors in factors_to_chord_names or base_chord.intervals in intervals_to_chord_names:
             log(f'  {chord_name} clash with {intervals_to_chord_names[base_chord.intervals]}')
@@ -916,7 +934,9 @@ class ChordVoicing(Chord):
             return root, octave, name
 
 
-def unit_test():
+def unit_test(verbose=False):
+    log.verbose=verbose
+
     # test inversion by factor/bass, AbstractChord->Chord initialisation, and unusual note names:
     test(Chord('E#m7/C'), AbstractChord('m7/2').root('F'))
     # test correct production of root notes/intervals and inverted notes/intervals:
@@ -934,6 +954,8 @@ def unit_test():
     # test recursive init:
     test(Chord('D/C#'), Chord('Dmaj7/C#'))
     test(Chord('Amaj7/B'), Chord('Amaj9/B'))
+
+    log.verbose = False
 
 if __name__ == '__main__':
     unit_test()
