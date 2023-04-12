@@ -68,39 +68,7 @@ class Interval:
             quality = Quality.from_offset_wrt_major(offset)
         return quality
 
-    @property
-    def name(self):
-        if abs(self.extended_degree) in degree_names:
-            # interval degree is at most a thirteenth:
-            degree_name = degree_names[abs(self.extended_degree)]
-            call_compound = False
-        else:
-            # greater than a thirteenth, so we just call it an extended whatever:
-            degree_name = degree_names[abs(self.degree)]
-            call_compound = True
 
-        qualifiers = []
-        if self.descending:
-            qualifiers.append('descending')
-        if call_compound:
-            qualifiers.append('compound')
-
-        if len(qualifiers) > 0:
-            qualifier_string = ", ".join(qualifiers)
-            qualifier_string = f' ({qualifier_string})'
-        else:
-            qualifier_string = ''
-
-        return f'{self.quality.name.capitalize()} {degree_name.capitalize()}{qualifier_string}'
-
-    @property
-    def short_name(self):
-        if self.value == 0:
-            return '‹Rt›'
-        else:
-            sign_str = '-' if self.sign == -1 else ''
-            short_deg = f'{abs(self.extended_degree)}'
-            return f'‹{sign_str}{self.quality.short_name}{short_deg}›'
 
     @property
     def consonance(self):
@@ -261,8 +229,42 @@ class Interval:
         """intervals only hash their values, not their degrees"""
         return hash(self.value)
 
+    @property
+    def name(self):
+        if abs(self.extended_degree) in degree_names:
+            # interval degree is at most a thirteenth:
+            degree_name = degree_names[abs(self.extended_degree)]
+            call_compound = False
+        else:
+            # greater than a thirteenth, so we just call it an extended whatever:
+            degree_name = degree_names[abs(self.degree)]
+            call_compound = True
+
+        qualifiers = []
+        if self.descending:
+            qualifiers.append('descending')
+        if call_compound:
+            qualifiers.append('compound')
+
+        if len(qualifiers) > 0:
+            qualifier_string = ", ".join(qualifiers)
+            qualifier_string = f' ({qualifier_string})'
+        else:
+            qualifier_string = ''
+
+        return f'{self.quality.name.capitalize()} {degree_name.capitalize()}{qualifier_string}'
+
+    @property
+    def short_name(self):
+        if self.value == 0:
+            return '‹Rt›'
+        else:
+            sign_str = '-' if self.sign == -1 else ''
+            short_deg = f'{abs(self.extended_degree)}'
+            return f'‹{sign_str}{self.quality.short_name}{short_deg}›'
+
     def __str__(self):
-        return f'«{self.value}:{self.name}»'
+        return f'‹{self.value}:{self.name}›'
 
     def __repr__(self):
         return str(self)

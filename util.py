@@ -1,3 +1,5 @@
+import string
+
 VERBOSE = False
 
 class Log:
@@ -31,7 +33,7 @@ class TestSuite:
         if not result and not self.graceful:
             raise Exception('Test failed')
 
-test = TestSuite(silent=True)
+test = TestSuite(silent=False)
 
 # generically useful functions used across modules:
 def rotate_list(lst, num_steps, N=None):
@@ -82,6 +84,29 @@ def precision_recall(target, candidate, weights=None):
 
     return precision, recall
 
+def auto_split(inp, allow='', allow_numerals=True, allow_letters=True):
+    """takes a string 'inp' and automatically separates it by the first character found that is
+        not in the whitelist 'allow'.
+    'allow' should be a string of characters that are NOT to be treated as separators.
+    if 'allow_numerals' is True, allow all the digit characters from 0 to 9.
+    if 'allow_letters' is True, allow all the upper and lowercase English alphabetical chars."""
+    allow = set(allow)
+    if allow_numerals:
+        allow.update(string.digits)
+    if allow_letters:
+        allow.update(string.ascii_letters)
+    sep_char = None
+    for c in inp:
+        if c not in allow:
+            sep_char = c
+            break
+    if sep_char is None:
+        # no separator found, return input as single list item
+        return [inp]
+    else:
+        return inp.split(sep_char)
+
+
 def reverse_dict(dct):
     """accepts a dict whose values and keys are both unique,
     and returns the reversed dict where keys are values and vice versa"""
@@ -113,26 +138,28 @@ def unpack_and_reverse_dict(dct, include_keys=False, force_list=False):
             rev_dct[k] = k
     return rev_dct
 
-def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True, include_keys=False, discard=False, verbose=False):
-    """given an input string, and a dict that maps potential input substrings
+def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True,
+                   include_keys=False, discard=False, verbose=False):
+    """given an input string 'inp', and a dict 'aliases' that maps potential input substrings
     to replacements (which can be arbitrary objects), recursively replace the string
     starting from longest possibilities first, until we have reduced it to its canonical form.
 
     if strip, pad replacement candidates with whitespace as well.
-    if reverse, we expect a dict where the VALUES are the replacements, instead of the reverse.
-        we assume that the values, then, are lists of replacement substrings,
-        and the keys are arbitrary objects.
-    if force_list, we relax this assumption on the values, and allow them to be non-lists,
-        in which case we just wrap them up as single-item lists.
-
-    if discard, we discard nonmatching characters instead of adding them to the output list."""
+    if reverse, we expect a dict where the VALUES are the replacements, instead
+        of the reverse. we assume that the values in this case are lists of
+        replacement substrings, and the keys are arbitrary objects.
+    if force_list, we relax this assumption on the values, and allow them to be
+        non-lists, in which case we just wrap them up as single-item lists.
+    if include_keys, we include the dict key in the replacements so they can map
+        back onto themselves.
+    if discard, we discard nonmatching characters instead of adding them to the
+        output list."""
 
     if reverse:
         replacements = unpack_and_reverse_dict(aliases, force_list=force_list, include_keys=include_keys)
     else:
         replacements = dict(aliases)
 
-        # 0.0160 / 3.795
     if strip:
         # add whitespace to the front of every replacement in addition:
         whitespaced_replacements = {f' {k}':v for k,v in replacements.items()}
@@ -140,7 +167,7 @@ def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True, inc
         stripped_replacements = {k.replace(' ', ''):v for k,v in replacements.items()}
 
         replacements.update(whitespaced_replacements)
-        # replacements.update(stripped_replacements)
+        replacements.update(stripped_replacements)
 
     # cached key lengths for performance optimisation:
     replacement_lengths = {k:len(k) for k in replacements.keys()}

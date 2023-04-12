@@ -1,6 +1,6 @@
 #### string parsing functions
 from collections import defaultdict
-from util import reverse_dict
+from util import reverse_dict, unpack_and_reverse_dict
 
 # note name lookups
 note_names = ['C', 'C# / Db', 'D', 'D# / Eb', 'E', 'F', 'F# / Gb', 'G', 'G# / Ab', 'A', 'A# / Bb', 'B', ]
@@ -56,6 +56,13 @@ degree_names = {1: 'unison',  2: 'second', 3: 'third',
                 4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh',
                 8: 'octave', 9: 'ninth', 10: 'tenth',
                 11: 'eleventh', 12: 'twelfth', 13: 'thirteenth'}
+
+offset_accidentals = {-2: ['𝄫', '♭♭', 'bb'],
+                -1: ['♭', 'b'],
+                 0: ['', '♮'],
+                 1: ['♯', '#'],
+                 2: ['𝄪', '♯♯', '##']}
+accidental_offsets = unpack_and_reverse_dict(offset_accidentals)
 
 #### note name parsing functions:
 
@@ -185,3 +192,13 @@ def parse_octavenote_name(name):
         else:
             raise ValueError(f'Provided note name is too long: {name}')
     return note_name, octave
+
+
+def parse_alteration(alteration):
+    """accepts an alteration string like '#5' or 'b11' and parses it into a dict
+    that keys degree to offset, such as: {5:1} or {11:-1}"""
+    degree_chars = [c for c in alteration if c.isnumeric()]
+    degree = int(''.join(degree_chars))
+    offset_str = alteration[:-len(degree_chars)]
+    offset = accidental_offsets[offset_str]
+    return {degree: offset}
