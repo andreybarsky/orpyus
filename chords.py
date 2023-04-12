@@ -733,6 +733,19 @@ class Chord(AbstractChord):
     def __and__(self, other):
         return self.enharmonic_to(other)
 
+    def pairwise_consonance(self, weight=True):
+        pairwise_intervals = []
+        consonances = []
+        for i in range(len(self)):
+            for j in range(i+1, len(self)):
+                pairwise_intervals.append(self.intervals[j] - self.intervals[i])
+                if (i == 0) and (weight==True):
+                    # intervals from the tonic are counted twice
+                    pairwise_intervals.append(self.intervals[j] - self.intervals[i])
+        consonances = [i.consonance for i in pairwise_intervals]
+        # simply the (weighted) average consonance of the pairwise intervals:
+        return round(sum(consonances) / len(consonances), 4)
+
     ### relative majors/minors are not very well-defined for chords (as opposed to keys), but we can have them anyway:
     @property
     def relative_minor(self):
@@ -997,6 +1010,8 @@ def unit_test(verbose=False):
     # test arg re-parsing
     test(Chord('CEA'), Chord(notes='CEA'))
 
+    # (this one also tests automatic chord factor detection from uninitialised intervals:
+    # Interval(8) is a minor sixth by default but here we parse it as the fifth in an aug chord)
     test(Chord([4,8], root='C'), Chord('C+'))
 
     from intervals import Maj3, Aug5

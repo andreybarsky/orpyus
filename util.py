@@ -271,6 +271,17 @@ def transpose_nested_list(nested_list):
             new_rows.append(this_row)
     return new_rows
 
+def euclidean_gcd(a,b):
+    """Euclidean algorithm to calculate greatest common divisor"""
+    # (don't ask me why this works)
+    left, right = a,b
+    while right > 0:
+        left, right = right, left % right
+    return left
+
+def least_common_multiple(a,b):
+    return (a*b) // euclidean_gcd(a,b)
+
 if __name__ == '__main__':
     # some tests on membership evaluation
     target = ['C', 'E', 'G', 'A']

@@ -4,6 +4,7 @@ import math
 #### name-value-pitch conversion functions for OctaveNotes
 # get octave and position from note value:
 def oct_pos(value): # equivalent to div_mod
+    value = int(value) # cast from Interval object if needed
     oct = math.floor((value+8) / 12)
     pos = (value - 4) % 12
     return oct, pos
@@ -45,6 +46,7 @@ def pitch_to_value(pitch, nearest=True):
 def value_to_pitch(value):
     """Given a piano key value (for an 88-note piano), return the corresponding
     pitch in Hz as a float."""
+    value = int(value)
     pitch = 2 ** ((value-49)/12) * 440.
     return round(pitch, 2)
 

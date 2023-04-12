@@ -1,6 +1,8 @@
 from qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
 from parsing import degree_names, num_suffixes
-from util import rotate_list, test
+from util import rotate_list, least_common_multiple, euclidean_gcd, test
+from conversion import value_to_pitch
+import math
 import pdb
 
 class Interval:
@@ -68,11 +70,23 @@ class Interval:
             quality = Quality.from_offset_wrt_major(offset)
         return quality
 
-
+    @property
+    def ratio(self):
+        if self.value in interval_ratios:
+            return interval_ratios[self.value]
+        else:
+            # this is an extended interval that we don't have a just ratio for,
+            # but we can say it's just the ratio of its mod, with the left side
+            # raised by 2 to the power of the octave span
+            left, right = interval_ratios[self.mod]
+            left *= (2**self.octave_span)
+            # reduce to simple form:
+            gcd = euclidean_gcd(left, right)
+            return (left // gcd, right // gcd)
 
     @property
-    def consonance(self):
-        # a very fuzzy notion of interval consonance:
+    def old_consonance(self):
+        # # a very fuzzy notion of interval consonance:
         if self.mod in [1, 6, 11]:
             consonance = 0 # dissonant
         elif self.mod in [0, 5, 7]:
@@ -82,6 +96,26 @@ class Interval:
             # where d is the distance from a perfect 5th (or 4th?)
             consonance = round(1 / (1+(abs(5-self.mod))), 1)
         return consonance
+
+    @property
+    def consonance(self):
+        """consonance of an interval, defined as
+        the base2 log of the least common multiple of
+        the sides of that interval's ratio"""
+        l, r = self.ratio
+        # reduce ratio:
+        # gcd = euclidean_gcd(l,r)
+        # l, r = l // gcd, r // gcd
+        # calculate least common multiple of simple form:
+        lcm = least_common_multiple(l,r)
+        dissonance = math.log(lcm, 2)
+        # this is a number that ranges from 0 to just under 15,
+        # for intervals in the range(0-88)
+        # (the most dissonant interval is the 7-octave compound minor second, of width 85)
+
+        # so we invert it into a consonance between 0-1:
+        return (15 - dissonance) / 15
+
 
     @staticmethod
     def from_degree(degree, quality=None, offset=None):
@@ -400,7 +434,12 @@ class IntervalList(list):
         those inverted intervals as a new IntervalList"""
         rotated = self.rotate(position)
         recentred = rotated - rotated[0] # centres first interval to be root again
-        inverted = recentred.flatten()   # inverts negative intervals to their correct values
+        # inverted = recentred.flatten()   # inverts negative intervals to their correct values
+        inverted = IntervalList(list(set([~i if i < 0 else i for i in recentred]))).sorted()
+
+        ### to do: intervals.unique() method
+        ###        intervals.__abs__ method
+
         return inverted
 
     def stack(self):
@@ -538,6 +577,56 @@ AugmentedThirteenth = AugThirteenth = Augmented13th = Aug13th = Aug13 = Interval
 
 common_intervals = [P1, m2, M2, m3, M3, P4, Dim5, Per5, m6, M6, m7, M7, P8, m9, M9, m10, M10, P11, P12, m13, M13]
 
+# interval whole-number ratios according to five-limit tuning just intonation:
+interval_ratios = {0: (1,1),  1: (16,15),  2: (9,8),    3: (6,5),
+                   4: (5,4),  5: (4,3),    6: (25,18),  7: (3,2),
+                   8: (8,5),  9: (5,3),   10: (16,9),  11: (15,8),
+                   12: (2,1)}
+
+
+
+# # calculate ratios of extended intervals:
+# higher_ratios = {}
+# for higher_octave in range(1,4):
+#     for i, (l,r) in interval_ratios.items():
+#         # raise the left side of the ratio by an octave:
+#         hi, hl = i+(12*higher_octave), l*(2*higher_octave)
+#         # reduce to least common factors:
+#         for factor in range(10,1,-1):
+#             if (hl % factor == 0) and (r % factor == 0):
+#                 higher_ratios[hi] = (hl // factor), (r // factor)
+#                 print(f'above {i}:{l,r}, {hi}:{hl,r} is divisible by factor {factor}, produces {higher_ratios[hi]}')
+#                 break
+#         if hi not in higher_ratios:
+#             print(f'above {i}:{l,r}, {hi}:{hl,r} not divisible by any factors')
+#             higher_ratios[hi] = (hl, r)
+
+# interval_ratios.update(higher_ratios)
+
+
+
+
+
+# def consonance(i):
+#     """consonance of an interval, defined as
+#     the base2 log of the least common multiple of
+#     the sides of that interval's ratio"""
+#     l, r = self.ratio
+#     # reduce ratio:
+#     # gcd = euclidean_gcd(l,r)
+#     # l, r = l // gcd, r // gcd
+#     # calculate least common multiple of simple form:
+#     lcm = least_common_multiple(l,r)
+#     return math.log(lcm, 2)
+
+
+new_consonances, old_consonances = [], []
+for i in range(12):
+    intv = Interval(i)
+    new_consonances.append(intv.consonance)
+    old_consonances.append(intv.old_consonance)
+
+
 def unit_test():
     test(Interval(4) - Interval(2), Interval(2))
     test(Interval(4) + 10, Interval(14))
@@ -545,8 +634,8 @@ def unit_test():
     test(Maj3, Interval(4))
     test(Maj3 + Min3, Per5)
     test(Per5-Min3, Maj3)
-    test(Interval(7).consonance, 1)
-    test(Interval(6).consonance, 0)
+    # test(Interval(7).consonance, 1)
+    # test(Interval(6).consonance, 0)
     test(~Interval(-7), Per4)
     test(-Aug9, Interval(-15, degree=-9))
     test(~Dim12, -Aug11)

@@ -78,8 +78,6 @@ class Scale:
 
     @staticmethod
     def _parse_input(name, intervals, mode, stacked):
-
-
         # in case we've been obviously fed intervals as first arg, implicitly fix input:
         if isinstance(name, IntervalList):
             intervals = name
