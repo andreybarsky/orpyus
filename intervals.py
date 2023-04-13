@@ -186,8 +186,8 @@ class Interval:
             # result = Interval(new_value)
             # catch special case: addition/subtraction by octaves preserves this interval's degree/quality,
             # (except if there's been a sign change)
-            if (self.value == 0) or (new_value) == 0:
-                # in this simplified case we don't need to worry about that
+            if (self.mod == 0):
+                # (but don't worry about it for addition/subtraction of unisons themselves)
                 return Interval(new_value)
             elif int(other) % 12 == 0:
                 octave_of_addition = int(other) // 12
