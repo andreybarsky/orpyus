@@ -394,7 +394,11 @@ class AbstractChord:
 
     @property
     def name(self):
-        return f'{self.suffix} chord'
+        if self.suffix == '':
+            # unique to AbstractChord: report major suffix
+            return f'maj chord'
+        else:
+            return f'{self.suffix} chord'
 
     def root(self, root_note):
         """constructs a Chord object from this AbstractChord with respect to a desired root"""
