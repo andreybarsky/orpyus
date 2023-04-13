@@ -370,6 +370,7 @@ class IntervalList(list):
         interval_items = self._cast_intervals(items)
 
         super().__init__(interval_items)
+        self.set = set(self) # for efficient use of __contains__
 
     @staticmethod
     def _cast_intervals(items):
@@ -436,13 +437,30 @@ class IntervalList(list):
         """pointwise negation"""
         return IntervalList([-i for i in self])
 
+    def __abs__(self):
+        """returns a new IntervalList where any negative intervals are inverted to be positive"""
+        return IntervalList([~i if i < 0 else i for i in self])
+
     def __hash__(self):
         """IntervalLists hash as sorted tuples for the purposes of chord/key reidentification"""
         return hash(tuple(self.sorted()))
 
-    def __abs__(self):
-        """returns a new IntervalList where any negative intervals are inverted to be positive"""
-        return IntervalList([~i if i < 0 else i for i in self])
+    def __contains__(self, item):
+        return item in self.set
+
+    def append(self, item):
+        """as list.append, but updates our set object as well"""
+        super().append(item)
+        self.set = set(self)
+
+    def remove(self, item):
+        super().remove(item)
+        self.set = set(self)
+
+    def pop(self, item):
+        popped_item = self[-1]
+        del self[-1]
+        self.set = set(self)
 
     def unique(self):
         """returns a new IntervalList, where repeated notes are dropped after the first"""
