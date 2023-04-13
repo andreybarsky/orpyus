@@ -714,9 +714,8 @@ def unit_test():
     test(Note('Ebb'), Note('C𝄪'))
     test(Note('E𝄫'), Note('C##'))
 
-    import chords
     # test matching chords:
-    test(NoteList('CEG').most_likely_chord()[0], chord.Chord('CEG'))
+    test(NoteList('CEG').most_likely_chord()[0].intervals, IntervalList(0,4,7))
 
 if __name__ == '__main__':
     unit_test()
