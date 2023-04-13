@@ -376,7 +376,7 @@ class ChordQualifier:
         name_str = []
         for deg, val in self.summary.items():
             if val: # i.e. not 0 (add) or False (remove)
-                name_str.append(f'{offset_accidentals[val]}{deg}')
+                name_str.append(f'{offset_accidentals[val][0]}{deg}')
             elif val is False:
                 name_str.append(f'no{val}')
             elif val == 0:
@@ -401,7 +401,10 @@ class ChordQualifier:
         return order
 
     def __str__(self):
-        return f'ChordQualifier: {self.name}'
+        if self.name in [chord_types, chord_qualifiers]:
+            return f'ChordQualifier: {self.name}'
+        else:
+            return f'Alteration: {self.name}'
 
     def __repr__(self):
         return str(self)
