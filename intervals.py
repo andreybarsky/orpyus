@@ -184,17 +184,25 @@ class Interval:
         if isinstance(other, (int, Interval)):
             new_value = self.value + int(other)
             # result = Interval(new_value)
-            # catch special case: addition/subtraction by octaves preserves this interval's degree/quality
-            if int(other) % 12 == 0:
-                octave_span = int(other) // 12
-                new_degree = self.extended_degree + (abs(octave_span)*7)
-
-                # new degree is an octave less if there's been a sign change:
+            # catch special case: addition/subtraction by octaves preserves this interval's degree/quality,
+            # (except if there's been a sign change)
+            if (self.value == 0) or (new_value) == 0:
+                # in this simplified case we don't need to worry about that
+                return Interval(new_value)
+            elif int(other) % 12 == 0:
+                octave_of_addition = int(other) // 12
+                # new_degree = ((((self.sign * self.extended_degree) + octave_of_addition) - 1) % 7) + 1
                 new_sign = -1 if new_value < 0 else 1
-                if new_sign != self.sign:
-                    new_degree -= 7
+                # invert the degree if there's been a sign change
+                new_degree = self.degree if (new_sign == self.sign) else (9-self.degree)
+                new_ext_degree = new_degree + (7*(abs(new_value) // 12))
+                #
+                # # new degree is an octave less if there's been a sign change:
+                # new_sign = -1 if new_value < 0 else 1
+                # if new_sign != self.sign:
+                #     new_degree -= 7
 
-                result = Interval(new_value, new_degree)
+                result = Interval(new_value, new_ext_degree)
             else:
                 result = Interval(new_value)
             return result
@@ -711,8 +719,11 @@ def unit_test():
 
     print('Degree preservation under addition/subtraction by octaves:')
     test((Aug4 + Interval(12)).degree, Aug11.degree)
-    test((Aug4 - Interval(12)).degree, (-Aug4).degree)
     test((-Aug4 - Interval(12)).degree, (-Aug11).degree)
+
+    print('And degree inversion under sign switch:')
+    test((Aug4 - Interval(12)).degree, (~Aug4).degree)
+    test(Interval(4) - Interval(24), Interval(-20))
 
 
     print('IntervalLists:')
