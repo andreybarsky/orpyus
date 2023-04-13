@@ -928,7 +928,7 @@ class Chord(AbstractChord):
 chord_names_by_rarity = { 0: ['', 'm', '7', 'm7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
                           1: ['maj7', 'mmaj7', '+', 'sus4', 'sus2', 'add9', '(no5)'], # maj/mmaj 7s, augs, and common alterations like sus2/4 and add9
                           2: ['dim', 'dim7', 'hdim7', '6', 'm6'], # diminised chords and 6ths
-                          3: ['dm9'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj') for d in (9,11,13)], # the four major types of extended chords, and dominant minor 9ths
+                          3: ['dm9'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (9,11,13)], # the five major types of extended chords, and dominant minor 9ths
                           4: [], 5: [], 6: [], 7: []}
 
 # these chord names cannot be modified:

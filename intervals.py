@@ -47,13 +47,25 @@ class Interval:
         else:
             # degree has been provided; we validate it here
             default_degree = (default_interval_degrees[self.mod] + (7*self.octave_span)) * self.sign
+            self.extended_degree = abs(degree) * self.sign
+            self.degree = (abs(self.extended_degree) - (7*self.octave_span)) * self.sign
             # should not be more than 1 away from the default:
-            if abs(degree - default_degree) <= 1:
-                self.extended_degree = abs(degree) * self.sign
-                self.degree = (abs(self.extended_degree) - (7*self.octave_span)) * self.sign
+            degree_distance_from_default = abs(degree - default_degree)
+
+            if degree_distance_from_default <= 1:
+                # all good - interval fits to the desired degree
+                pass
+                # self.extended_degree = abs(degree) * self.sign
+                # self.degree = (abs(self.extended_degree) - (7*self.octave_span)) * self.sign
+            elif degree_distance_from_default in {8,9,10}:
+                # interval has been asked to correspond to a degree one octave higher or lower than default
+                # maybe this is fine fine: we can quietly re-init?
+                raise ValueError(f'Interval init specified that interval of semitone distance {self.value}' +
+                f' should correspond to degree={degree}, but that appears to be an octave up or down from default: {default_degree}')
+
             else:
                 raise ValueError(f'Interval init specified that interval of semitone distance {self.value}' +
-                f' should correspond to degree={degree}, but that is too far from {default_degree}')
+                f' should correspond to degree={degree}, but that is too far from default: {default_degree}')
 
 
 
@@ -161,11 +173,23 @@ class Interval:
 
     # interval constructor methods:
     def __add__(self, other):
-        if isinstance(other, Interval):
-            return Interval(self.value + other.value)
-        elif isinstance(other, int):
-            # cast to interval and call again recursively:
-            return Interval(self.value + other)
+        # if isinstance(other, Interval):
+        #     operand = other.value
+        # elif isinstance(other, int):
+        #     operand = other
+
+        if isinstance(other, (int, Interval)):
+            new_value = self.value + int(other)
+            # catch special case: addition/subtraction by octaves preserves interval degree
+            if int(other) % 12 == 0:
+                octave_span = int(other) // 12
+                new_degree = self.extended_degree + (7*octave_span)
+            else:
+                new_degree = None
+            return Interval(new_value, new_degree)
+        # elif isinstance(other, int):
+        #     # cast to interval and call again recursively:
+        #     return Interval(self.value + other)
         else:
             raise TypeError('Intervals can only be added to integers or other Intervals')
 
@@ -173,10 +197,12 @@ class Interval:
         return self + other
 
     def __sub__(self, other):
-        if isinstance(other, Interval):
-            return Interval(self.value - other.value)
-        elif isinstance(other, int):
-            return Interval(self.value - other)
+        if isinstance(other, (int, Interval)):
+            # call __add__ method recursively:
+            return self + (-other)
+        #     return Interval(self.value - other.value)
+        # elif isinstance(other, int):
+        #     return Interval(self.value - other)
         else:
             raise TypeError('Intervals can only be subtracted from integers or other Intervals')
 
@@ -648,6 +674,7 @@ for i in range(12):
 
 def unit_test():
     test(Interval(4) - Interval(2), Interval(2))
+    test(Interval(3) - 5, Interval(-2))
     test(Interval(4) + 10, Interval(14))
     test(Interval(4), Interval.from_degree(3))
     test(Maj3, Interval(4))
