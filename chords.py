@@ -208,7 +208,7 @@ class AbstractChord:
         # dict mapping chord factors to intervals from tonic:
         self.factor_intervals = {i.extended_degree: i for i in self.root_intervals}
 
-        if self.inversion is not None: # list of self.intervals is with respect to this chord's inversion
+        if self.inversion != 0: # list of self.intervals is with respect to this chord's inversion
             self.intervals = self.root_intervals.invert(self.inversion)
         else:
             self.intervals = self.root_intervals
@@ -344,6 +344,8 @@ class AbstractChord:
                         raise ValueError(f'got string argument to inversion, but does not seem to be a valid note name: {inversion}')
             else:
                 raise TypeError(f'inversion must be an int or str, but got: {type(inversion)}')
+        else:
+            inversion = 0 # 0th inversion means no inversion at all
 
         return factors, intervals.sorted(), inversion
 
@@ -353,7 +355,7 @@ class AbstractChord:
     @property
     def _inv_string(self):
         """inversion string, used internally by suffix method (and inherited by subclasses)"""
-        return f'/{self.inversion}' if (self.inversion is not None) else ''
+        return f'/{self.inversion}' if (self.inversion != 0) else ''
 
     @property
     def suffix(self, inversion=True):
@@ -613,8 +615,9 @@ class Chord(AbstractChord):
         """given an inversion as int (Xth inversion) or string (bass note),
         return canonical forms: (inversion, inversion_degree, bass)
         with respect to already-defined self.root_notes"""
-        if inversion is None:
-            inversion = inversion_degree = None
+        if inversion == 0:
+            inversion_degree = None
+            # inversion = inversion_degree = None
             # no inversion, so the bass is just the root, and the notes/intervals are in root position:
             bass = self.root
             inverted_notes, inverted_intervals = self.root_notes, self.root_intervals
@@ -667,8 +670,8 @@ class Chord(AbstractChord):
                             print(f"\n  --Identified most likely chord: {most_likely_chord}\n       (with {stats})")
                             # print(f"Warning: Recursively re-initialising {self.root.name}{naive_chord_name}/{bass.name} as {bass.name}{most_likely_chord.suffix}")
                             # pdb.set_trace()
-                            self.__init__(factors=most_likely_chord.factors, root=most_likely_chord.root)
-                            return self._parse_inversion(None)
+                            self.__init__(factors=most_likely_chord.factors, root=most_likely_chord.root, inversion=None)
+                            return self._parse_inversion(0)
                         except Exception as e:
                             raise Exception(f" Failed to re-initialise, uncaught error: {e}")
 
@@ -1101,7 +1104,7 @@ def matching_chords(note_list, display=True,
                         candidates[candidate] = {   'recall': round(recall,    2),
                                                  'precision': round(precision, 2),
                                                 'likelihood': round(likelihood,2),
-                                                'consonance': round(consonance,4)}
+                                                'consonance': round(consonance,3)}
 
     # return sorted candidates dict:
     sorted_cands = sorted(candidates,
@@ -1149,7 +1152,7 @@ def matching_chords(note_list, display=True,
             num_combi_chars = len([c for c in notes_str if c in combi_chars])
 
             descriptor = f'{name_str:{longest_name_len}} {notes_str:{longest_notes_len + num_combi_chars}}'
-            scores = f' {str(rec):{hspace}} {str(prec):{hspace}}  {str(lik):{hspace}}  {cons:.04f}'
+            scores = f' {str(rec):{hspace}} {str(prec):{hspace}}  {str(lik):{hspace}}  {cons:.03f}'
             out_list.append(descriptor + scores)
         print('\n'.join(out_list))
     else:
