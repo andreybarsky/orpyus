@@ -49,7 +49,7 @@ class TestSuite:
 
         resultstr = 'TEST +++ PASS' if result else 'TEST --- FAIL'
         if not self.silent:
-            print(f'\n[{wall_time:.06f}] {resultstr}:\n obs: {op}\n exp: {exp}\n   (execution time: {exec_time_ms:.04f}ms)')
+            print(f'[{wall_time:.06f}] {resultstr}:\n obs: {op}\n exp: {exp}\n   (execution time: {exec_time_ms:.04f}ms)\n')
 
         if not result and not self.graceful:
             raise Exception('Test failed')
