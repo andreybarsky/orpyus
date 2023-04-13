@@ -374,7 +374,13 @@ class AbstractChord:
 
     @property
     def rarity(self):
+        """an integer denoting how rarely this chord is used in practice"""
         return chord_name_rarities[factors_to_chord_names[self.factors]]
+
+    @property
+    def likelihood(self):
+        """converse of rarity, as a float between 0-1"""
+        return (10-self.rarity)/10
 
     def identify_inversion(self):
         """searches all of this chord's possible inversions to see if one of them
@@ -480,6 +486,9 @@ class AbstractChord:
             return (self.factors == other.factors) and (self.inversion == other.inversion)
         else:
             raise TypeError(f'AbstractChords can only be compared to other AbstractChords')
+
+    def __hash__(self):
+        return hash(((tuple(self.factors.items())), self.inversion))
 
 ################################################################################
 
@@ -797,6 +806,9 @@ class Chord(AbstractChord):
         else:
             raise TypeError(f'Chords can only be compared to other Chords')
 
+    def __hash__(self):
+        return hash(((tuple(self.factors.items())), self.inversion, self.root))
+
     # enharmonic equality:
     def enharmonic_to(self, other):
         """Compares enharmonic equivalence across Chords,
@@ -1063,7 +1075,7 @@ def matching_chords(note_list, display=True,
                 cand_factors = chord_names_to_factors[chord_name]
                 candidate = Chord(factors=cand_factors, root=n)
 
-                likelihood = (10-rarity)/10 # float from 0.3 to 1.0
+                likelihood = candidate.likelihood # float from 0.3 to 1.0
 
                 # if candidate doesn't share the 'root', we can invert it:
                 if (candidate.root != note_list[0]):
