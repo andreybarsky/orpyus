@@ -452,14 +452,14 @@ chord_types =  {'m': ChordQualifier(make={3: -1}),
 # chord 'modifiers' are those that could conceivably modify an existing chord type:
 # note that this dict order matters, since it affects the order in which chords get named: (e.g. add9sus4 instead of sus4add9)
 chord_modifiers = {
-                    'add4': ChordQualifier(add=4, verify={9: False}), # are these real? or just add11s
-                    'add9': ChordQualifier(add={9:0}, verify={7: False}),
-                    'add11': ChordQualifier(add=11, verify={9: False}),
-                    'add13': ChordQualifier(add=13, verify={11: False}),
+                    'add4': ChordQualifier(add=4, verify={9: False, 11:False}), # are these real? or just add11s
+                    'add9': ChordQualifier(add={9:0}, verify={7: False, 2:False}),
+                    'add11': ChordQualifier(add=11, verify={9: False, 4:False}),
+                    'add13': ChordQualifier(add=13, verify={11: False, 6:False, 5:0}), # verify natural 5 is a kludge, see: Bbdim9add13/C
 
-                    'sus4': ChordQualifier(remove=3, add=4, verify={2:False}),
-                    'sus2': ChordQualifier(remove=3, add=2, verify={4:False}),
-                    '(no5)': ChordQualifier(remove=5, verify={3: True}),
+                    'sus4': ChordQualifier(remove=3, add=4, verify={2:False, }),
+                    'sus2': ChordQualifier(remove=3, add=2, verify={4:False, }),
+                    '(no5)': ChordQualifier(remove=5, verify={3: True, 10:False}),
                     }
 
 # add chord alterations as well: (♯5, ♭11, etc.)

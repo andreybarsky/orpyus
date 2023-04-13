@@ -184,7 +184,10 @@ class Interval:
         return Interval(self.value % m)
 
     def __neg__(self):
-        return Interval(-self.value, -self.extended_degree)
+        if self.value == 0:
+            return self
+        else:
+            return Interval(-self.value, -self.extended_degree)
 
     def __invert__(self):
         """returns the inverted interval, which is distinct from the negative interval.
@@ -384,6 +387,20 @@ class IntervalList(list):
         """IntervalLists hash as sorted tuples for the purposes of chord/key reidentification"""
         return hash(tuple(self.sorted()))
 
+    def __abs__(self):
+        """returns a new IntervalList where any negative intervals are inverted to be positive"""
+        return IntervalList([~i if i < 0 else i for i in self])
+
+    def unique(self):
+        """returns a new IntervalList, where repeated notes are dropped after the first"""
+        unique_intervals = []
+        unique_intervals_set = set() # for efficiency
+        for i in self:
+             if i not in unique_intervals_set:
+                 unique_intervals.append(i)
+                 unique_intervals_set.add(i)
+        return IntervalList(unique_intervals)
+
     def sort(self):
         super().sort()
 
@@ -434,11 +451,12 @@ class IntervalList(list):
         those inverted intervals as a new IntervalList"""
         rotated = self.rotate(position)
         recentred = rotated - rotated[0] # centres first interval to be root again
+        positive = abs(recentred) # inverts any negative intervals to their positive inversions
+        inverted = positive.unique().sorted()
         # inverted = recentred.flatten()   # inverts negative intervals to their correct values
-        inverted = IntervalList(list(set([~i if i < 0 else i for i in recentred]))).sorted()
+        # inverted = IntervalList(list(set([~i if i < 0 else i for i in recentred]))).sorted()
 
-        ### to do: intervals.unique() method
-        ###        intervals.__abs__ method
+
 
         return inverted
 

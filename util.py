@@ -103,6 +103,9 @@ def precision_recall(target, candidate, weights=None):
     precision = relevant_retrieved / num_retrieved    # i.e. validity
     recall = relevant_retrieved / num_relevant        # i.e. completeness
 
+    if precision > 1:
+        pdb.set_trace()
+
     return precision, recall
 
 def auto_split(inp, allow='', allow_numerals=True, allow_letters=True):

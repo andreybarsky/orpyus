@@ -538,6 +538,20 @@ class NoteList(list):
         else:
             raise Exception(f"Can't subtract {type(other)} from NoteList")
 
+    def unique(self):
+        """returns a new NoteList, where repeated notes are dropped after the first"""
+        unique_notes = []
+        unique_notes_set = set() # for efficiency
+        for n in self:
+             if n not in unique_notes_set:
+                 unique_notes.append(n)
+                 unique_notes_set.add(n)
+        return NoteList(unique_notes)
+
+    def __hash__(self):
+        """NoteLists hash as tuples for the purposes of chord/key reidentification"""
+        return hash(tuple(self))
+
     def rotate(self, num_places):
         """returns the rotated NoteList that begins num_steps up
         from the beginning of this one. used for inversions,

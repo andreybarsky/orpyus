@@ -141,7 +141,7 @@ roman_numerals = reverse_dict(numerals_roman)
 degree_names = {1: 'unison',  2: 'second', 3: 'third',
                 4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh', 8: 'octave',
                 9: 'ninth', 10: 'tenth',
-                11: 'eleventh', 12: 'twelfth', 13: 'thirteenth',  16: 'double octave'}
+                11: 'eleventh', 12: 'twelfth', 13: 'thirteenth',  15: 'double-octave'}
 
 
 
@@ -268,7 +268,7 @@ def parse_octavenote_name(name, case_sensitive=True):
     numbers = [n for n in name if n.isnumeric()]
     numbers_str = ''.join(numbers)
     note_name = name[:-len(numbers)]
-    assert numbers_str == name[len(numbers):], f'Could not parse OctaveNote name: {name}, the numbers seem to be in weird places'
+    assert numbers_str == name[-len(numbers):], f'Could not parse OctaveNote name: {name}, the numbers seem to be in weird places'
     octave = int(numbers_str)
 
     if not case_sensitive:

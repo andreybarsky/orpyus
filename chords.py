@@ -277,25 +277,32 @@ class AbstractChord:
             else:
                 supplied_rarity = 10 # max possible
 
-                # search for possible inversions, and adopt them if they are less rare than what we've been given:
-            possible_inversions = AbstractChord.inversions_from_intervals(intervals)
-            if len(possible_inversions) > 0 and possible_inversions[0].rarity < supplied_rarity:
-                # adopt the inverted chord's root intervals and inversion instead
-                intervals = possible_inversions[0].root_intervals
-                inversion = possible_inversions[0].inversion
-                # and one last change (bit of a kludge): if this is a Chord, intercept and change the root:
-                if isinstance(self, Chord):
-                    self.root -= intervals[inversion]
-            else:
-                # we've failed to find an inversion, so just use the intervals and root as they are
-                if intervals not in intervals_to_chord_names:
-                    print(f'Failed to find a matching chord or inversion for intervals: {intervals}')
+            # search for possible inversions if this is not already one,
+            # and adopt the most common, if it's more common than what we've been given:
+            if inversion is None and inversion_degree is None:
+                possible_inversions = AbstractChord.inversions_from_intervals(intervals)
+                if len(possible_inversions) > 0 and possible_inversions[0].rarity < supplied_rarity:
+                    # adopt the inverted chord's root intervals and inversion instead
+                    intervals = possible_inversions[0].root_intervals
+                    inversion = possible_inversions[0].inversion
+                    # and one last change (bit of a kludge): if this is a Chord, intercept and change the root:
+                    if isinstance(self, Chord):
+                        self.root -= intervals[inversion]
+                else:
+                    # we've failed to find an inversion, so just use the intervals and root as they are
+                    if intervals not in intervals_to_chord_names:
+                        log(f'Failed to find a matching chord or inversion for intervals: {intervals}')
 
             # build factors by looping through intervals:
             factors = ChordFactors({1:0}) # note: NOT a major triad
+            mod_factors_used = set()
             for i in intervals: # parse interval degree and quality into factors dict
-                if i.mod != 0: # catch special case: do not record perfect octaves
+                # if i.mod != 0: # catch special case: do not record perfect octaves
+                # count the mod intervals we've already used, so we ignore adding them if they come up again:
+                # (this ensures that e.g. 'CEGCGEC' is parsed as 'CEG')
+                if i.mod not in mod_factors_used:
                     factors[i.extended_degree] = i.offset_from_default
+                    mod_factors_used.add(i.mod)
 
         if qualifiers is not None:
             if factors is None:
@@ -465,13 +472,15 @@ class Chord(AbstractChord):
 
         assert self.root is not None
 
+        # allow inversion by bass keyword arg, by reallocating into inversion arg for _parse_input:
+        if bass is not None:
+            assert inversion is None
+            inversion = Note(bass).name
+
         # recover factor offsets, intervals from root, and inversion position from input args:
         self.factors, self.root_intervals, inversion = self._parse_input(suffix, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=True)
         # note that while self.inversion in AbstratChord comes out as strictly int or None
         # here we allow it to be a string denoting the bass note, which we'll correct in a minute
-
-        # if inversion is not None:
-        #     pdb.set_trace()
 
         # mapping of chord factors to intervals from tonic:
         self.factor_intervals = {i.extended_degree: i for i in self.root_intervals}
@@ -521,18 +530,17 @@ class Chord(AbstractChord):
 
     @staticmethod
     def _parse_root(name, root):
-        """takes the class's name and root input args
-        returns Note object as root,
-        and string or None as chord_name"""
+        """takes the class's name and root args, and determines which has been given.
+        returns root as a Note object, and chord suffix as string or None"""
         if name is not None:
-            root_name, chord_name = parsing.note_split(name)
+            root_name, suffix = parsing.note_split(name)
             root = Note(root_name)
         elif root is not None:
             root = Note(root)
-            chord_name = name
+            suffix = name
         else:
             raise Exception('neither name nor root provided to Chord init, we need one or the other!')
-        return root, chord_name
+        return root, suffix
 
 
     def _parse_inversion(self, inversion, move_above=True):
@@ -618,7 +626,7 @@ class Chord(AbstractChord):
         # inverted_notes = self.root_notes.rotate(bass_place)
         # inverted_intervals = [Interval(0)] + [n - bass for n in inverted_notes[1:]]
         inverted_intervals = self.root_intervals.invert(bass_place)
-        inverted_notes = [bass + i for i in inverted_intervals]
+        inverted_notes = NoteList([bass + i for i in inverted_intervals])
 
         inv_params = (inversion, inversion_degree, bass)
         return (inv_params), inverted_notes, inverted_intervals
@@ -676,7 +684,9 @@ class Chord(AbstractChord):
     def name(self):
         return f'{self.root.name}{self.suffix}'
 
-
+    def __hash__(self):
+        # chords hash based on their notes and intervals
+        return hash((self.notes, self.intervals))
 
     def __str__(self):
         # note_list = self.inverted_notes
@@ -686,16 +696,17 @@ class Chord(AbstractChord):
         notes_str = [] # notes are annotated with accent marks depending on which octave they're in wrt root
         for i, n in zip(self.intervals, self.notes):
             assert (self.bass + i) == n, f'bass ({self.bass}) + interval ({i}) should be {n}, but is {self.bass + i}'
+            nl, na = str(n)[:2], str(n)[2:] # note letter and accidental (so we can put the dot over the letter)
             if i < -12:
-                notes_str.append(f'{n}\u0324') # lower diaresis
+                notes_str.append(f'{nl}\u0324{na}') # lower diaresis
             elif i < 0:
-                notes_str.append(f'{n}\u0323') # lower dot
+                notes_str.append(f'{nl}\u0323{na}') # lower dot
             elif i < 12:
                 notes_str.append(str(n))
             elif i < 24:
-                notes_str.append(f'{n}\u0307') # upper dot
+                notes_str.append(f'{nl}\u0307{na}') # upper dot
             else:
-                notes_str.append(f'{n}\u0308') # upper diaresis
+                notes_str.append(f'{nl}\u0308{na}') # upper diaresis
         notes_str = ', '.join(notes_str)
 
         return f'♬ {self.name} [ {notes_str} ]'
@@ -736,8 +747,8 @@ class Chord(AbstractChord):
     def pairwise_consonance(self, weight=True):
         pairwise_intervals = []
         consonances = []
-        for i in range(len(self)):
-            for j in range(i+1, len(self)):
+        for i in range(len(self.intervals)):
+            for j in range(i+1, len(self.intervals)):
                 pairwise_intervals.append(self.intervals[j] - self.intervals[i])
                 if (i == 0) and (weight==True):
                     # intervals from the tonic are counted twice
@@ -777,6 +788,12 @@ class Chord(AbstractChord):
     def __invert__(self):
         """inversion operator on Chords returns the relative major or minor"""
         return self.relative
+
+    def invert(self, inversion=None, inversion_degree=None, bass=None):
+        """returns a new Chord based off this one, but inverted.
+        not to be confused with self.__invert__!"""
+        return Chord(factors=self.factors, root=self.root, inversion=inversion, inversion_degree=inversion_degree, bass=bass)
+
 
     def _get_flags(self):
         """Returns a list of the boolean flags associated with this object"""
@@ -873,9 +890,8 @@ chord_name_rarities = unpack_and_reverse_dict(chord_names_by_rarity)
 # starting_size2 = sum([len(v) for v in chord_names_by_rarity_proxy.values()])
 
 new_rarities = {i: [] for i in range(8)}
-
 for rarity, chord_names in chord_names_by_rarity.items():
-    log(f'Handling rarity={rarity}, chords={chord_names}')
+    log(f'Handling base chords for rarity={rarity}, chords={chord_names}')
 
     for chord_name in chord_names:
         base_chord = AbstractChord(chord_name)
@@ -887,12 +903,19 @@ for rarity, chord_names in chord_names_by_rarity.items():
             factors_to_chord_names[base_chord.factors] = chord_name
             intervals_to_chord_names[base_chord.intervals] = chord_name
 
+# handle the modifiers of base chords in a new loop:
+for rarity, chord_names in chord_names_by_rarity.items():
+    log(f'Handling modifiers for rarity={rarity}, chords={chord_names}')
+
+    for chord_name in chord_names:
+        if chord_name not in unmodifiable_chords:
+            base_chord = AbstractChord(chord_name)
             # now: add chord modifications to each base chord as well, increasing rarity accordingly
             for mod_name, modifier in qualities.chord_modifiers.items():
                 # add a modification if it does not already exist by name and is valid on this base chord:
                 # (we check if chord_name is major because the modifiers on their own apply to major chords,
                 #  i.e. the chord 'sus2' implies ['' + 'sus2'])
-                if chord_name not in unmodifiable_chords and modifier.valid_on(base_chord.factors):
+                if modifier.valid_on(base_chord.factors):
                     altered_name = chord_name + mod_name
 
                     altered_factors = base_chord.factors + modifier
@@ -900,7 +923,6 @@ for rarity, chord_names in chord_names_by_rarity.items():
                     # avoid double counting: e.g. this ensures that '9sus4' and 'm9sus4' are treated as one chord, '9sus4', despite both being a valid chord init
                     if altered_factors not in factors_to_chord_names and altered_intervals not in intervals_to_chord_names:
                         factors_to_chord_names[altered_factors] = altered_name
-
                         intervals_to_chord_names[altered_intervals] = altered_name
 
                         # figure out the rarity of this modification and add it to the rarity dict:
@@ -933,6 +955,105 @@ for r, names in new_rarities.items():
 # re-instantiate the reverse dict since we've added to the forward one (but we still needed it earlier:)
 chord_name_rarities = unpack_and_reverse_dict(chord_names_by_rarity)
 
+# reverse these too:
+chord_names_to_factors = reverse_dict(factors_to_chord_names)
+chord_names_to_intervals = reverse_dict(intervals_to_chord_names)
+
+######################################################
+
+# matching likely chords from unordered lists of note names (e.g. guitar fingerings)
+# we cannot use intervals for this, because notes being in an arbitrary order
+# makes their relative intervals much less informative.
+# so we really must initialise every imaginable chord
+
+def matching_chords(note_list, display=True, assume_root=True, invert=True, min_recall=0.8, min_precision=0.8, min_likelihood=0.5):
+    """from an unordered set of notes, return a dict of candidate chords that could match those notes.
+    we make no assumptions about the note list, except in the case of assume_root, where we slightly
+    privilege chords that have their root on the same note as the starting note in note_list.
+    alternatively, if invert is True, we invert candidate chords to match the note_list's starting note."""
+    note_list = NoteList(note_list)
+
+    candidates = {} # we'll build a list of Chord object candidates as we go
+    # keying candidate chord objs to (rec, prec, likelihood, consonance) tuples
+
+    # we'll try building notes starting on every unique note in the note_list
+    # (this implicitly means that we require the tonic to be in the input, which is fine)
+    unique_notes = note_list.unique()
+
+    for n in unique_notes:
+        for rarity, chord_names in chord_names_by_rarity.items():
+            likelihood = (10-rarity)/10 # float from 0.3 to 1.0
+            for chord_name in chord_names:
+                # init chord more efficiently than by name:
+                cand_factors = chord_names_to_factors[chord_name]
+                candidate = Chord(factors=cand_factors, root=n)
+
+                # if candidate doesn't share the 'root', we can invert it:
+                if (candidate.root != note_list[0]):
+                    if invert and (note_list[0] in candidate.notes):
+                        candidate = candidate.invert(bass=note_list[0])
+                        # or otherwise just assume the note_list's root and make the non-inversion slightly less likely:
+                    elif assume_root:
+                        likelihood -= 0.05
+
+                precision, recall = precision_recall(unique_notes, candidate.notes)
+                consonance = candidate.pairwise_consonance() # float from ~0.4 to ~0.9, in principle
+                # spread out the consonance scale, most chords end up in the 0.55 to 0.75 range in practice:
+                consonance = (consonance - 0.5) * 4
+
+                if recall >= min_recall and precision >= min_precision and likelihood >= min_likelihood:
+                    candidates[candidate] = {   'recall': round(recall,    2),
+                                             'precision': round(precision, 2),
+                                            'likelihood': round(likelihood,2),
+                                            'consonance': round(consonance,4)}
+
+    # return sorted candidates dict:
+    sorted_cands = sorted(candidates,
+                          key=lambda c: (candidates[c]['recall'],
+                                         candidates[c]['precision'],
+                                         candidates[c]['likelihood'],
+                                         candidates[c]['consonance']),
+                          reverse=True)
+    if display:
+        # print result instead of returning
+        chord_name_parts = []
+        note_list_parts = []
+        for cand in sorted_cands:
+            # break chord string up for nice viewing:
+            str_parts = str(cand).split(' ')
+            chord_name_parts.append(' '.join(str_parts[:2]))
+            note_list_parts.append(' '.join(str_parts[2:]))
+        longest_name_len = max([len(str(s)) for s in (chord_name_parts + ['  chord name'])])+3
+        longest_notes_len = max([len(str(s)) for s in (note_list_parts + ['    notes'])])+3
+
+        left_header =f"{'  chord name':{longest_name_len}} {'    notes':{longest_notes_len}}"
+        score_parts = ['recall', 'precision', 'lklihood', 'consonance']
+        hspace = 8
+        right_header = ' '.join([f'{h:{hspace}}' for h in score_parts])
+        out_list = [left_header + right_header]
+
+        combi_chars = {"\u0324", "\u0323", "\u0307", "\u0308"} # a kludge: we have to count combining characters separately for chord notelist formatting
+
+        for i, cand in enumerate(sorted_cands):
+            scores = candidates[cand]
+            rec, prec, lik, cons = list(scores.values())
+            name_str, notes_str = chord_name_parts[i], note_list_parts[i]
+            num_combi_chars = len([c for c in notes_str if c in combi_chars])
+
+            descriptor = f'{name_str:{longest_name_len}} {notes_str:{longest_notes_len + num_combi_chars}}'
+            scores = f' {str(rec):{hspace}} {str(prec):{hspace}}  {str(lik):{hspace}}  {cons:.04f}'
+            out_list.append(descriptor + scores)
+        print('\n'.join(out_list))
+    else:
+        return {c: candidates[c] for c in sorted_cands}
+
+def most_likely_chord(note_list, **kwargs):
+    """from an unordered set of notes, return the single most likely chord,
+    within specified constraints, as a tuple of (Chord, match_params)"""
+    candidates = matching_chords(note_list, display=False, **kwargs)
+    best_match = list(candidates.keys())[0]
+    match_params = candidates[best_match]
+    return best_match, match_params
 
 
 ### WIP, incomplete class
@@ -1009,15 +1130,17 @@ def unit_test(verbose=False):
 
     # test arg re-parsing
     test(Chord('CEA'), Chord(notes='CEA'))
-
     # (this one also tests automatic chord factor detection from uninitialised intervals:
     # Interval(8) is a minor sixth by default but here we parse it as the fifth in an aug chord)
     test(Chord([4,8], root='C'), Chord('C+'))
 
-    from intervals import Maj3, Aug5
-    test(Chord([Maj3,Aug5], root='C'), Chord('C+'))
+    # test repeated interval parsing:
+    test(Chord('CEGCEGC'), Chord('C')) #, compare='enharmonic')
+    test(Chord('CEGDGD'), Chord('Cadd9'))
 
     log.verbose = False
+
+    test(most_likely_chord('CEAB')[0], Chord('Amadd9/C'))
 
 if __name__ == '__main__':
     unit_test()
