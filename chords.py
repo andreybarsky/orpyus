@@ -333,7 +333,7 @@ class AbstractChord:
                     inversion = x
                     break
 
-        if inversion is not None:
+        if (inversion is not None) and (inversion != 0):
             if isinstance(inversion, int):
                 assert 0 < inversion <= (len(factors)-1), f'{inversion} is an invalid inversion number for chord with {len(factors)} factors'
             elif isinstance(inversion, str):
@@ -722,7 +722,7 @@ class Chord(AbstractChord):
     @property
     def _inv_string(self):
         """inversion string, used internally by suffix method (and inherited by subclasses)"""
-        return f'/{self.bass.name}' if (self.inversion is not None) else ''
+        return f'/{self.bass.name}' if (self.inversion != 0) else ''
 
     def _detect_sharp_preference(self, default=False): #tonic, quality='major', default=False):
         """detect if a chord should prefer sharp or flat labelling
