@@ -285,7 +285,9 @@ def euclidean_gcd(a,b):
 def least_common_multiple(a,b):
     return (a*b) // euclidean_gcd(a,b)
 
-if __name__ == '__main__':
+
+
+def unit_test():
     # some tests on membership evaluation
     target = ['C', 'E', 'G', 'A']
     # weights will prioritise the root:
@@ -312,3 +314,6 @@ if __name__ == '__main__':
     # test alias reduction:
     aliases = {'hdim': ['half diminished', 'halfdim'], 'fdim': ['diminished', 'fully diminished']}
     print(''.join(reduce_aliases('half diminished diminished chord', aliases)))
+
+if __name__ == '__main__':
+    unit_test()
