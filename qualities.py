@@ -461,8 +461,8 @@ chord_modifiers = {
                     'add11': ChordQualifier(add=11, verify={9: False, 4:False}),
                     'add13': ChordQualifier(add=13, verify={11: False, 6:False, 5:0}), # verify natural 5 is a kludge, see: Bbdim9add13/C
 
-                    'sus4': ChordQualifier(remove=3, add=4, verify={2:False, 3:0}),
-                    'sus2': ChordQualifier(remove=3, add=2, verify={4:False, 3:0}),
+                    'sus4': ChordQualifier(remove=3, add=4, verify={2:False, 3:0, 11:False}),
+                    'sus2': ChordQualifier(remove=3, add=2, verify={4:False, 3:0, 9:False}),
                     '(no5)': ChordQualifier(remove=5, verify={3: True, 10:False}),
                     }
 
