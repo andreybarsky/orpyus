@@ -60,8 +60,8 @@ class Scale:
         # build degrees dict that maps ScaleDegrees to this scale's intervals:
         self.degrees = {ScaleDegree(1): Unison}
         for d, i in enumerate(self.intervals):
-            deg = d+2
-            self.degrees[deg] = Interval(value=i.value, degree=deg)
+            deg = d+2 # starting from 2
+            self.degrees[ScaleDegree(deg)] = Interval(value=i.value, degree=deg)
 
         assert len(self.degrees) == 7, f"{scale_name} is not diatonic: has {len(self.degrees)} degrees instead of 7"
         assert len(self.intervals) == 6, f"{scale_name} has {len(self.intervals)} intervals instead of the required 6"
@@ -221,8 +221,12 @@ class Scale:
             raise TypeError(f'__eq__ not defined between Scale and {type(other)}')
 
     def __getitem__(self, d):
-        d = ScaleDegree(d)
-        return self.degrees[d]
+        if isinstance(d, int):
+            deg = ScaleDegree(d)
+            return self.degrees[deg]
+        else:
+            degs = [ScaleDegree(deg) for deg in d]
+            return IntervalList([self.degrees[deg] for deg in degs])
 
     def subscale(self, degrees):
         """returns a list of intervals from self.intervals matching the required degrees"""
@@ -255,11 +259,23 @@ class Scale:
         """returns an AbstractChord built on a desired degree of this scale,
         and of a desired order (where triads are order=3, tetrads are order=4, etc.).
         optionally accepts chord qualifiers in addition, to modify the chord afterward"""
-        root_degree = ScaleDegree(degree)
+        root_degree = degree
         # calculate chord degrees by successively applying thirds:
-        chord_degrees = [root_degree+(o*2) for o in range(1, order)] # e.g. third and fifth degrees for oder=3
-        chord_intervals = [self[d] for d in chord_degrees]
-        return AbstractChord(intervals=chord_intervals, qualifiers=qualifiers)
+        desired_degrees = range(1, (2*order), 2)
+        chord_degrees = [root_degree] + [root_degree+(o*2) for o in range(1, order)] # e.g. third and fifth degrees for oder=3
+        root_interval = self[root_degree]
+        absolute_intervals = IntervalList([self[d] - root_interval for d in chord_degrees])
+        relative_intervals = abs(absolute_intervals)
+
+        # sanitise relative intervals to thirds, fifths etc. (instead of aug4ths and whatever)
+        sanitised_intervals = []
+        for i,d in zip(relative_intervals, desired_degrees):
+            if d > 7:
+                sanitised_intervals.append(Interval(i.value, degree=d))
+            else:
+                sanitised_intervals.append(Interval(i.value, degree=d))
+
+        return AbstractChord(intervals=sanitised_intervals, qualifiers=qualifiers)
 
     def triad(self, degree, qualifiers=None):
         """wrapper for self.chord() to create a tetrad (i.e. 7-chord)
@@ -285,24 +301,25 @@ class Scale:
 class Subscale(Scale):
     """a scale that contains a subset of the diatonic 7 intervals,
     such as a pentatonic or hexatonic scale.
-    not all Scale operations are well-defined on it, but some will work fine.
+    not all Scale methods are well-defined on Subscales, but some will work fine.
 
     accepts an extra optional init argument, chromatic_degrees: None, or iterable.
     if not None, should contain a list of Intervals that don't belong to the base scale, like blues notes.
     chords using those notes are valid, though they are never chord roots"""
 
-    def __init__(self, base_scale_name=None, degrees=None, intervals=None, chromatic_intervals=None):
+    def __init__(self, subscale_name=None, base_scale_name=None, degrees=None, intervals=None, chromatic_intervals=None):
         if base_scale_name is not None:
             assert degrees is not None, f'Subscale init by base_scale_name must include a list of degrees'
             assert intervals is None, f'Subscale init by base_scale_name received mutually exclusive "intervals" arg'
             parent_scale = Scale(base_scale_name)
-            self.degrees = {ScaleDegree(d): parent_scale[d] for d in degrees}
+            self.degrees = {d: parent_scale[d] for d in degrees}
+            assert 1 in degrees, "Subscale sub-degrees must include the tonic"
             self.intervals = sorted(list(self.degrees.values()))
             self.base_scale_name = base_scale_name
         elif intervals is not None:
             assert (base_scale_name is None) and (intervals is None), f'Subscale init by intervals received mutually exclusive "base_scale_name" or "degree" arg'
             self.intervals = [Interval(i) for i in intervals]
-            self.degrees = {ScaleDegree(i.degree):i for i in intervals}
+            self.degrees = {i.degree:i for i in intervals}
             self.base_scale_name = None
         else:
             raise Exception(f'Subscale init received neither intervals nor base_scale_name as init args')
@@ -317,78 +334,81 @@ class Subscale(Scale):
     def from_intervals(intervals, chromatic_intervals=None):
         return Subscale(intervals=intervals, chromatic_intervals=chromatic_intervals)
 
+    def possible_parents(self):
+        # 
+
     ### TBI: blues pentatonic scales?
     # The major blues scale is 1, 2,♭3, 3, 5, 6 and the minor is 1, ♭3, 4, ♭5, 5, ♭7
     # (Maj2, Per4, Per5, Maj6): [' blues major', ' blues major pentatonic', ' blues'],
     # (Min3, Per4, Min6, Min7): [' blues minor', ' blues minor pentatonic', 'm blues'],
 
 
-class ScaleDegree(int):
-    """The degrees of a scale. Subclass of int, but adds and subtracts according
-    to modulo arithmetic (beginning at 1, not 0)"""
-
-    def __new__(cls, val):
-        # instantiate as int but mod into range(1,8)
-        if (val < 1) or (val > 7):
-            val = ((val-1) % 7) + 1
-        object = super().__new__(cls, val)
-        return object
-
-    def __add__(self, other):
-        assert isinstance(other, (int)), "ScaleDegrees can only be added or subtracted with ints"
-        # mod back to range(1,8)
-        new_degree = int(self) + int(other)
-        new_degree = ((new_degree-1) % 7) + 1
-        return ScaleDegree(new_degree)
-
-    def __sub__(self, other):
-        assert isinstance(other, (int)), "ScaleDegrees can only be added or subtracted with ints"
-        return self + (-other)
-
-    def __mul__(self, other):
-        raise Exception(f'__mul__ undefined for ScaleDegrees')
-
-    def __div__(self, other):
-        raise Exception(f'__div__ undefined for ScaleDegrees')
-
-    def __str__(self):
-        return f'{str(int(self))}\u0302' # unicode circumflex character
-
-    def __repr__(self):
-        return str(self)
-
-    def fifth_distance(self, other):
-        return interval_distance(self, other, 5)
-
-    def fourth_distance(self, other):
-        return interval_distance(self, other, 4)
-
-    def third_distance(self, other):
-        return interval_distance(self, other, 3)
-
-    def second_distance(self, other):
-        return self.distance(self, other, 2)
-
-    @staticmethod
-    def distance(deg1, deg2, step_degree):
-        """distance between two scale-degrees, in degree-interval steps.
-        note that a fifth is 5 step_degrees but implicitly a step size of 4,
-        a third is 3 step_degrees but implicitly step size=2, etc."""
-        assert step_degree in range(2,8), f'Invalid step degree for counting interval distance between ScaleDegrees: {step_degree}'
-        deg1 = ScaleDegree(deg1)
-        step_size = step_degree - 1
-        distance = 0
-        # count in two directions simultaneously, return the lowest:
-        pos_proxy = ScaleDegree(deg2)
-        neg_proxy = ScaleDegree(deg2)
-        while (pos_proxy != deg1) and (neg_proxy != deg1):
-            pos_proxy += step_size
-            neg_proxy -= step_size
-            distance += 1
-        if pos_proxy == deg1:
-            return -distance
-        elif neg_proxy == deg1:
-            return distance
+# class ScaleDegree(int):
+#     """The degrees of a scale. Subclass of int, but adds and subtracts according
+#     to modulo arithmetic (beginning at 1, not 0)"""
+#
+#     def __new__(cls, val):
+#         # instantiate as int but mod into range(1,8)
+#         if (val < 1) or (val > 7):
+#             val = ((val-1) % 7) + 1
+#         object = super().__new__(cls, val)
+#         return object
+#
+#     def __add__(self, other):
+#         assert isinstance(other, (int)), "ScaleDegrees can only be added or subtracted with ints"
+#         # mod back to range(1,8)
+#         new_degree = int(self) + int(other)
+#         new_degree = ((new_degree-1) % 7) + 1
+#         return ScaleDegree(new_degree)
+#
+#     def __sub__(self, other):
+#         assert isinstance(other, (int)), "ScaleDegrees can only be added or subtracted with ints"
+#         return self + (-other)
+#
+#     def __mul__(self, other):
+#         raise Exception(f'__mul__ undefined for ScaleDegrees')
+#
+#     def __div__(self, other):
+#         raise Exception(f'__div__ undefined for ScaleDegrees')
+#
+#     def __str__(self):
+#         return f'{str(int(self))}\u0302' # unicode circumflex character
+#
+#     def __repr__(self):
+#         return str(self)
+#
+#     def fifth_distance(self, other):
+#         return interval_distance(self, other, 5)
+#
+#     def fourth_distance(self, other):
+#         return interval_distance(self, other, 4)
+#
+#     def third_distance(self, other):
+#         return interval_distance(self, other, 3)
+#
+#     def second_distance(self, other):
+#         return self.distance(self, other, 2)
+#
+#     @staticmethod
+#     def distance(deg1, deg2, step_degree):
+#         """distance between two scale-degrees, in degree-interval steps.
+#         note that a fifth is 5 step_degrees but implicitly a step size of 4,
+#         a third is 3 step_degrees but implicitly step size=2, etc."""
+#         assert step_degree in range(2,8), f'Invalid step degree for counting interval distance between ScaleDegrees: {step_degree}'
+#         deg1 = ScaleDegree(deg1)
+#         step_size = step_degree - 1
+#         distance = 0
+#         # count in two directions simultaneously, return the lowest:
+#         pos_proxy = ScaleDegree(deg2)
+#         neg_proxy = ScaleDegree(deg2)
+#         while (pos_proxy != deg1) and (neg_proxy != deg1):
+#             pos_proxy += step_size
+#             neg_proxy -= step_size
+#             distance += 1
+#         if pos_proxy == deg1:
+#             return -distance
+#         elif neg_proxy == deg1:
+#             return distance
 
 
 
@@ -539,7 +559,9 @@ def unit_test():
     test(Scale('major'), Scale.from_intervals(scale_name_intervals['natural major']))
 
     # test chords built on scaledegrees:
-    test(Scale('major').chord(7), AbstractChord('dim'))
+    test(Scale('minor').chord(2), AbstractChord('dim'))
+    test(Scale('major').chord(5, order=4), AbstractChord('dom7'))
+    test(Scale('mixolydian').chord(1, order=7), AbstractChord('maj13'))
 
     # test init by mode name:
     print(Scale('lydian'))

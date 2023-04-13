@@ -14,7 +14,9 @@ class Interval:
     def __init__(self, value:int, degree=None):
         if isinstance(value, Interval):
             # accept re-casting from another interval object:
-            degree = value.extended_degree
+            if degree is None:
+                degree = value.extended_degree
+            # changed this to let degree kwarg overwrite init by interval
             value = value.value
 
         self.value = value # signed integer semitone distance
@@ -109,9 +111,8 @@ class Interval:
         # calculate least common multiple of simple form:
         lcm = least_common_multiple(l,r)
         dissonance = math.log(lcm, 2)
-        # this is a number that ranges from 0 to just under 15,
-        # for intervals in the range(0-88)
-        # (the most dissonant interval is the 7-octave compound minor second, of width 85)
+        # this is a number that ranges from 0 (for perfect unison)
+        # to just under 15, (for the 7-octave compound minor second, of width 85)
 
         # so we invert it into a consonance between 0-1:
         return (15 - dissonance) / 15

@@ -470,6 +470,7 @@ class NoteList(list):
     def __init__(self, *items):
         if len(items) == 1:
             arg = items[0]
+
             # if we have been passed a single string as arg, parse it out as a series of notes:
             if isinstance(arg, str):
                 arg = parsing.parse_out_note_names(arg)
@@ -506,6 +507,14 @@ class NoteList(list):
     def __repr__(self):
         # return f'𝄃{super().__repr__()}𝄂'
         return f'𝄃{", ".join([str(n) for n in self])} 𝄂'
+
+    def append(self, other):
+        """Cast any appendices to Notes"""
+        self.append(Note(other))
+
+    def extend(self, other):
+        """Cast any extensions to Notes"""
+        self.extend([Note(n) for n in other])
 
     def __add__(self, other):
         if isinstance(other, (int, Interval)):
@@ -603,8 +612,6 @@ class NoteList(list):
                 # overwrite octave of existing octavenote:
                 octavenotes.append((self[0].note)[start_octave])
 
-
-
         for note in self[1:]:
             if isinstance(note, OctaveNote):
                 octavenotes.append(note)
@@ -621,6 +628,16 @@ class NoteList(list):
             octavenotes = [n - (12*octave_shift) for n in wave_notes]
 
         return octavenotes
+
+    def matching_chords(self, *args, **kwargs):
+        """wrapper for chords.matching_chords function: displays or returns
+        a listing of the possible chords that fit these (unordered) notes"""
+        import chords
+        return chords.matching_chords(self, *args, **kwargs)
+
+    def most_likely_chord(self, *args, **kwargs):
+        import chords
+        return chords.most_likely_chord(self, *args, **kwargs)
 
     def _waves(self, duration, octave, type, falloff=False):
         wave_notes = self.force_octave(start_octave=octave)
@@ -696,6 +713,10 @@ def unit_test():
 
     test(Note('Ebb'), Note('C𝄪'))
     test(Note('E𝄫'), Note('C##'))
+
+    import chords
+    # test matching chords:
+    test(NoteList('CEG').most_likely_chord()[0], chord.Chord('CEG'))
 
 if __name__ == '__main__':
     unit_test()
