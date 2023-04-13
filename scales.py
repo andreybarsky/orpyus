@@ -2,6 +2,7 @@ from intervals import *
 # from scales import interval_scale_names, key_name_intervals
 from util import rotate_list, unpack_and_reverse_dict, log
 from chords import AbstractChord
+from qualities import ChordQualifier
 from parsing import num_suffixes
 import notes as notes
 import pdb
@@ -136,15 +137,19 @@ class Scale:
             assert intervals is not None, f'Received neither name or intervals arg to Scale init; need one or the other!'
 
             if isinstance(intervals, (list, tuple)):
-                intervals = IntervalList(intervals)
-                name = interval_mode_names[intervals][-1]
-                base_scale, rotation = mode_lookup[name]
+                # intervals = IntervalList(intervals)
+                intervals = Scale.sanitise_intervals(intervals)
+                if intervals in interval_mode_names:
+                    name = interval_mode_names[intervals][-1]
+                    base_scale, rotation = mode_lookup[name]
 
-                if mode != 1:
-                    intervals = rotate_mode_intervals(intervals, mode)
-                    rotation += (mode-1)
+                    if mode != 1:
+                        intervals = rotate_mode_intervals(intervals, mode)
+                        rotation += (mode-1)
 
-                return intervals, base_scale, rotation
+                    return intervals, base_scale, rotation
+                else:
+                    raise KeyError(f'No scale found that matches intervals: {intervals}')
             else:
                 raise TypeError(f'Invalid input to Scale init: expected second arg (intervals) to be an iterable of Intervals, but got: {type(inp)}')
 
@@ -179,41 +184,85 @@ class Scale:
         else:
             return IntervalList([self.degrees[mod_degree(d)] for d in idx])
 
-
-
     @staticmethod
-    def from_intervals(intervals, stacked=True):
-        """Initialises a Scale from stacked intervals (of the form: M2, m3, P4, P5, etc.).
+    def sanitise_intervals(intervals, stacked=True):
+        """forces a list of (assumed) stacked Intervals into canonical form,
+            with unisons neither at start nor end, and one interval for each degree.
         if stacked=False, accepts unstacked intervals (of form: M2, m1, M2, M2, etc.) and stacks them first."""
-        # ensure that these are interval objects,
-        # ensure that it contains no unison interval (root, octave):
-        # and flatten it to fit it all inside an octave:
         if not stacked:
             intervals = IntervalList(intervals).strip().stack()
         elif stacked:
             intervals = IntervalList(intervals).flatten().strip()
 
-        log(f'Initializing scale from intervals: {intervals}',)
+        # sanitise interval list to have the exact desired degrees:
+        desired_degrees = range(2,8)
+        sanitised_intervals = IntervalList()
+        for d, i in zip(desired_degrees, intervals):
+            sanitised_intervals.append(Interval(i.value, degree=d))
+        return sanitised_intervals
 
-        scale_name = interval_mode_names[intervals][-1]
-        log(f' called: {scale_name}')
-        return Scale(scale_name)
+
+    # @staticmethod
+    # def from_intervals(intervals, stacked=True):
+    #     """Initialises a Scale from stacked intervals (of the form: M2, m3, P4, P5, etc.).
+    #     if stacked=False, accepts unstacked intervals (of form: M2, m1, M2, M2, etc.) and stacks them first."""
+    #     # ensure that these are interval objects,
+    #     # ensure that it contains no unison interval (root, octave):
+    #     # and flatten it to fit it all inside an octave:
+    #     if not stacked:
+    #         intervals = IntervalList(intervals).strip().stack()
+    #     elif stacked:
+    #         intervals = IntervalList(intervals).flatten().strip()
+    #
+    #     # sanitise interval list to have the exact desired degrees:
+    #     desired_degrees = range(2,8)
+    #     sanitised_intervals = IntervalList()
+    #     for d, i in zip(desired_degrees, intervals):
+    #         sanitised_intervals.append(Interval(i.value, degree=d))
+    #
+    #     log(f'Initializing scale from sanitised intervals: {sanitised_intervals}',)
+    #
+    #     if sanitised_intervals in interval_mode_names:
+    #         scale_name = interval_mode_names[sanitised_intervals][-1]
+    #         log(f' called: {scale_name}')
+    #         return Scale(scale_name)
+    #     else:
+    #         raise ValueError(f"No mode or scale found that has intervals: {intervals}")
 
     def neighbouring_scales(self):
         """return a list of Scale objects that differ from this one by only a semitone"""
         neighbours = {}
-        for degree, intv in self.degrees.items():
-            flat_deg_intervals = IntervalList(self.intervals)
-            flat_deg_intervals[degree] -= 1
-            flat_deq_qualifier = ChordQualifier(modify={degree:-1})
-            flat_deg_scale = Scale(intervals=flat_deg_intervals)
-            neighbours[flat_deg_qualifier] = flat_deg_scale
+        for degree, intv in self.degrees.items(): # try modifying each interval in this scale
+            if degree != 1: # (but not the tonic)
+                if not intv.quality.minor_ish: # don't flatten minor/dim degrees (they're already flat)
+                    flat_deg_intervals = IntervalList(self.intervals)
+                    interval_to_modify = flat_deg_intervals[degree-2]
+                    new_value = interval_to_modify.value -1
+                    if (new_value not in flat_deg_intervals) and (new_value % 12 != 0):
+                        new_interval = Interval(new_value, degree=degree)
+                        flat_deg_intervals[degree-2] = new_interval
 
-            sharp_deg_intervals = IntervalList(self.intervals)
-            sharp_deg_intervals[degree] += 1
-            sharp_deq_qualifier = ChordQualifier(modify={degree:+1})
-            sharp_deg_scale = Scale(intervals=sharp_deg_intervals)
-            neighbours[sharp_deg_qualifier] = sharp_deg_scale
+                        flat_deg_qualifier = ChordQualifier(modify={degree:-1})
+                        try:
+                            flat_deg_scale = Scale(intervals=flat_deg_intervals)
+                            neighbours[flat_deg_qualifier] = flat_deg_scale
+                        except KeyError as e:
+                            log(f'Could not find neighbour of {self.name} with alteration {flat_deg_qualifier.name}: {e}')
+
+                if not intv.quality.augmented: # and don't raise augmented degrees (they're already sharp)
+                    sharp_deg_intervals = IntervalList(self.intervals)
+                    interval_to_modify = sharp_deg_intervals[degree-2]
+                    new_value = interval_to_modify.value +1
+                    if (new_value not in sharp_deg_intervals) and (new_value % 12 != 0): # don't raise intervals to a degree that's already in the scale
+                        new_interval = Interval(new_value, degree=degree)
+                        sharp_deg_intervals[degree-2] = new_interval
+                        # sharp_deg_intervals[degree] = Interval(sharp_deg_intervals[degree-2]+1, degree)
+                        sharp_deg_qualifier = ChordQualifier(modify={degree:+1})
+                        try:
+                            sharp_deg_scale = Scale(intervals=sharp_deg_intervals)
+                            neighbours[sharp_deg_qualifier] = sharp_deg_scale
+                        except KeyError as e:
+                            log(f'Could not find neighbour of {self.name} with alteration {sharp_deg_qualifier.name}: {e}')
         return neighbours
 
     @property
@@ -302,21 +351,11 @@ class Scale:
         root_interval = self[root_degree]
         # note we use self.degrees[d] instead of self[d] to avoid the mod behaviour:
         chord_intervals = [self.get_higher_interval(d) - root_interval for d in chord_degrees]
-        # absolute_intervals = IntervalList([self[d] - root_interval for d in chord_degrees])
-        # relative_intervals = abs(absolute_intervals)
-
-
 
         # sanitise relative intervals to thirds, fifths etc. (instead of aug4ths and whatever)
         sanitised_intervals = []
         for i,d in zip(chord_intervals, desired_degrees):
             assert i.extended_degree == d
-            # sanitised_intervals.append(Interval(i.value, degree=d))
-            # else:
-                # sanitised_intervals.append(Interval(i.value, degree=d))
-        #
-        # if desired_degrees.stop > 7:
-        #     pdb.set_trace()
 
         return AbstractChord(intervals=chord_intervals, qualifiers=qualifiers)
 
@@ -608,20 +647,31 @@ def unit_test():
     # test mode retrieval by name:
     test(mode_name_intervals['natural major'], get_modes('major')[1])
 
-    # test scale init by intervals:
-    test(Scale('major'), Scale.from_intervals(scale_name_intervals['natural major']))
+    print('Test scale init by intervals:')
+    test(Scale('major'), Scale(intervals=scale_name_intervals['natural major']))
 
-    # test chords built on scaledegrees:
+    print('Test chords built on Scale degrees:')
     test(Scale('minor').chord(2), AbstractChord('dim'))
-    test(Scale('major').chord(5, order=4), AbstractChord('dom7'))
+    test(Scale('major').chord(5, order=5), AbstractChord('dom9'))
 
-    # scales underlying the common 13th chords:
+    print('Scales underlying the common 13th chords:')
     test(Scale('lydian').chord(1, order=7), AbstractChord('maj13'))
     test(Scale('mixolydian').chord(1, order=7), AbstractChord('13'))
     test(Scale('dorian').chord(1, order=7), AbstractChord('m13'))
     test(Scale('lydian b3').chord(1, order=7), AbstractChord('mmaj13'))
 
-    # test nei
+    # test neighbours:
+    major_neighbours = Scale('natural major').neighbouring_scales()
+    print(f'Neighbours of natural major scale:')
+    for a, sc in major_neighbours.items():
+        print(f'with {a.name}: {sc}')
+
+    # extreme test case: do we crash if computing neighbours for every possible scale?
+    for intvs, names in interval_mode_names.items():
+        name = names[0]
+        sc = Scale(name)
+        neighbours = sc.neighbouring_scales()
+        log(f'{name} scale has {len(neighbours)} neighbours')
 
 if __name__ == '__main__':
     unit_test()
@@ -632,10 +682,10 @@ if __name__ == '__main__':
     for chord_name in _13chords:
         c = AbstractChord(chord_name)
         chord_intervals = c.intervals
-        s = Scale.from_intervals(chord_intervals)
+        s = Scale(intervals=chord_intervals)
         alias_str = f" (aka: {', '.join(s.aliases)})" if len(s.aliases) > 0 else ''
 
-        print(f'\n{c}')
-        print(f'  flattened intervals: {c.intervals.flatten()}')
-        print(f'    unstacked intervals: {s.intervals.unstack()}')
-        print(f'------associated scale: {s}{alias_str}')
+        # print(f'\n{c}')
+        # print(f'  flattened intervals: {c.intervals.flatten()}')
+        # print(f'    unstacked intervals: {s.intervals.unstack()}')
+        # print(f'------associated scale: {s}{alias_str}')

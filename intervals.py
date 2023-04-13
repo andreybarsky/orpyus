@@ -47,6 +47,8 @@ class Interval:
 
         else:
             assert degree > 0, "Interval degree must be non-negative"
+            if self.unison:
+                assert degree == 1, 'Degree of a unison (mod12) interval can never be anything but 1'
             # degree has been provided; we validate it here
             default_degree = (default_interval_degrees[self.mod] + (7*self.octave_span)) #* self.sign
             self.extended_degree = degree # * self.sign

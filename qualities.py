@@ -401,10 +401,11 @@ class ChordQualifier:
         return order
 
     def __str__(self):
-        if self.name in [chord_types, chord_qualifiers]:
-            return f'ChordQualifier: {self.name}'
-        else:
-            return f'Alteration: {self.name}'
+        return f'≈ {self.name} ≈'
+        # if self.name in [chord_types, chord_modifiers]:
+        #     return f'≈{self.name}≈'
+        # else:
+        #     return f'≈{self.name}≈'
 
     def __repr__(self):
         return str(self)
