@@ -30,25 +30,28 @@ class Interval:
         # whole-octave width, and interval width-within-octave (both strictly positive)
         self.octave_span, self.mod = divmod(self.width, 12)
 
-        # intervals are directional (but unison remains positive, it's a weird hack):
-        self.sign = -1 if self.value < 0 else 1
+        # intervals are directional, so even though degree is strictly-positive we store the sign here:
+        self.sign = -1 if self.value < 0 else 1 # technically "non-negative" rather than "sign"
         self.ascending = (self.sign == 1)
         self.descending = (self.sign == -1)
         self.unison = (self.mod == 0)
 
         if degree is None:
             # no degree provided, so auto-detect degree by assuming ordinary diatonic intervals:
-            self.degree = default_interval_degrees[self.mod] * self.sign
+            self.degree = default_interval_degrees[self.mod] # * self.sign
 
             # self.extended_degree is >=8 if this is a ninth or eleventh etc,
-            # but self.degree is always mod-7
-            self.extended_degree = (self.degree + (7*self.octave_span)) * self.sign
+            # but self.degree is always mod-7,
+            # and both are strictly positive
+            self.extended_degree = (self.degree + (7*self.octave_span))
 
         else:
+            assert degree > 0, "Interval degree must be non-negative"
             # degree has been provided; we validate it here
-            default_degree = (default_interval_degrees[self.mod] + (7*self.octave_span)) * self.sign
-            self.extended_degree = abs(degree) * self.sign
-            self.degree = (abs(self.extended_degree) - (7*self.octave_span)) * self.sign
+            default_degree = (default_interval_degrees[self.mod] + (7*self.octave_span)) #* self.sign
+            self.extended_degree = degree # * self.sign
+            self.degree = (self.extended_degree - (7*self.octave_span)) #  * self.sign
+            assert 0 < self.degree < 8
             # should not be more than 1 away from the default:
             degree_distance_from_default = abs(degree - default_degree)
 
@@ -75,10 +78,10 @@ class Interval:
     def _detect_quality(self):
         """uses mod-value and mod-degree to determine the quality of this interval"""
 
-        default_value = default_degree_intervals[abs(self.degree)]
+        default_value = default_degree_intervals[self.degree]
         offset = (self.mod - default_value)
 
-        if abs(self.degree) in perfect_degrees:
+        if self.degree in perfect_degrees:
             quality = Quality.from_offset_wrt_perfect(offset)
         else: # non-perfect degree, major by default
             quality = Quality.from_offset_wrt_major(offset)
@@ -180,13 +183,21 @@ class Interval:
 
         if isinstance(other, (int, Interval)):
             new_value = self.value + int(other)
-            # catch special case: addition/subtraction by octaves preserves interval degree
+            # result = Interval(new_value)
+            # catch special case: addition/subtraction by octaves preserves this interval's degree/quality
             if int(other) % 12 == 0:
                 octave_span = int(other) // 12
-                new_degree = self.extended_degree + (7*octave_span)
+                new_degree = self.extended_degree + (abs(octave_span)*7)
+
+                # new degree is an octave less if there's been a sign change:
+                new_sign = -1 if new_value < 0 else 1
+                if new_sign != self.sign:
+                    new_degree -= 7
+
+                result = Interval(new_value, new_degree)
             else:
-                new_degree = None
-            return Interval(new_value, new_degree)
+                result = Interval(new_value)
+            return result
         # elif isinstance(other, int):
         #     # cast to interval and call again recursively:
         #     return Interval(self.value + other)
@@ -214,17 +225,20 @@ class Interval:
         if self.value == 0:
             return self
         else:
-            return Interval(-self.value, -self.extended_degree)
+            return Interval(-self.value, self.extended_degree)
 
     def __invert__(self):
         """returns the inverted interval, which is distinct from the negative interval.
         negative of Interval(7) (perfect fifth) is Interval(-7) (perfect fifth descending),
         but the inverse, ~Interval(7) is equal to Interval(-5) (perfect fourth descending)"""
-        new_value = (-(12-self.mod)) * self.sign
-        new_degree = (-(9-abs(self.degree))) * self.sign
+        new_mod = (-(12-self.mod)) * self.sign
         # stretch to higher octave if necessary:
-        new_value = new_value + (12 * self.octave_span)* -(self.sign)
-        new_degree = new_degree + (7 * self.octave_span)* -(self.sign)
+        new_value = new_mod + (12 * self.octave_span)* -(self.sign)
+        new_degree = (9-self.degree) + (7*self.octave_span) # * self.sign
+        # new_degree = new_degree + (7 * self.octave_span) # * -(self.sign)
+        # new_degree =
+
+
         return Interval(new_value, new_degree)
 
     def __abs__(self):
@@ -296,13 +310,13 @@ class Interval:
 
     @property
     def name(self):
-        if abs(self.extended_degree) in degree_names:
+        if self.extended_degree in degree_names:
             # interval degree is at most a thirteenth:
-            degree_name = degree_names[abs(self.extended_degree)]
+            degree_name = degree_names[self.extended_degree]
             call_compound = False
         else:
             # greater than a thirteenth, so we just call it an extended whatever:
-            degree_name = degree_names[abs(self.degree)]
+            degree_name = degree_names[self.degree]
             call_compound = True
 
         qualifiers = []
@@ -325,7 +339,7 @@ class Interval:
             return '‹Rt›'
         else:
             sign_str = '-' if self.sign == -1 else ''
-            short_deg = f'{abs(self.extended_degree)}'
+            short_deg = f'{self.extended_degree}'
             return f'‹{sign_str}{self.quality.short_name}{short_deg}›'
 
     def __str__(self):
@@ -673,28 +687,39 @@ for i in range(12):
 
 
 def unit_test():
+    print('Testing basic arithmetic:')
     test(Interval(4) - Interval(2), Interval(2))
     test(Interval(3) - 5, Interval(-2))
     test(Interval(4) + 10, Interval(14))
-    test(Interval(4), Interval.from_degree(3))
+
+    print('Recasting and init by degrees')
+    test(Interval(Interval(14)), Interval(14))
     test(Maj3, Interval(4))
     test(Maj3 + Min3, Per5)
     test(Per5-Min3, Maj3)
-    # test(Interval(7).consonance, 1)
-    # test(Interval(6).consonance, 0)
+
+    # init by degree:
+    test(Interval(4), Interval.from_degree(3))
+
+    print('Inversion and negation:')
     test(~Interval(-7), Per4)
-    test(-Aug9, Interval(-15, degree=-9))
+    test(-Aug9, Interval(-15, degree=9))
     test(~Dim12, -Aug11)
 
+    print('Extended intervals:')
     test(Interval(14), Interval.from_degree(9))
 
-    # test re-casting:
-    test(Interval(Interval(14)), Interval(14))
+    print('Degree preservation under addition/subtraction by octaves:')
+    test((Aug4 + Interval(12)).degree, Aug11.degree)
+    test((Aug4 - Interval(12)).degree, (-Aug4).degree)
+    test((-Aug4 - Interval(12)).degree, (-Aug11).degree)
 
-    # test interval lists:
+
+    print('IntervalLists:')
     test(IntervalList([M3, P5]).pad(left=True, right=True), IntervalList([P1, M3, P5, P8]))
     test(IntervalList([M3, P5]), IntervalList([P1, M3, P5, P8]).strip())
     test(IntervalList([M2, M3, P5]), IntervalList([M3, P5, M9]).flatten())
+
 
 
 
