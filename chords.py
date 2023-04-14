@@ -216,7 +216,7 @@ class AbstractChord:
         # quality of a chord is the quality of its third:
         self.quality = qualities.Perfect if 3 not in self.factors else self.factor_intervals[3].quality
 
-    def _parse_input(self, name, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=False):
+    def _parse_input(self, name, factors, intervals, inversion, inversion_degree, qualifiers, _allow_note_name=False):
         """takes valid inputs to AbstractChord and parses them into factors, intervals and inversion.
         (see docstring for AbstractChord.__init__)"""
 
@@ -236,7 +236,7 @@ class AbstractChord:
                 if inversion_str.isnumeric():
                     inversion = int(inversion_str)
                 else:
-                    assert allow_note_name, f'String inversions only allowed for non-AbstractChords'
+                    assert _allow_note_name, f'String inversions only allowed for non-AbstractChords'
                     inversion = inversion_str
 
             # detect if name refers to a major chord:
@@ -337,7 +337,7 @@ class AbstractChord:
             if isinstance(inversion, int):
                 assert 0 < inversion <= (len(factors)-1), f'{inversion} is an invalid inversion number for chord with {len(factors)} factors'
             elif isinstance(inversion, str):
-                if not allow_note_name:
+                if not _allow_note_name:
                     raise TypeError(f'inversion arg for AbstractChord must be an int, but got: {type(inversion)}')
                 else:
                     if not parsing.is_valid_note_name(inversion):
@@ -486,29 +486,44 @@ class AbstractChord:
 ################################################################################
 
 class Chord(AbstractChord):
-    """a Chord built on a note of the chromatic scale, but in no particular octave,
-    whose members are Notes.
-    a Chord is fully identified by its Root, its Factors, and its Inversion"""
+    """a Chord built on a note of the chromatic scale, but in no particular octave.
+            shares all of the attributes/methods of AbstractChord,
+            but additionally has a root and a note list. (and a sharp/flat preference)
+            if inverted, also stores bass note, and note list in inverted position.
+    """
     def __init__(self, name=None,
                        root=None, factors=None, intervals=None, notes=None,
                        inversion=None, inversion_degree=None, bass=None,
                        qualifiers=None,
                        in_key=None,
                        recursive_reinit=True):
-        """initialised in the same way as an AbstractChord, with two differences:
-        if 'notes' arg is supplied, we try to construct a Chord object from those notes
-            and ignore name/root/factors/intervals keywords. (but still allow inversion? and qualifiers)
+        """initialised in one of three ways:
 
-        elif 'name' arg is supplied, we treat it as in AbstractChord but require it to lead with the name of the chord root.
-            i.e. 'Bbmmaj7' is parsed as having root 'Bb', and passes 'mmaj7' to AbstractChord init.
+        1. from 'notes' arg, as a list of Notes (or a note-string),
+            in which case we set the first Note as the root,
+            and initialise the remaining intervals as with an AbstractChord.
 
-        otherwise, if neither is supplied, we parse keyword args in the same way as AbstractChord,
-            with the additional requirement that 'root' keyword arg is also supplied, as a Note
-            or object that casts to Note.
+        2. from 'name' arg, as a proper Chord name (like "Csus2" or "Ebminmaj7"),
+            in which case we extract the root note from the string, and initialise
+            the remaining suffix as with an AbstractChord.
+                name can also specify an inversion, such as: "Csus2/D", which
+                overwrites explicit inversion args (see below)
+
+        3. from 'root' arg, as a Note object (or an object that casts to a Note),
+            in combination with any of the keyword args that would initialise an AbstractChord,
+            i.e. one of 'factors', 'intervals', or 'name'.
 
         if a NoteList, or IntervalList, or ChordFactors object is fed as first arg (name),
-            we'll try to detect that and re-parse the args appropriately. we'll even check
-            if name is a STRING of valid notes, like Chord('CEA').
+            we'll try to detect that and re-parse the args appropriately.
+            we'll even check if name is a valid note-string, like Chord('CEA').
+
+        for any initialisation method, an inversion can also be specified
+            (unless a slash chord name was used). this must be one of:
+
+                a) 'inversion', the index of the bass note with respect to root.
+                    (same as common musical term: "Cm, 2nd inversion" is Cm/G)
+
+                b) 'inversion_degree', the degree of the bass note.
 
         we also accept the optional 'in_key' argument (TBI), instead of AbstractChord's 'in_scale',
         which specifies that this Chord is to be regarded as in a specific Key,
@@ -537,7 +552,7 @@ class Chord(AbstractChord):
             inversion = Note(bass).name
 
         # recover factor offsets, intervals from root, and inversion position from input args:
-        self.factors, self.root_intervals, inversion = self._parse_input(suffix, factors, intervals, inversion, inversion_degree, qualifiers, allow_note_name=True)
+        self.factors, self.root_intervals, inversion = self._parse_input(suffix, factors, intervals, inversion, inversion_degree, qualifiers, _allow_note_name=True)
         # note that while self.inversion in AbstratChord comes out as strictly int or None
         # here we allow it to be a string denoting the bass note, which we'll correct in a minute
 
@@ -565,6 +580,11 @@ class Chord(AbstractChord):
     def _reparse_args(name, root, factors, intervals, notes):
         """re-parse args to detect if 'name' is a list of notes, a list of intervals, or a dict of chordfactors,
         and returns the appropriate 'corrected' args if so."""
+        # accept re-casting if name is just another Chord object:
+        if isinstance(name, Chord):
+            # initialise by input chord's name: (which contains its inversion information)
+            assert (factors, intervals, notes) == (None, None, None), f'tried to initialise Chord object from another chord but with conflicting factors/intervals/notes arg'
+            name = name.name
         # is name an IntervalList, or a list that contains only Intervals/ints:
         if isinstance(name, IntervalList) or (isinstance(name, (list, tuple)) and check_all(name, 'isinstance', (int, Interval))):
             assert intervals is None, f'list of Intervals was passed as first input to Chord init, but intervals arg was also given'
@@ -840,7 +860,7 @@ class Chord(AbstractChord):
             raise Exception(f'Chord {self} is neither major or minor, and therefore has no relative')
 
     def __invert__(self):
-        """inversion operator on Chords returns the relative major or minor"""
+        """returns the relative major or minor (using inversion operator '~')"""
         return self.relative
 
     def invert(self, inversion=None, inversion_degree=None, bass=None):
@@ -1216,8 +1236,11 @@ def unit_test(verbose=False):
     test(Chord([4,8], root='C'), Chord('C+'))
 
     # test repeated interval parsing:
-    test(Chord('CEGCEGC'), Chord('C')) 
+    test(Chord('CEGCEGC'), Chord('C'))
     test(Chord('CEGDGD'), Chord('Cadd9'))
+
+    # chord init by re-casting:
+    test(Chord(Chord('Cdim9/Eb')), Chord('Cdim9/Eb'))
 
     log.verbose = False
 
