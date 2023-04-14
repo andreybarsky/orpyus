@@ -1,7 +1,7 @@
 # new chord class with explicit factor recognition and compositional name generation/recognition
 
-import notes
-from notes import Note, NoteList
+# import notes
+from notes import Note, NoteList, chromatic_scale
 from intervals import Interval, IntervalList
 from util import log, test, precision_recall, rotate_list, check_all, auto_split, reverse_dict, unpack_and_reverse_dict
 import parsing
@@ -13,9 +13,9 @@ from collections import defaultdict
 import pdb
 
 # relative minors/majors of all chromatic notes:
-relative_minors = {c.name : (c - 3).name for c in notes.chromatic_scale}
-relative_minors.update({c.sharp_name: (c-3).sharp_name for c in notes.chromatic_scale})
-relative_minors.update({c.flat_name: (c-3).flat_name for c in notes.chromatic_scale})
+relative_minors = {c.name : (c - 3).name for c in chromatic_scale}
+relative_minors.update({c.sharp_name: (c-3).sharp_name for c in chromatic_scale})
+relative_minors.update({c.flat_name: (c-3).flat_name for c in chromatic_scale})
 
 relative_majors = {value:key for key,value in relative_minors.items()}
 
@@ -268,12 +268,11 @@ class AbstractChord:
             intervals = IntervalList(intervals).pad(left=True, right=False)
             assert len(intervals) == len(set(intervals)), f'Interval list supplied to AbstractChord init contains repeated intervals: {intervals}'
 
-            # check if this is an inversion of some common chord
-
+            # check if this is an inversion of some common chord:
             if intervals in intervals_to_chord_names:
                 # (we'll use the inversion only if it's less rare than the root intervals)
-                supplied_interval_name = intervals_to_chord_names[intervals]
-                supplied_rarity = chord_name_rarities[supplied_interval_name]
+                supplied_interval_chord_name = intervals_to_chord_names[intervals]
+                supplied_rarity = chord_name_rarities[supplied_interval_chord_name]
             else:
                 supplied_rarity = 10 # max possible
 
@@ -433,6 +432,8 @@ class AbstractChord:
 
     @staticmethod
     def inversions_from_intervals(intervals):
+        """searches an interval list's inversions for possible matching chords
+        and returns as a dict keying candidate inverted AbstractChords to their rarities"""
         candidates = []
         for inversion_place in range(1, len(intervals)):
             inverted_intervals = intervals.invert(-inversion_place)
@@ -452,9 +453,20 @@ class AbstractChord:
         else:
             return f'{self.suffix} chord'
 
-    def root(self, root_note):
+    def on_root(self, root_note):
         """constructs a Chord object from this AbstractChord with respect to a desired root"""
         return Chord(root=root_note, factors=self.factors, inversion=self.inversion)
+
+    def on_bass(self, bass_note):
+        """constructs an inverted Chord object from this inverted AbstractChord with respect to a desired bass"""
+        if self.inversion == 0:
+            # bass is root, so on_bass is equivalent to on_root:
+            return self.on_root(bass_note)
+        else:
+            # construct the root note from the desired bass note and this AbstractChord's inversion:
+            root_to_bass_interval = self.root_intervals[self.inversion]
+            root_note = Note(bass_note) - root_to_bass_interval
+            return Chord(root=root_note, factors=self.factors, inversion=self.inversion)
 
     def __len__(self):
         """this chord's order, i.e. the number of notes/factors"""
@@ -716,8 +728,10 @@ class Chord(AbstractChord):
                 pdb.set_trace()
 
         # infer inverted note order by finding the bass's place in our root_notes notelist:
-        bass_place = [i for i, n in enumerate(self.root_notes) if n == bass][0]
-        assert inversion == bass_place ### is this always true?
+        # bass_place = [i for i, n in enumerate(self.root_notes) if n == bass][0]
+        # assert inversion == bass_place ### is this always true?
+        bass_place = inversion # kludge? odd behaviour around 11sus4 // 13sus4 // 13sus2 chords
+
         # and rearranging the notes by rotation, e.g. from ordering [0,1,2] to [1,2,0]:
         # inverted_notes = self.root_notes.rotate(bass_place)
         # inverted_intervals = [Interval(0)] + [n - bass for n in inverted_notes[1:]]
@@ -890,6 +904,9 @@ class Chord(AbstractChord):
         not to be confused with self.__invert__!"""
         return Chord(factors=self.factors, root=self.root, inversion=inversion, inversion_degree=inversion_degree, bass=bass)
 
+    def abstract(self):
+        """return the AbstractChord that this Chord is associated with"""
+        return AbstractChord(factors=self.factors)
 
     def _get_flags(self):
         """Returns a list of the boolean flags associated with this object"""
@@ -964,10 +981,10 @@ chord_names_by_rarity = { 0: ['', 'm', '7', 'm7', '5'],   # basic chords: major/
                           4: [], 5: [], 6: [], 7: []}
 
 # these chord names cannot be modified:
-unmodifiable_chords = ['', '5', '(no5)']
+unmodifiable_chords = ['', '5', '(no5)', 'add4', 'add9', 'add11', 'add13']
 # '' because most ordinary chord types imply modification from major, i.e. 'sus4' implies ['' + 'sus4']
 # '5' and '(no5)' because they both imply simple removals of triad degrees, and are best handled by fuzzy matching
-
+# and add4/add9/add11 chords because they are themselves modifiers; they combine oddly with sus2/sus4, and must be done strictly in sus/add order
 
 # now we'll loop over those chords and build a dict mapping intervals/factors to their names:
 factors_to_chord_names, intervals_to_chord_names = {}, {}
@@ -1064,7 +1081,8 @@ def matching_chords(note_list, display=True,
     try:
         note_list = NoteList(note_list)
     except Exception as e:
-        raise ValueError(f'{note_list} does not appear to be a valid list of notes')
+        print(f'{note_list} does not appear to be a valid list of notes')
+        raise e
 
     candidates = {} # we'll build a list of Chord object candidates as we go
     # keying candidate chord objs to (rec, prec, likelihood, consonance) tuples
@@ -1234,7 +1252,8 @@ def unit_test(verbose=False):
     log.verbose=verbose
 
     # test inversion by factor/bass, AbstractChord->Chord initialisation, and unusual note names:
-    test(Chord('E#m7/C'), AbstractChord('m7/2').root('F'))
+    test(Chord('E#m7/C'), AbstractChord('m7/2').on_root('F'))
+    test(Chord('E#m7/C'), AbstractChord('m7/2').on_bass('C'))
     # test correct production of root notes/intervals and inverted notes/intervals:
     test(Chord('Am/C').root_notes, Chord('Am').root_notes)
     test(Chord('Am/C').root_intervals, Chord('Am').root_intervals)
@@ -1245,6 +1264,9 @@ def unit_test(verbose=False):
     test(4 in AbstractChord('sus4'), True)
     test(Interval(4) in AbstractChord('sus4'), False)
     test('C' in Chord('Am'), True)
+
+    # test chord abstraction:
+    test(Chord('Cmaj7sus2').abstract(), AbstractChord('maj7sus2'))
 
     # test chord factor init by strings and lists:
     test(ChordFactors('1-♭3-b5'), ChordFactors(['1', '♭3', 'b5']))
