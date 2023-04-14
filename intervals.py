@@ -216,8 +216,11 @@ class Interval:
         else:
             raise TypeError('Intervals can only be added to integers or other Intervals')
 
-    def __radd__(self, other):
-        return self + other
+    # def __radd__(self, other):
+    #     # if isinstance(other, (int, Interval)):
+    #     return self + other
+    #     # else:
+    #     #     return other + self
 
     def __sub__(self, other):
         if isinstance(other, (int, Interval)):
@@ -370,7 +373,7 @@ class IntervalList(list):
         interval_items = self._cast_intervals(items)
 
         super().__init__(interval_items)
-        self.set = set(self) # for efficient use of __contains__
+        self.value_set = set([s.value for s in self]) # for efficient use of __contains__
 
     @staticmethod
     def _cast_intervals(items):
@@ -446,21 +449,25 @@ class IntervalList(list):
         return hash(tuple(self.sorted()))
 
     def __contains__(self, item):
-        return item in self.set
+        """check if interval with a value (not degree) of item is contained inside this IntervalList,
+        using self.value_set for efficient lookup"""
+        if isinstance(item, Interval):
+            item = item.value
+        return item in self.value_set
 
     def append(self, item):
         """as list.append, but updates our set object as well"""
         super().append(item)
-        self.set = set(self)
+        self.value_set = set([s.value for s in self])
 
     def remove(self, item):
         super().remove(item)
-        self.set = set(self)
+        self.value_set = set([s.value for s in self])
 
     def pop(self, item):
         popped_item = self[-1]
         del self[-1]
-        self.set = set(self)
+        self.value_set = set([s.value for s in self])
 
     def unique(self):
         """returns a new IntervalList, where repeated notes are dropped after the first"""

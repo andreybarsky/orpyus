@@ -445,13 +445,18 @@ class AbstractChord:
 
     @property
     def name(self):
-        if self.suffix == '':
-            # unique to AbstractChord: report major and dominant suffix
-            return f'maj chord'
-        elif self.suffix == '7':
-            return f'dom7 chord'
+        if '/' in self.suffix:
+            suffix, inv = self.suffix.split('/')
+            inv = f'/{inv}'
         else:
-            return f'{self.suffix} chord'
+            suffix, inv = self.suffix, ''
+        if suffix == '':
+            # unique to AbstractChord: report major and dominant suffix
+            return f'maj{inv} chord'
+        elif suffix.isnumeric() and suffix not in {'5', '6'}: # dominant chords (which are not 5s or 6s)
+            return f'dom7{inv} chord'
+        else:
+            return f'{suffix}{inv} chord'
 
     def on_root(self, root_note):
         """constructs a Chord object from this AbstractChord with respect to a desired root"""
@@ -976,9 +981,9 @@ class Chord(AbstractChord):
 
 chord_names_by_rarity = { 0: ['', 'm', '7', 'm7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
                           1: ['maj7', 'mmaj7', '+', 'sus4', 'sus2', 'add9', '(no5)'], # maj/mmaj 7s, augs, and common alterations like sus2/4 and add9
-                          2: ['dim', 'dim7', 'hdim7', '6', 'm6', 'add11'], # diminised chords and 6ths
-                          3: ['dm9', 'add13'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (9,11,13)], # the five major types of extended chords, and dominant minor 9ths
-                          4: [], 5: [], 6: [], 7: []}
+                          2: ['dim', 'dim7', 'hdim7', '6', 'm6'], # diminised chords and 6ths
+                          3: ['add4', 'dm9'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (9,11,13)], # the five major types of extended chords, and dominant minor 9ths
+                          4: ['add11', 'add13'], 5: [], 6: [], 7: []}
 
 # these chord names cannot be modified:
 unmodifiable_chords = ['', '5', '(no5)', 'add4', 'add9', 'add11', 'add13']

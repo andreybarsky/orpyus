@@ -134,11 +134,11 @@ class Note:
         """instantiates an OctaveNote object corresponding to this Note played in a specific octave"""
         return OctaveNote(f'{self.chroma}{int(octave)}')
 
-    # quick accessor for in_octave method defined above:
-    def __getitem__(self, octave):
-        """returns OctaveNote in the specified octave"""
-        assert isinstance(octave, int)
-        return self.in_octave(octave)
+    # # quick accessor for in_octave method defined above:
+    # def __getitem__(self, octave):
+    #     """returns OctaveNote in the specified octave"""
+    #     assert isinstance(octave, int)
+    #     return self.in_octave(octave)
 
     ## comparison operators:
     def __eq__(self, other):
@@ -478,9 +478,9 @@ class NoteList(list):
             # now either way we should have an iterable of note-likes:
             try:
                 note_items = self._cast_notes(arg)
-            except:
-                raise Exception(f'Could not parse NoteList input as a series of notes: {arg}')
-
+            except Exception as e:
+                print(f'Could not parse NoteList input as a series of notes: {arg}')
+                raise e
         else:
             # we've been passed a series of items that we can unpack
             note_items = self._cast_notes(items)
@@ -489,19 +489,35 @@ class NoteList(list):
 
     @staticmethod
     def _cast_notes(items):
+        """accepts an iterable of Note objects, or strings that cast to Note objects,
+        and returns them strictly as a list of Note objects"""
         note_items = []
         for item in items:
-            if isinstance(item, Note):
-                # add note
-                note_items.append(item)
-            elif parsing.is_valid_note_name(item):
-                # cast string to note
-                note_items.append(Note(item))
-            elif item[-1].isdigit():
-                # cast string to octavenote
-                note_items.append(OctaveNote(item))
+            if isinstance(item, str):
+                if parsing.is_valid_note_name(item):
+                    note_items.append(Note(item))
+                elif item[-1].isdigit():
+                    raise Exception("TBI error: we haven't implemented any OctaveNote handling in NoteList yet")
+                    # note_items.append(OctaveNote(item))
+                else:
+                    raise ValueError(f'{item} is a string but does not cast to a note name')
             else:
-                raise Exception('NoteList can only be initialised with Notes, or objects that cast to Notes')
+                # assume this is a Note object, initialise a note with that object's name
+                # (to avoid circular import errors)
+                item = Note(item.name)
+                note_items.append(item)
+            # if isinstance(item, Note):
+            #     # add note
+            #     note_items.append(item)
+            # elif parsing.is_valid_note_name(item):
+            #     # cast string to note
+            #     note_items.append(Note(item))
+            # elif isinstance(item, str) and item[-1].isdigit():
+            #     # cast string to octavenote
+            #     raise Exception("TBI error: we haven't implemented any OctaveNote handling in NoteList yet")
+            #     note_items.append(OctaveNote(item))
+            # else:
+            #     raise Exception('NoteList can only be initialised with Notes, or objects that cast to Notes')
         return note_items
 
     def __repr__(self):
@@ -546,6 +562,13 @@ class NoteList(list):
                 return out_list
         else:
             raise Exception(f"Can't subtract {type(other)} from NoteList")
+
+    # def __contains__(self, item):
+    #     if isinstance(item, str):
+    #         #cast to Note
+    #         item = Note(item)
+    #     assert isinstance(item, Note), 'NoteLists.__contain__ method only allows Notes (or strings that cast to Notes)'
+    #     return item in self
 
     def unique(self):
         """returns a new NoteList, where repeated notes are dropped after the first"""
@@ -602,15 +625,15 @@ class NoteList(list):
                 start_octave = 4
                 auto_octave = True
                 # cast abstract first note to octavenote:
-                octavenotes.append(self[0][start_octave])
+                octavenotes.append(self[0].in_octave(start_octave))
                 # auto_octave will let us adjust pitch down later
         else:
             # cast abstract first note to octavenote:
             if not isinstance(self[0], OctaveNote):
-                octavenotes.append(self[0][start_octave])
+                octavenotes.append(self[0].in_octave(start_octave))
             else:
                 # overwrite octave of existing octavenote:
-                octavenotes.append((self[0].note)[start_octave])
+                octavenotes.append((self[0].note).in_octave(start_octave))
 
         for note in self[1:]:
             if isinstance(note, OctaveNote):

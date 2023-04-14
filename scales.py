@@ -65,15 +65,16 @@ def mod_degree(deg, max_degree=7):
 ### TBI: should scales be able to be modified by ChordQualifiers or something similar, like ChordFactors can?
 class Scale:
     """a hypothetical diatonic 7-note scale not built on any specific tonic,
-    but defined by a series of intervals from whatever its tonic is"""
+    but defined by a series of Intervals from whatever its hypothetical tonic is"""
     def __init__(self, scale_name=None, intervals=None, mode=1, chromatic_intervals=None, stacked=True):
         self.intervals, self.base_scale, self.rotation = self._parse_input(scale_name, intervals, mode, stacked)
 
         # build degrees dict that maps ScaleDegrees to this scale's intervals:
-        self.degree_intervals = {1: Unison}
+        self.degree_intervals = {1: Interval(0)}
         for d, i in enumerate(self.intervals):
             deg = d+2 # starting from 2
             self.degree_intervals[deg] = Interval(value=i.value, degree=deg)
+        self.interval_degrees = {i: d for d,i in self.degree_intervals.items()}
 
         assert len(self.degree_intervals) == 7, f"{scale_name} is not diatonic: has {len(self.degree_intervals)} degrees instead of 7"
         assert len(self.intervals) == 6, f"{scale_name} has {len(self.intervals)} intervals instead of the required 6"
@@ -214,7 +215,7 @@ class Scale:
             return IntervalList([self.degree_intervals[mod_degree(d)] for d in idx])
 
     def __call__(self, degree, order=3, qualifiers=None):
-        """wrapper around self.chord - returns an AbstractChord built on desired degree"""
+        """wrapper around self.chord - returns a chord object built on desired degree"""
         return self.chord(degree=degree, order=order, qualifiers=qualifiers)
 
     def __eq__(self, other):
@@ -244,19 +245,25 @@ class Scale:
             raise Exception('Unimplemented')
 
     @property
-    def short_name(self):
+    def suffix(self):
         # for use in Keys, so that Key('Cm') is listed as Cm, and not C natural minor
-        remapping = {'natural major': '', 'natural minor': 'm'}
-        name = self.name
-        if name in remapping:
-            return remapping[name]
+        if self.chromatic_intervals is None:
+            if self.intervals in interval_scale_names:
+                return interval_scale_names[self.intervals][0] # first item in interval_scale_names is the short suffix form
+            elif self.intervals in interval_mode_names:
+                suf = interval_mode_names[self.intervals][-1]
+            else:
+                suf = '(?)'
         else:
-            return name
+            # TBI - identify special scales with chromatic intervals?
+            raise Exception('Unimplemented')
+
+        return suf
 
     @property
     def aliases(self):
         """return a list of other names for this scale"""
-        return mode_name_aliases[self.name]
+        return list(set(mode_name_aliases[self.name]))
 
     @property
     def pentatonic(self):
@@ -301,9 +308,9 @@ class Scale:
         chord_intervals = [self.get_higher_interval(d) - root_interval for d in chord_degrees]
 
         # sanitise relative intervals to thirds, fifths etc. (instead of aug4ths and whatever)
-        sanitised_intervals = []
-        for i,d in zip(chord_intervals, desired_degrees):
-            assert i.extended_degree == d
+        # sanitised_intervals = []
+        # for i,d in zip(chord_intervals, desired_degrees):
+        #     assert i.extended_degree == d
 
         return AbstractChord(intervals=chord_intervals, qualifiers=qualifiers)
 
@@ -357,7 +364,7 @@ class Scale:
                             log(f'Could not find neighbour of {self.name} with alteration {sharp_deg_qualifier.name}: {e}')
         return neighbours
 
-    def valid_chords(self, degree, max_order=4, min_likelihood=0.4, min_consonance=0, max_results=None, sort_by='likelihood', inversions=False, display=True):
+    def valid_chords(self, degree, max_order=4, min_likelihood=0.4, min_consonance=0, max_results=None, sort_by='likelihood', inversions=False, display=True, _root_note=None):
         """For a specified degree, returns all the chords that can be built on that degree
         that fit perfectly into this scale."""
 
@@ -390,10 +397,22 @@ class Scale:
                             break
                     if is_match:
                         candidate = AbstractChord(factors=chord_names_to_factors[name], inversion=inversion)
+                        if _root_note is not None: # for easy inheritance by Key class
+                            candidate = candidate.on_bass(_root_note)
+
+
                         if candidate.order <= max_order and candidate.likelihood >= min_likelihood and candidate.consonance >= min_consonance:
                             candidates[candidate] = {'order': candidate.order,
                                                      'likelihood': round(candidate.likelihood,2),
                                                      'consonance': round(candidate.consonance,3)}
+
+        # if inversions were allowed, we prune the candidate list to remove inversions that have the same intervals as a non-inverted candidate:
+
+        # TBI: we could prune repeated inversions having the same intervals too, by pruning for each inversion-place starting from the highest?
+        if inversions:
+            non_inverted_intervals = {c.intervals for c in candidates if c.inversion == 0}
+            pruned_candidates = {c:v for c,v in candidates.items() if (c.inversion == 0) or (c.intervals not in non_inverted_intervals)}
+            candidates = pruned_candidates
 
         # sort result: (always by chord size first)
         if sort_by=='likelihood':
@@ -406,8 +425,8 @@ class Scale:
         sorted_cands = sorted(candidates, key=sort_key, reverse=True)[:max_results]
 
         if display:
-            longest_name_len = max([len(str(c.suffix)) for c in sorted_cands])+3
-            longest_intvs_len = max([len(str(c.intervals)) for c in sorted_cands])+3
+            longest_result_len = max([len(str(c)) for c in sorted_cands])+3
+            # longest_intvs_len = max([len(str(c.intervals)) for c in sorted_cands])+3
             orders_represented = sorted(list(set([c.order for c in sorted_cands])))
 
             print(f'Valid chords built on degree {degree} of {self}')
@@ -419,9 +438,9 @@ class Scale:
                     print(f'  {o}-note chords')
                 this_order_chords = [c for c in sorted_cands if c.order == o]
                 for chord in this_order_chords:
-                    suffix = chord.suffix if chord.suffix is not '' else 'maj'
+                    # suffix = chord.suffix if chord.suffix != '' else 'maj'
                     sort_str = f"L:{chord.likelihood:.2f} C:{chord.consonance:.3f}" if sort_by=='likelihood' else f"C:{chord.consonance:.3f} L:{chord.likelihood:.2f}"
-                    print(f'    ♫ {str(suffix):{longest_name_len}} {str(chord.intervals + root_interval):{longest_intvs_len}} {sort_str}')
+                    print(f'    {str(chord):{longest_result_len}} {sort_str}')
 
         else:
             return sorted_cands
