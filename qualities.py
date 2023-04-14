@@ -394,7 +394,7 @@ class ChordQualifier:
         return str(self)
 
     def __hash__(self):
-        tuples = [tuple(x) for x in [self.removals, self.additions, self.makes.keys(), self.makes.values(),
+        tuples = [tuple(x) for x in [self.removals, self.additions.keys(), self.additions.values(), self.makes.keys(), self.makes.values(),
                   self.modifications.keys(), self.modifications.values(), self.verifications.keys(), self.verifications.values()]]
         return hash(tuple(tuples))
 
