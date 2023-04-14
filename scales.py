@@ -70,12 +70,12 @@ class Scale:
         self.intervals, self.base_scale, self.rotation = self._parse_input(scale_name, intervals, mode, stacked)
 
         # build degrees dict that maps ScaleDegrees to this scale's intervals:
-        self.degrees = {1: Unison}
+        self.degree_intervals = {1: Unison}
         for d, i in enumerate(self.intervals):
             deg = d+2 # starting from 2
-            self.degrees[deg] = Interval(value=i.value, degree=deg)
+            self.degree_intervals[deg] = Interval(value=i.value, degree=deg)
 
-        assert len(self.degrees) == 7, f"{scale_name} is not diatonic: has {len(self.degrees)} degrees instead of 7"
+        assert len(self.degree_intervals) == 7, f"{scale_name} is not diatonic: has {len(self.degree_intervals)} degrees instead of 7"
         assert len(self.intervals) == 6, f"{scale_name} has {len(self.intervals)} intervals instead of the required 6"
 
         # determine quality by asking: is the third major or minor
@@ -184,7 +184,7 @@ class Scale:
 
     def __len__(self):
         # diatonic scale by definition has 7 intervals:
-        assert len(self.degrees) == 7
+        assert len(self.degree_intervals) == 7
         return 7
 
     def __contains__(self, item):
@@ -209,9 +209,9 @@ class Scale:
     def __getitem__(self, idx):
         """returns the (flattened) Interval or Intervals from root to this scale degree"""
         if isinstance(idx, int):
-            return self.degrees[mod_degree(idx)]
+            return self.degree_intervals[mod_degree(idx)]
         else:
-            return IntervalList([self.degrees[mod_degree(d)] for d in idx])
+            return IntervalList([self.degree_intervals[mod_degree(d)] for d in idx])
 
     def __call__(self, degree, order=3, qualifiers=None):
         """wrapper around self.chord - returns an AbstractChord built on desired degree"""
@@ -297,7 +297,7 @@ class Scale:
         desired_degrees = range(1, (2*order), 2)
         chord_degrees = [root_degree] + [root_degree+(o*2) for o in range(1, order)] # e.g. third and fifth degrees for order=3
         root_interval = self[root_degree]
-        # note we use self.degrees[d] instead of self[d] to avoid the mod behaviour:
+        # note we use self.degree_intervals[d] instead of self[d] to avoid the mod behaviour:
         chord_intervals = [self.get_higher_interval(d) - root_interval for d in chord_degrees]
 
         # sanitise relative intervals to thirds, fifths etc. (instead of aug4ths and whatever)
@@ -324,7 +324,7 @@ class Scale:
     def neighbouring_scales(self):
         """return a list of Scale objects that differ from this one by only a semitone"""
         neighbours = {}
-        for degree, intv in self.degrees.items(): # try modifying each interval in this scale
+        for degree, intv in self.degree_intervals.items(): # try modifying each interval in this scale
             if degree != 1: # (but not the tonic)
                 if not intv.quality.minor_ish: # don't flatten minor/dim degrees (they're already flat)
                     flat_deg_intervals = IntervalList(self.diatonic_intervals)
@@ -452,10 +452,10 @@ class Subscale(Scale):
         self.parent_scale = parent_scale
         self.borrowed_degrees = sorted(degrees)
         # ordered dict of this subscale's degrees with respect to parent, with gaps:
-        self.degrees = {d: parent_scale[d] for d in self.borrowed_degrees}
-        self.intervals = IntervalList(list(self.degrees.values()))
+        self.degree_intervals = {d: parent_scale[d] for d in self.borrowed_degrees}
+        self.intervals = IntervalList(list(self.degree_intervals.values()))
         # ordered dict of this subscale's degrees with no gaps:
-        self.subdegrees = {d+1: self.intervals[d] for d in range(len(self.intervals))}
+        self.subdegree_intervals = {d+1: self.intervals[d] for d in range(len(self.intervals))}
 
         self.diatonic_intervals = self.intervals
         if chromatic_intervals is not None:
