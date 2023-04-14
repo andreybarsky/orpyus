@@ -473,6 +473,15 @@ class AbstractChord:
     def __repr__(self):
         return str(self)
 
+    def __contains__(self, item):
+        """AbstractChords can contain degrees (as integers), or intervals (as Intervals)"""
+        if isinstance(item, Interval):
+            return item in self.intervals # note: uses inverted intervals, not root position
+        elif isinstance(item, int):
+            return item in self.factors.keys()
+        else:
+            raise TypeError(f'AbstractChord object cannot contain items of type: {type(item)}')
+
     def __eq__(self, other):
         """AbstractChords are equal to others on the basis of their factors and inversion"""
         if type(other) == AbstractChord:
@@ -796,6 +805,19 @@ class Chord(AbstractChord):
 
     def __repr__(self):
         return str(self)
+
+    def __contains__(self, item):
+        """Chords can contain degrees (as integers), intervals (as Intervals),
+        or notes (as Notes, or strings that cast to Notes)"""
+        if isinstance(item, Interval):
+             return item in self.intervals # note: uses inverted intervals, not root position
+        elif isinstance(item, int):
+            return item in self.factors
+        elif isinstance(item, (Note, str)):
+            n = Note(item)
+            return n in self.notes
+        else:
+            raise TypeError(f'Chord object cannot contain items of type: {type(item)}')
 
     def __eq__(self, other):
         """Chords are equal to others on the basis of their root, factors and inversion"""
@@ -1219,6 +1241,11 @@ def unit_test(verbose=False):
     test(Chord('Am/C').notes, Chord('C6(no5)').notes)
     test(Chord('Am/C').intervals, Chord('C6(no5)').intervals)
 
+    # test chord membership:
+    test(4 in AbstractChord('sus4'), True)
+    test(Interval(4) in AbstractChord('sus4'), False)
+    test('C' in Chord('Am'), True)
+
     # test chord factor init by strings and lists:
     test(ChordFactors('1-♭3-b5'), ChordFactors(['1', '♭3', 'b5']))
 
@@ -1245,6 +1272,8 @@ def unit_test(verbose=False):
     log.verbose = False
 
     test(most_likely_chord('CEAB')[0], Chord('Amadd9/C'))
+
+
 
 if __name__ == '__main__':
     unit_test()
