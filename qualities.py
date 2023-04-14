@@ -269,7 +269,6 @@ class ChordQualifier:
 
     def _parse_name(self, alias):
         """accepts the alias of a ChordQualifier and returns appropriate parameters"""
-        # quals = parse_chord_qualifiers(alias)
         # re-cast existing ChordQualifier as input:
         if isinstance(alias, ChordQualifier):
             return alias.params
@@ -293,12 +292,6 @@ class ChordQualifier:
                     return quals[0].params
                 elif len(quals) > 2:
                     raise ValueError(f'{alias} refers not to one ChordQualifier but to multiple: {quals}')
-                # elif isinstance(qual, ChordQualifier):
-                #     return qual.params
-                #     raise Exception(f'{alias} (evaluated as {qual_name}) does not map onto a known ChordQualifier')
-                # else:
-                #     if len(reduced_alias) >= 2:
-                #         raise ValueError(f'{alias} refers not to one ChordQualifier but to multiple: {reduced_alias}')
                 else:
                     raise Exception
         else:
@@ -365,12 +358,6 @@ class ChordQualifier:
                 qual_name = rev_lookup[self]
 
                 return qual_name
-        # if len(self.makes) == 1 and sum([len(x) for x in self.params]) == 1:
-        #     # this is a chord alteration: unpick the raised/lowered/natural degrees
-        #     degree, op = list(self.makes.keys())[0], list(self.makes.values())[0]
-        #     acc = ops_accidentals[op]
-        #     import pdb; pdb.set_trace() ### TBI: not needed now that chord_alterations is in the above block?
-        #     return f'{acc}{degree}'
 
         # no lookup exists: as a last resort, build up from self.summary instead:
         name_str = []
@@ -402,10 +389,6 @@ class ChordQualifier:
 
     def __str__(self):
         return f'≈ {self.name} ≈'
-        # if self.name in [chord_types, chord_modifiers]:
-        #     return f'≈{self.name}≈'
-        # else:
-        #     return f'≈{self.name}≈'
 
     def __repr__(self):
         return str(self)
@@ -455,37 +438,20 @@ chord_types =  {'m': ChordQualifier(make={3: -1}),
 
 # chord 'modifiers' are those that could conceivably modify an existing chord type:
 # note that this dict order matters, since it affects the order in which chords get named: (e.g. add9sus4 instead of sus4add9)
-chord_modifiers = {
+chord_modifiers = { 'sus4': ChordQualifier(remove=3, add=4, verify={2:False, 3:0}),
+                    'sus2': ChordQualifier(remove=3, add=2, verify={4:False, 3:0}),
+
                     'add4': ChordQualifier(add=4, verify={9: False, 11:False}), # are these real? or just add11s
                     'add9': ChordQualifier(add={9:0}, verify={7: False, 2:False}),
                     'add11': ChordQualifier(add=11, verify={9: False, 4:False}),
                     'add13': ChordQualifier(add=13, verify={11: False, 6:False, 5:0}), # verify natural 5 is a kludge, see: Bbdim9add13/C
 
-                    'sus4': ChordQualifier(remove=3, add=4, verify={2:False, 3:0, 11:False}),
-                    'sus2': ChordQualifier(remove=3, add=2, verify={4:False, 3:0, 9:False}),
                     '(no5)': ChordQualifier(remove=5, verify={3: True, 10:False}),
                     }
 
-# add chord alterations as well: (♯5, ♭11, etc.)
-# ChordQualifier.char_offsets
-# accidental_ops = {'♭': -1, '♯': 1, '♮': 0}
-# ops_accidentals = reverse_dict(accidental_ops)
-# offset_chars
-
-# chord_alterations = {}
-# for offset, chars in ChordQualifier.offset_chars.items():
-#     char = chars[0] # e.g. ♯, ♭
-#     for degree in range(2, 14):
-#         alteration_name = f'{char}{degree}'
-#         print(alteration_name)
-#         if char == '♮':
-#             alteration_qual = ChordQualifier(add={degree:val})
-#         else:
-#             alteration_qual = ChordQualifier(make={degree:val})
-#         chord_alterations[alteration_name] = alteration_qual
 
 # union of them all:
-chord_aliases = {**chord_types, **chord_modifiers} #, **chord_alterations}
+chord_aliases = {**chord_types, **chord_modifiers}
 
 
 
