@@ -1,7 +1,7 @@
 from intervals import *
 # from scales import interval_scale_names, key_name_intervals
 from util import rotate_list, unpack_and_reverse_dict, check_all, log
-from chords import AbstractChord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
+from chords import ChordFactors, AbstractChord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
 from qualities import ChordQualifier
 from parsing import num_suffixes
 import notes as notes
@@ -29,18 +29,17 @@ standard_scale_suffixes = list([names[0] for names in interval_scale_names.value
 #### here we define the 'base scales': natural major, melodic minor, harmonic minor/major
 # which are those scales that are not modes of other scales
 # and the names their modes are known by
-base_scale_names = ['major', 'melodic minor', 'harmonic minor', 'harmonic major']
-# note that melodic major modes are just rotations of melodic minor modes
+base_scale_names = {'natural major', 'melodic minor', 'harmonic minor', 'harmonic major'} # note that melodic major modes are just rotations of melodic minor modes
 # this is technically true in the reverse as well, but 'melodic minor' is more common / well-known than mel. major
 
 # this dict maps base scale names to dicts that map scale degrees to the modes of that base scale
 mode_idx_names = {
-          'major': {1: ['ionian'], 2: ['dorian'], 3: ['phrygian'], 4: ['lydian'],
+  'natural major': {1: ['ionian'], 2: ['dorian'], 3: ['phrygian'], 4: ['lydian'],
                     5: ['mixolydian'], 6: ['aeolian'], 7: ['locrian']},
-  'melodic minor': {1: ['athenian'], 2: ['phrygian ♯6', 'cappadocian', 'dorian ♭2'],
+  'melodic minor': {1: ['athenian', 'melodic minor ascending', 'jazz minor'], 2: ['phrygian ♯6', 'cappadocian', 'dorian ♭2'],
                     3: ['lydian augmented', 'asgardian'], 4: ['lydian dominant', 'pontikonisian'],
                     5: ['aeolian dominant', 'olympian', 'mixolydian ♭6'],
-                    6: ['half-diminished', 'sisyphean'], 7: ['altered dominant', 'palamidian']},
+                    6: ['half-diminished', 'sisyphean', 'aeolocrian'], 7: ['altered dominant', 'palamidian']},
  'harmonic minor': {1: ['harmonic minor'], 2: ['locrian ♯6'], 3: ['ionian ♯5'], 4: ['ukrainian dorian'],
                     5: ['phrygian dominant'], 6: ['lydian ♯2'], 7: ['altered diminished']},
  'harmonic major': {1: ['harmonic major'], 2: ['blues', 'dorian ♭5', 'locrian ♯2♯6'], 3: ['phrygian ♭4', 'altered dominant ♯5'],
@@ -288,7 +287,7 @@ class Scale:
     def get_higher_interval(self, idx):
         """from root to this scale degree, which is NOT in the range 1-7,
         return the relevant extended interval without modding the degree.
-        e.g. Scale('major').get_higher_interval[8] returns MajorNinth"""
+        e.g. Scale('major').get_higher_interval(9) returns MajorNinth"""
         octave_span = (idx-1) // 7
         # deg_mod = mod_degree(idx)
         flat_interval = self[idx]
@@ -307,12 +306,16 @@ class Scale:
         # note we use self.degree_intervals[d] instead of self[d] to avoid the mod behaviour:
         chord_intervals = [self.get_higher_interval(d) - root_interval for d in chord_degrees]
 
+        chord_interval_offsets = [i.offset_from_degree(d) for i,d in zip(chord_intervals, desired_degrees)]
+        chord_factors = ChordFactors({d: o for d,o in zip(desired_degrees, chord_interval_offsets)})
+
         # sanitise relative intervals to thirds, fifths etc. (instead of aug4ths and whatever)
         # sanitised_intervals = []
         # for i,d in zip(chord_intervals, desired_degrees):
         #     assert i.extended_degree == d
 
-        return AbstractChord(intervals=chord_intervals, qualifiers=qualifiers)
+        # return AbstractChord(intervals=chord_intervals, qualifiers=qualifiers)
+        return AbstractChord(factors=chord_factors, qualifiers=qualifiers)
 
     def triad(self, degree, qualifiers=None):
         """wrapper for self.chord() to create a tetrad (i.e. 7-chord)
@@ -409,6 +412,8 @@ class Scale:
         # if inversions were allowed, we prune the candidate list to remove inversions that have the same intervals as a non-inverted candidate:
 
         # TBI: we could prune repeated inversions having the same intervals too, by pruning for each inversion-place starting from the highest?
+        # (idea: we could keep a dict that maps intervals to chords matching those intervals, and take the least rare from each)
+
         if inversions:
             non_inverted_intervals = {c.intervals for c in candidates if c.inversion == 0}
             pruned_candidates = {c:v for c,v in candidates.items() if (c.inversion == 0) or (c.intervals not in non_inverted_intervals)}
@@ -446,6 +451,64 @@ class Scale:
             return sorted_cands
 
 
+    # we define consonance for scales a little different to how we do for chords
+    # instead of looking at every pairwise interval, we look at every second-and-third interval
+    # for each degree in the scale. i.e. the intervals 1-2, 1-3, 2-3, 2-4, etc.
+    def pairwise_intervals(self):
+        pairwise = {}
+        for d1 in range(1,8):
+            for d2 in range(1,7):
+                left, right = self[d1], self.get_higher_interval(d2)
+                pairwise[(left, right)] = right - left
+
+        return pairwise
+
+    def pairwise_consonances(self):
+        # simply lifted from AbstractChord class:
+        return AbstractChord.pairwise_consonances(self)
+        # (this internally calls self.pairwise_intervals, which is defined above)
+
+        # pw_intervals = self.pairwise_intervals()
+        # pw_consonances = {}
+        # for pair, diff in pw_intervals.items():
+        #     pw_consonances[pair] = diff.consonance
+        # return pw_consonances
+
+    @property
+    def consonance(self, tonic_weight=2):
+        """simply the mean of pairwise interval consonances"""
+        cons_list = list(self.pairwise_consonances().values())
+        raw_cons = sum(cons_list) / len(cons_list)
+        # return raw_cons
+        # the raw consonance comes out as maximum=0.7231 for the most consonant scale (natural major)
+        # and 0.6731 for the most dissonant scale, the half-diminished scale (mode 6 of melodic minor)
+        # so we set the former to be just below 1 and the latter to be just above 0,
+        # and rescale the entire raw consonance range within those bounds:
+        max_cons = 0.75 # 0.7231
+        min_cons = 0.5 # 0.6731
+
+        rescaled_cons = (raw_cons - min_cons) / (max_cons - min_cons)
+        return round(rescaled_cons, 4)
+
+    @property
+    def rarity(self):
+        scale_name = interval_mode_names[self.intervals][-1]
+        if scale_name in base_scale_names:
+            # natural major and minor scales are most common:
+            return 1
+        else:
+            base, mode = mode_lookup[scale_name]
+            if base == 'natural major':
+                # modes of the major scale are the next most common:
+                return 2
+            else:
+                # weird modes
+                return 3
+
+    @property
+    def likelihood(self):
+        # inverse of rarity
+        return 1.1 - (0.2*(self.rarity))
 
 
 class Subscale(Scale):
@@ -646,7 +709,7 @@ subscales_by_name = unpack_and_reverse_dict(subscales_to_aliases)
 def unit_test():
     from chords import AbstractChord
     # test mode retrieval by name:
-    test(mode_name_intervals['natural major'], get_modes('major')[1])
+    test(mode_name_intervals['natural major'], get_modes('natural major')[1])
 
     print('Test scale init by intervals:')
     test(Scale('major'), Scale(intervals=scale_name_intervals['natural major']))
@@ -691,14 +754,61 @@ if __name__ == '__main__':
 
     # which modes correspond to which 13 chords?
 
-    _13chords = '13', 'maj13', 'min13', 'mmaj13', 'dim13'
-    for chord_name in _13chords:
-        c = AbstractChord(chord_name)
-        chord_intervals = c.intervals
-        s = Scale(intervals=chord_intervals)
-        alias_str = f" (aka: {', '.join(s.aliases)})" if len(s.aliases) > 0 else ''
+    # _13chords = '13', 'maj13', 'min13', 'mmaj13', 'dim13'
+    # for chord_name in _13chords:
+    #     c = AbstractChord(chord_name)
+    #     chord_intervals = c.intervals
+    #     s = Scale(intervals=chord_intervals)
+    #     alias_str = f" (aka: {', '.join(s.aliases)})" if len(s.aliases) > 0 else ''
 
         # print(f'\n{c}')
         # print(f'  flattened intervals: {c.intervals.flatten()}')
         # print(f'    unstacked intervals: {s.intervals.unstack()}')
         # print(f'------associated scale: {s}{alias_str}')
+
+    print(Scale('major').consonance)
+    print(Scale('dorian').consonance)
+
+    # plot all scale consonances:
+
+    all_consonances = {}
+    for ivs, scs in interval_mode_names.items():
+        sc = Scale(scs[0])
+        all_consonances[sc] = sc.consonance
+
+    sorted_scales = sorted(all_consonances, key=lambda x: all_consonances[x], reverse=True)
+    cons_names = [sc.name for sc in sorted_scales]
+    cons_values = [all_consonances[sc] for sc in sorted_scales]
+
+    # cons_names, cons_values = [sc.name for sc in all_consonances.keys()], [c for c in all_consonances.values()]
+
+    descriptors = []
+    aliases = []
+    for cons_name in cons_names:
+        if cons_name in base_scale_names:
+            # full_names.append(f'{cons_name}')
+            descriptors.append('')
+        else:
+            base, mode = mode_lookup[cons_name]
+            descriptors.append(f'mode {mode} of {base} scale')
+        this_aliases = list(set(mode_name_aliases[cons_name]))
+        aliases.append(this_aliases)
+
+    longest_name = max([len(c) for c in cons_names])
+    longest_desc = max([len(d) for d in descriptors])
+
+    # rows = zip(cons_names, cons_values)
+    # rows = rows.sorted(lambda x: (x[1]), reverse=True)
+
+    print('====================================\n')
+    print('Modes/scales by pairwise consonance:\n')
+
+    print(f'consonance {"    scale name":{longest_name}}   {"    mode rotation":{longest_desc}}           aliases')
+    print('---------------------------------------------------------------------------------------------------')
+    for i, (name, desc, value, this_aliases) in enumerate(zip(cons_names, descriptors, cons_values, aliases)):
+        # if i % 4 == 0:
+        #     print('')
+        print(f'  {value:.3f}       {name:{longest_name}}   {desc:{longest_desc}}      {", ".join(this_aliases)}')
+
+    # import numpy as np
+    # import matplotlib.pyplot as plt
