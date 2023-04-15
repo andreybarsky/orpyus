@@ -108,6 +108,7 @@ def precision_recall(target, candidate, weights=None):
 
     return precision, recall
 
+### TBI: allow split by blacklist instead of whitelist??
 def auto_split(inp, allow='', allow_numerals=True, allow_letters=True):
     """takes a string 'inp' and automatically separates it by the first character found that is
         not in the whitelist 'allow'.
@@ -128,7 +129,10 @@ def auto_split(inp, allow='', allow_numerals=True, allow_letters=True):
         # no separator found, return input as single list item
         return [inp]
     else:
-        return inp.split(sep_char)
+        splits = inp.split(sep_char)
+        # strip whitespace in addition: in case our sep is something like ', '
+        splits = [s.strip() for s in splits]
+        return splits
 
 
 def reverse_dict(dct):

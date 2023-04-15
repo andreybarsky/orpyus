@@ -27,8 +27,6 @@ class Key(Scale):
             in combination with any other args that would initialise a valid Scale object.
             i.e. one of 'scale_name' or 'intervals'."""
 
-        print(f'Key init')
-
         # if notes have been provided, parse them into tonic and intervals:
         if notes is not None:
             # ignore intervals/factors/root inputs
@@ -274,16 +272,14 @@ class Subkey(Key, Subscale):
     def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, chromatic_intervals=None, assigned_name=None, tonic=None):
 
         # get correct tonic and scale name from (key_name, tonic) input args:
-        print(f'Subkey init')
-
         self.tonic, subscale_name = self._parse_tonic(subscale_name, tonic)
 
-        # initialise everything else as SubScale class does:
+        # as Subscale.init:
         super(Key, self).__init__(subscale_name, parent_scale, degrees, omit, chromatic_intervals, assigned_name)
         # (this sets self.base_scale, .quality, .intervals, .diatonic_intervals, .chromatic_intervals, .rotation)
 
         # set Subkey-specific attributes: notes, degree_notes, etc.
-        print(f'Key init')
+        # as in Key.init:
         padded_diatonic_intervals = self.diatonic_intervals.pad()
         self.diatonic_notes = NoteList([self.tonic + i for i in padded_diatonic_intervals])
         self.diatonic_note_intervals = {self.diatonic_notes[i]: padded_diatonic_intervals[i] for i in range(len(self.diatonic_notes))}

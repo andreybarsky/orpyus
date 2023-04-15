@@ -3,7 +3,7 @@ from intervals import *
 from util import rotate_list, unpack_and_reverse_dict, check_all, log
 from chords import ChordFactors, AbstractChord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
 from qualities import ChordQualifier, Quality
-from parsing import num_suffixes
+from parsing import num_suffixes, numerals_roman
 import notes as notes
 import pdb
 
@@ -58,8 +58,6 @@ class Scale:
     """a hypothetical diatonic 7-note scale not built on any specific tonic,
     but defined by a series of Intervals from whatever its hypothetical tonic is"""
     def __init__(self, scale_name=None, intervals=None, mode=1, chromatic_intervals=None, stacked=True):
-        print(f'Scale init')
-
         self.intervals, self.base_scale, self.rotation = self._parse_input(scale_name, intervals, mode, stacked)
 
         # build degrees dict that maps ScaleDegrees to this scale's intervals:
@@ -579,6 +577,26 @@ class Scale:
         # inverse of rarity
         return 1.1 - (0.2*(self.rarity))
 
+    def roman_numeral(self, degree):
+        """returns the roman numeral associated with the Chord on the desired degree of this scale"""
+        chord = self.chord(degree)
+        roman = numerals_roman[degree] # uppercase by default
+        if chord.quality.major:
+            pass # remain uppercase
+            suffix = chord.suffix
+        elif chord.quality.minor:
+            roman = roman.lower()
+            # exclude the 'm' suffix from minor chords - their minor-ness is indicated by the numeral case
+            suffix = chord.suffix if chord.suffix != 'm' else ''
+        else:
+            # use upside down numerals instead of upper or lower case: ?
+            # replacements = {'I': 'ı', 'V': 'ʌ'}
+            # roman = ''.join(util.reduce_aliases(roman, replacements))
+            # rare case of neither-major-nor-minor chord; maybe fall back on default assumptions of scale instead of this?
+            roman = roman.lower() if ((scale.chord(1).quality.minor and degree in {1,4,5}) or (scale.chord(1).quality.major and degree in {2,3,6,7})) else roman
+            suffix = chord.suffix
+        return f'{roman}{suffix}'
+
 
 class Subscale(Scale):
     """a scale that contains a subset of the diatonic 7 intervals,
@@ -593,8 +611,6 @@ class Subscale(Scale):
     chords using those notes are valid, though they are never chord roots"""
 
     def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, chromatic_intervals=None, assigned_name=None):
-
-        print(f'Subscale init')
 
         if subscale_name is not None:
             assert assigned_name is None
@@ -619,7 +635,7 @@ class Subscale(Scale):
         self.borrowed_degrees = sorted(degrees)
 
 
-        print(f'Scale init')
+        # as in Scale.init
         # ordered dict of this subscale's degrees with respect to parent, with gaps:
         self.parent_degree_intervals = {d: parent_scale[d] for d in self.borrowed_degrees}
         self.intervals = IntervalList(list(self.parent_degree_intervals.values()))
