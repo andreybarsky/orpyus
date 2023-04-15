@@ -714,6 +714,25 @@ Ab = Note('Ab')
 # all chromatic pitch classes:
 chromatic_scale = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
 
+# relative minors/majors of all chromatic notes:
+relative_minors = {c.name : (c - 3).name for c in chromatic_scale}
+relative_minors.update({c.sharp_name: (c-3).sharp_name for c in chromatic_scale})
+relative_minors.update({c.flat_name: (c-3).flat_name for c in chromatic_scale})
+
+relative_majors = {value:key for key,value in relative_minors.items()}
+
+# some chord/key tonics correspond to a preference for sharps or flats:
+sharp_tonic_names = ['G', 'D', 'A', 'E', 'B']
+flat_tonic_names = ['F', 'Bb', 'Eb', 'Ab', 'Db']
+neutral_tonic_names = ['C', 'Gb'] # no sharp/flat preference, fall back on default
+
+sharp_major_tonics = [Note(t) for t in sharp_tonic_names]
+flat_major_tonics = [Note(t) for t in flat_tonic_names]
+neutral_major_tonics = [Note(t) for t in neutral_tonic_names]
+
+sharp_minor_tonics = [Note(relative_minors[t]) for t in sharp_tonic_names]
+flat_minor_tonics = [Note(relative_minors[t]) for t in flat_tonic_names]
+neutral_minor_tonics = [Note(relative_minors[t]) for t in neutral_tonic_names]
 
 def unit_test():
     ### magic method tests:

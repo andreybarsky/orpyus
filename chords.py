@@ -1,7 +1,7 @@
 # new chord class with explicit factor recognition and compositional name generation/recognition
 
 # import notes
-from notes import Note, NoteList, chromatic_scale
+from notes import Note, NoteList, chromatic_scale, relative_minors, relative_majors, sharp_minor_tonics, sharp_major_tonics, flat_minor_tonics, flat_major_tonics
 from intervals import Interval, IntervalList
 from util import log, test, precision_recall, rotate_list, check_all, auto_split, reverse_dict, unpack_and_reverse_dict
 import parsing
@@ -12,25 +12,7 @@ from collections import defaultdict
 
 import pdb
 
-# relative minors/majors of all chromatic notes:
-relative_minors = {c.name : (c - 3).name for c in chromatic_scale}
-relative_minors.update({c.sharp_name: (c-3).sharp_name for c in chromatic_scale})
-relative_minors.update({c.flat_name: (c-3).flat_name for c in chromatic_scale})
 
-relative_majors = {value:key for key,value in relative_minors.items()}
-
-# some chord/key tonics correspond to a preference for sharps or flats:
-sharp_tonic_names = ['G', 'D', 'A', 'E', 'B']
-flat_tonic_names = ['F', 'Bb', 'Eb', 'Ab', 'Db']
-neutral_tonic_names = ['C', 'Gb'] # no sharp/flat preference, fall back on default
-
-sharp_major_tonics = [Note(t) for t in sharp_tonic_names]
-flat_major_tonics = [Note(t) for t in flat_tonic_names]
-neutral_major_tonics = [Note(t) for t in neutral_tonic_names]
-
-sharp_minor_tonics = [Note(relative_minors[t]) for t in sharp_tonic_names]
-flat_minor_tonics = [Note(relative_minors[t]) for t in flat_tonic_names]
-neutral_minor_tonics = [Note(relative_minors[t]) for t in neutral_tonic_names]
 
 
 class ChordFactors(dict):
@@ -363,9 +345,11 @@ class AbstractChord:
         if self.factors in factors_to_chord_names:
             return factors_to_chord_names[self.factors] + inv_string
         elif self.root_intervals in intervals_to_chord_names:
-            print(f' ++ Could not find chord by factors ({self.factors}), but found it by root intervals: {self.root_intervals}')
-            return intervals_to_chord_names[self.root_intervals] + inv_string
+            suf = intervals_to_chord_names[self.root_intervals] + inv_string
+            print(f' ++ Could not find chord by factors ({self.factors}), but found it by root intervals ({self.root_intervals}): {suf}')
+            return suf
         elif self.intervals in intervals_to_chord_names:
+            pdb.set_trace() # what is going on here
             print(f' ++++ Could not find chord by factors ({self.factors}), but found it by inverted intervals: {self.intervals}')
             return intervals_to_chord_names[self.intervals] + f' (inverted from {self.root})'
         elif self.factors == _major_triad:
@@ -392,15 +376,17 @@ class AbstractChord:
         matches an existing chord, and returns that chord's inversion as a new object"""
         return self.inversions_from_intervals(self.intervals)
 
-    def pairwise_intervals(self):
+    def pairwise_intervals(self, extra_tonic=False):
         pairwise = {}
         for i in range(len(self.intervals)):
             for j in range(i+1, len(self.intervals)):
                 pairwise[(self.intervals[i], self.intervals[j])] = self.intervals[j] - self.intervals[i]
+                if extra_tonic:
+                    raise Exception('not implemented')
         return pairwise
 
-    def pairwise_consonances(self):
-        pw_intervals = self.pairwise_intervals()
+    def pairwise_consonances(self, extra_tonic=False):
+        pw_intervals = self.pairwise_intervals(extra_tonic=extra_tonic)
         pw_consonances = {}
         for pair, diff in pw_intervals.items():
             pw_consonances[pair] = diff.consonance
@@ -483,12 +469,15 @@ class AbstractChord:
 
     def __str__(self):
         # note that intervals are presented with respect to inversion
-        interval_short_names = [i.short_name for i in self.intervals]
-        intervals_str = ', '.join(interval_short_names)
-        return f'♫ {self.name}  | {intervals_str} |'
+        # interval_short_names = [i.short_name for i in self.intervals]
+        # intervals_str = ', '.join(interval_short_names)
+        return f'♫ {self.name}'
 
     def __repr__(self):
-        return str(self)
+        interval_short_names = [i.short_name for i in self.intervals]
+        intervals_str = ', '.join(interval_short_names)
+        return f'{str(self)} | {intervals_str} |'
+        # return str(self)
 
     def __contains__(self, item):
         """AbstractChords can contain degrees (as integers), or intervals (as Intervals)"""
@@ -521,7 +510,7 @@ class Chord(AbstractChord):
                        root=None, factors=None, intervals=None, notes=None,
                        inversion=None, inversion_degree=None, bass=None,
                        qualifiers=None,
-                       in_key=None,
+                       in_key=None, prefer_sharps=None,
                        recursive_reinit=True):
         """initialised in one of three ways:
 
@@ -600,7 +589,7 @@ class Chord(AbstractChord):
         self.quality = qualities.Perfect if 3 not in self.factors else self.factor_intervals[3].quality
 
         # set sharp preference based on root note:
-        self._set_sharp_preference()
+        self._set_sharp_preference(prefer_sharps) ### TBI: move this up and make it affect root_notes etc. as well?
 
     @staticmethod
     def _reparse_args(name, root, factors, intervals, notes):
@@ -703,10 +692,10 @@ class Chord(AbstractChord):
                             new_notes = NoteList([bass] + [n for n in self.root_notes])
                             print(f"  --Re-identifying chord from notes: {new_notes}")
                             new_notes.matching_chords(invert=False, min_precision=0.7, min_recall=0.8)
-                            most_likely_chord, stats = new_notes.most_likely_chord(invert=False, require_root=True, min_likelihood=0.5)
-                            print(f"\n  --Identified most likely chord: {most_likely_chord}\n       (with {stats})")
-                            print(f" --Recursively re-initialising {self.root.name}{naive_chord_name}/{bass.name} as {bass.name}{most_likely_chord.suffix}")
-                            self.__init__(factors=most_likely_chord.factors, root=most_likely_chord.root, inversion=None)
+                            likely_chord, stats = new_notes.most_likely_chord(invert=False, require_root=True, min_likelihood=0.5)
+                            print(f"\n  --Identified most likely chord: {likely_chord}\n       (with {stats})")
+                            print(f" --Recursively re-initialising {self.root.name}{naive_chord_name}/{bass.name} as {bass.name}{likely_chord.suffix}")
+                            self.__init__(factors=likely_chord.factors, root=likely_chord.root, inversion=None)
                             return self._parse_inversion(0)
                         except Exception as e:
                             raise Exception(f" Failed to re-initialise, uncaught error: {e}")
@@ -1154,6 +1143,7 @@ def matching_chords(note_list, display=True,
             title.append('(inversions allowed)')
 
         title = ' '.join(title)
+        print(title)
 
         # we'll figure out how long we need to make each 'column' by iterating through cands:
         chord_name_parts = []
