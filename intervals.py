@@ -74,8 +74,6 @@ class Interval:
                 raise ValueError(f'Interval init specified that interval of semitone distance {self.value}' +
                 f' should correspond to degree={degree}, but that is too far from default: {default_degree}')
 
-
-
         # determine this interval's quality:
         self.quality = self._detect_quality()
 
@@ -171,8 +169,18 @@ class Interval:
     @property
     def offset_from_default(self):
         """how many semitones this interval is from its default/canonical (perfect/major) degree"""
-        perfect_degree = self.degree in [1,4,5]
+        perfect_degree = self.degree in {1,4,5}
         offset = self.quality.offset_wrt_perfect if perfect_degree else self.quality.offset_wrt_major
+        return offset
+        # return self.offset_from_default_degree(self.degree)
+
+    def offset_from_degree(self, degree):
+        """how many semitones this interval is from some chosen (perfect/major) degree"""
+        assert degree > 0
+        deg_oct, mod_degree = (divmod(degree-1, 7))
+        mod_degree += 1
+        default_value = default_degree_intervals[mod_degree] + (12*deg_oct)
+        offset = self.width - default_value
         return offset
 
     def __int__(self):
