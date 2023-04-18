@@ -704,7 +704,7 @@ class Chord(AbstractChord):
                             new_notes = NoteList([bass] + [n for n in self.root_notes])
                             print(f"  --Re-identifying chord from notes: {new_notes}")
                             new_notes.matching_chords(invert=False, min_precision=0.7, min_recall=0.8)
-                            likely_chord, stats = new_notes.most_likely_chord(invert=False, require_root=True, min_likelihood=0.5)
+                            likely_chord, stats = new_notes.most_likely_chord(invert=False, require_root=True, min_likelihood=0.5, stats=True)
                             print(f"\n  --Identified most likely chord: {likely_chord}\n       (with {stats})")
                             print(f" --Recursively re-initialising {self.root.name}{naive_chord_name}/{bass.name} as {bass.name}{likely_chord.suffix}")
                             self.__init__(factors=likely_chord.factors, root=likely_chord.root, inversion=None)
@@ -983,7 +983,7 @@ class Chord(AbstractChord):
 chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
                           1: ['m7', 'maj7', 'dim', 'aug', 'sus4', 'add9'], # maj/mmaj 7s, augs, and common alterations like sus2/4 and add9
                           2: ['mmaj7', 'dim7', 'hdim7', '6', 'm6', 'aug7', 'sus2'], # diminished chords and 6ths
-                          3: ['7b5', 'add4', 'dm9', 'dimM7', 'augM7'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (9,11,13)], # the five major types of extended chords, and dominant minor 9ths
+                          3: ['7b5', 'add4', 'dm9', 'dmin9', 'hdmin9', 'dimM7', 'augM7'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (9,11,13)], # the five major types of extended chords, and dominant minor 9ths
                           4: ['add11', 'add13'], 5: [], 6: [], 7: []}
 
 # removed no5 - handled better by incomplete chord matching
@@ -1197,7 +1197,7 @@ def matching_chords(note_list, display=True,
     else:
         return {c: candidates[c] for c in sorted_cands}
 
-def most_likely_chord(note_list, **kwargs):
+def most_likely_chord(note_list, stats=False, **kwargs):
     """from an unordered set of notes, return the single most likely chord,
     within specified constraints, as a tuple of (Chord, match_params)"""
 
@@ -1209,7 +1209,10 @@ def most_likely_chord(note_list, **kwargs):
     candidates = matching_chords(note_list, display=False, **kwargs)
     best_match = list(candidates.keys())[0]
     match_params = candidates[best_match]
-    return best_match, match_params
+    if stats:
+        return best_match, match_params
+    else:
+        return best_match
 
 
 ### WIP, incomplete class
@@ -1314,7 +1317,7 @@ def unit_test(verbose=False):
 
     log.verbose = False
 
-    test(most_likely_chord('CEAB')[0], Chord('Amadd9/C'))
+    test(most_likely_chord('CEAB'), Chord('Amadd9/C'))
 
 
 
