@@ -91,7 +91,7 @@ class ChordFactors(dict):
 
     def __add__(self, other):
         """modifies these factors by the alterations in a ChordQualifier,
-        return new factors object"""
+        return new factors object."""
         # output_factors = ChordFactors(self, qualifiers=self.qualifiers)
 
         if isinstance(other, ChordQualifier):
@@ -466,6 +466,18 @@ class AbstractChord:
     @property
     def order(self):
         return len(self)
+
+    def __add__(self, other):
+        """Chord addition with int or Interval is upward transposition.
+        Chord addition with Note creates a new Chord.
+        (neither are defined for AbstractChords)"""
+        # transposition by int/interval:
+        if isinstance(other, int):
+            other = Interval(other)
+        if isinstance(other, Interval):
+            new_root = self.root + other
+            return Chord(factors=self.factors, root=new_root)
+
 
     def __str__(self):
         # note that intervals are presented with respect to inversion
@@ -971,7 +983,7 @@ class Chord(AbstractChord):
 chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
                           1: ['m7', 'maj7', 'dim', 'aug', 'sus4', 'add9'], # maj/mmaj 7s, augs, and common alterations like sus2/4 and add9
                           2: ['mmaj7', 'dim7', 'hdim7', '6', 'm6', 'aug7', 'sus2'], # diminished chords and 6ths
-                          3: ['add4', 'dm9', 'dimM7', 'augM7'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (9,11,13)], # the five major types of extended chords, and dominant minor 9ths
+                          3: ['7b5', 'add4', 'dm9', 'dimM7', 'augM7'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (9,11,13)], # the five major types of extended chords, and dominant minor 9ths
                           4: ['add11', 'add13'], 5: [], 6: [], 7: []}
 
 # removed no5 - handled better by incomplete chord matching
@@ -990,7 +1002,7 @@ factors_to_chord_names, intervals_to_chord_names = {}, {}
 # (while adding chord modifications/alterations as well)
 
 chord_name_rarities = unpack_and_reverse_dict(chord_names_by_rarity)
-modifier_name_rarities = unpack_and_reverse_dict(modifiers_by_rarity)
+modifier_name_rarities = unpack_and_reverse_dict(modifier_names_by_rarity)
 
 new_rarities = {i: [] for i in range(8)}
 for rarity, chord_names in chord_names_by_rarity.items():
@@ -1263,10 +1275,16 @@ def unit_test(verbose=False):
     test(Chord('Am/C').notes, Chord('C6(no5)').notes)
     test(Chord('Am/C').intervals, Chord('C6(no5)').intervals)
 
+    # test magic methods: transposition:
+    test(Chord('Caug7') + Interval(4), Chord('Eaug7'))
+
     # test chord membership:
     test(4 in AbstractChord('sus4'), True)
     test(Interval(4) in AbstractChord('sus4'), False)
     test('C' in Chord('Am'), True)
+
+    # test chord matching by notes:
+    print(matching_chords('CEA'))
 
     # test chord abstraction:
     test(Chord('Cmaj7sus2').abstract(), AbstractChord('maj7sus2'))
