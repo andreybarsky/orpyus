@@ -1,5 +1,5 @@
 import notes as notes
-from notes import OctaveNote, NoteList
+from notes import Note, OctaveNote, NoteList
 from chords import Chord, most_likely_chord, matching_chords
 from parsing import parse_out_note_names
 from util import test, transpose_nested_list
@@ -12,7 +12,7 @@ class String(OctaveNote):
         return self + fret
 
 
-tunings = {'standard': [String('E2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')],
+tunings = {'standard':[String('E2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')],
            'dropD':   [String('D2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')],
            'dropC':   [String('C2'), String('G2'), String('C3'), String('F3'), String('A3'), String('D4')],
            'dropB':   [String('B1'), String('Gb2'), String('B2'), String('E3'), String('Ab3'), String('Db4')],
@@ -23,7 +23,7 @@ tunings = {'standard': [String('E2'), String('A2'), String('D3'), String('G3'), 
            }
 
 class Guitar:
-    def __init__(self, tuning='standard', strings=6):
+    def __init__(self, tuning='standard', strings=6, capo=0, verbose=False):
         """tuning can be one of:
         a descriptive string: standard, dropD, openE, etc.
         or a six-character string like: EADGBE, DADGAD, etc."""
@@ -31,22 +31,22 @@ class Guitar:
         assert isinstance(tuning, str) # for now
 
         self.num_strings = strings
+        self.capo = capo
 
         if tuning in tunings.keys():
             self.open_strings = tunings[tuning]
 
-
         else:
             default_bass = String('E2')
 
-    #         cleanup:
             tuning = tuning.strip()
             # separate out individual note chromas from the input string:
-            tuning_chromas = NoteList(parse_out_note_names(tuning))
-            #
+            tuning_chromas = NoteList([Note(n) for n in parse_out_note_names(tuning)])
+
             open_strings = tuning_chromas.force_octave(start_octave=2)
             self.open_strings = [String(s) for s in open_strings]
 
+        self.verbose = verbose # for debugging
 
     def distance_from_standard(self):
         """how many semitones up/down must the strings of a standard guitar be tuned to get this tuning?"""
@@ -76,38 +76,48 @@ class Guitar:
         # notes.play(*args, arpeggio=False, **kwargs)
         notes.play(*args, duration=3, **kwargs)
 
-    def __getitem__(self, frets):
+    def fret(self, frets):
         """plucks each string according to the listed fret diagram, gets the
         resulting notes, and returns them as a NoteList together with the
         appropriate auto-detected Chord object"""
         string_notes = []
         if isinstance(frets, (list, tuple)):
-            for s, fret in enumerate(frets):
-                if isinstance(fret, int):
-                    notes.append(self.open_strings[s](fret))
-                elif fret is None:
+            for s, f in enumerate(frets):
+                if isinstance(f, int):
+                    # transpose the note that this string is tuned to upwards by f:
+                    notes.append(self.open_strings[s](f) + self.capo)
+                elif f is None:
+                    # don't sound this string
                     pass
                 else:
                     raise ValueError(f'Passed iterable to Guitar.__call__, expected items to be ints or None, but received item #{s}: {type(fret)}')
         elif isinstance(frets, str):
-            for s, fret in enumerate(frets):
-                if fret.isdigit():
-                    string_notes.append(self.open_strings[s](int(fret)))
+            for s, f in enumerate(frets):
+                if f.isdigit():
+                    # transpose the note that this string is tuned to upwards by f:
+                    string_notes.append(self.open_strings[s](int(f)) + self.capo)
                 else:
+                    # don't sound this string
                     pass
-        notes = NoteList(string_notes)
+        notes = NoteList(string_notes, strip_octave=False)
         return notes
+
+    def __getitem__(self, frets):
+        return self.fret(frets)
 
     def __contains__(self, item):
         return item in self.open_strings
 
     def __call__(self, frets):
         """returns the most likely chord detected for this set of frets"""
-        return most_likely_chord(self[frets])
+        likely_chord, stats = most_likely_chord(self[frets])
+        if self.verbose:
+            print(f'Detected {likely_chord} ({stats})')
+        return likely_chord
 
     def matching_chords(self, frets, *args, **kwargs):
         notelist = self[frets]
-        return matching_chords(notelist, *args, **kwargs)
+        return matching_chords(notelist, display=False, *args, **kwargs)
 
     def __str__(self):
         tuning_letters = [string.chroma for string in self.open_strings]
@@ -138,7 +148,6 @@ def chord_diagram(frets, fingerings=None, title=None, tuning='EADGBE', orientati
 
     sounded_notes = Guitar(tuning)[frets]
     sounded_chord = Guitar(tuning)(frets)
-
 
     print(f'\nDrawing chord diagram for fret positions: [{frets}] in tuning: {tuning}')
     print(f'Sounded notes: {sounded_notes}')
@@ -326,7 +335,7 @@ def chord_diagram(frets, fingerings=None, title=None, tuning='EADGBE', orientati
 #        E X |   |   |   |--
 #              3   4   5
 
-standard = Guitar()
+standard = eadgbe = Guitar()
 dadgad = Guitar('DADGAD')
 dadgbe = dropD = Guitar('DADGBE')
 
