@@ -33,20 +33,32 @@ class Guitar:
         self.num_strings = strings
         self.capo = capo
 
+        # parse tuning string into internal list of OctaveNotes:
         if tuning in tunings.keys():
-            self.open_strings = tunings[tuning]
-
+            self.tuned_strings = tunings[tuning]
         else:
             default_bass = String('E2')
-
             tuning = tuning.strip()
             # separate out individual note chromas from the input string:
             tuning_chromas = NoteList([Note(n) for n in parse_out_note_names(tuning)])
+            tuned_strings = tuning_chromas.force_octave(start_octave=2)
+            self.tuned_strings = [String(s) for s in tuned_strings]
 
-            open_strings = tuning_chromas.force_octave(start_octave=2)
-            self.open_strings = [String(s) for s in open_strings]
+        # open strings are relative to capo instead of to the neck:
+        self.open_strings = [s + self.capo for s in self.tuned_strings]
 
         self.verbose = verbose # for debugging
+
+    def add_capo(self, capo):
+        self.capo = capo
+        self.open_strings = [s + self.capo for s in self.tuned_strings]
+        print(self)
+
+    def remove_capo(self):
+        self.capo = 0
+        self.open_strings = [s + self.capo for s in self.tuned_strings]
+        print(self)
+
 
     def distance_from_standard(self):
         """how many semitones up/down must the strings of a standard guitar be tuned to get this tuning?"""
@@ -76,31 +88,51 @@ class Guitar:
         # notes.play(*args, arpeggio=False, **kwargs)
         notes.play(*args, duration=3, **kwargs)
 
-    def fret(self, frets):
-        """plucks each string according to the listed fret diagram, gets the
+    ### TBI: distinguish between fretting from neck and fretting from capo
+    def fret(self, frets, from_capo=False):
+        """simulates plucking each string according to the listed fret diagram, gets the
         resulting notes, and returns them as a NoteList together with the
         appropriate auto-detected Chord object"""
         string_notes = []
+
         if isinstance(frets, (list, tuple)):
             for s, f in enumerate(frets):
                 if isinstance(f, int):
-                    # transpose the note that this string is tuned to upwards by f:
-                    notes.append(self.open_strings[s](f) + self.capo)
+                    if from_capo:
+                        # transpose the note that this string is tuned to upwards by f:
+                        string_notes.append(self.open_strings[s] + f)
+                    else:
+                        # from neck:
+                        if f in {0, self.capo}: # 'open', i.e. sounded from capo position
+                            string_notes.append(self.open_strings[s])
+                        else:
+                            if f < self.capo:
+                                raise Exception(f"Tried to fret on {f}, but capo on {self.capo} - can't fret beneath capo!")
+                            else:
+                                # relative to neck position, not capo position:
+                                string_notes.append(self.tuned_strings[s] + f)
                 elif f is None:
                     # don't sound this string
                     pass
                 else:
                     raise ValueError(f'Passed iterable to Guitar.__call__, expected items to be ints or None, but received item #{s}: {type(fret)}')
+
+            notes = NoteList(string_notes, strip_octave=False)
+            return notes
         elif isinstance(frets, str):
-            for s, f in enumerate(frets):
-                if f.isdigit():
-                    # transpose the note that this string is tuned to upwards by f:
-                    string_notes.append(self.open_strings[s](int(f)) + self.capo)
-                else:
-                    # don't sound this string
-                    pass
-        notes = NoteList(string_notes, strip_octave=False)
-        return notes
+            # re-cast and call recursively:
+            frets_list = [int(f) if f.isdigit() else None for f in frets]
+            return self.fret(frets_list)
+            # for s, f in enumerate(frets):
+            #     if f.isdigit():
+            #         # transpose the note that this string is tuned to upwards by f:
+            #         string_notes.append(self.open_strings[s] + int(f))
+            #     else:
+            #         # don't sound this string
+            #         pass
+        else:
+            raise TypeError(f'Guitar.fret() expected string or list of fret positions, but got: {type(frets)}')
+
 
     def __getitem__(self, frets):
         return self.fret(frets)
@@ -109,20 +141,31 @@ class Guitar:
         return item in self.open_strings
 
     def __call__(self, frets):
-        """returns the most likely chord detected for this set of frets"""
-        likely_chord, stats = most_likely_chord(self[frets])
-        if self.verbose:
-            print(f'Detected {likely_chord} ({stats})')
-        return likely_chord
+        """accepts a fretting pattern, prints out sounded notes, detected chord,
+        and the chord diagram showing what note each string is playing"""
+        return chord_diagram(frets, tuning=self)
 
     def matching_chords(self, frets, *args, **kwargs):
+        """analyses this set of frets and detects what chords they might represent"""
         notelist = self[frets]
-        return matching_chords(notelist, display=False, *args, **kwargs)
+        return matching_chords(notelist, *args, **kwargs)
+
+    def most_likely_chord(self, frets, *args, **kwargs):
+        """returns the most likely chord detected for this set of frets"""
+        notelist = self[frets]
+        return most_likely_chord(notelist, *args, **kwargs)
 
     def __str__(self):
-        tuning_letters = [string.chroma for string in self.open_strings]
+        tuning_letters = [string.chroma for string in self.tuned_strings]
         tuning_str = ''.join(tuning_letters)
-        return f'|Guitar:{tuning_str}|'
+        main_str = [f'Guitar | Tuning: {tuning_str} |']
+        if self.capo == 0:
+            return main_str[0]
+        else:
+            capo_letters = [string.chroma for string in self.open_strings]
+            capo_str = ''.join(capo_letters)
+            main_str.append(f'Capo on {self.capo}: {capo_str}')
+            return ' '.join(main_str)
 
     def __repr__(self):
         return str(self)
@@ -146,10 +189,17 @@ def chord_diagram(frets, fingerings=None, title=None, tuning='EADGBE', orientati
     orientation should be one of 'down' or 'right',
     controls the direction of strings (from nut to bridge)"""
 
-    sounded_notes = Guitar(tuning)[frets]
-    sounded_chord = Guitar(tuning)(frets)
+    # if 'tuning' arg is a tuning str, instantiate it:
+    if isinstance(tuning, str):
+        guitar = Guitar(tuning)
+    # otherwise, if it is an existing guitar object, just use it:
+    elif isinstance(tuning, Guitar):
+        guitar = tuning
 
-    print(f'\nDrawing chord diagram for fret positions: [{frets}] in tuning: {tuning}')
+    sounded_notes = guitar.fret(frets)
+    sounded_chord = guitar.most_likely_chord(frets)
+
+    print(f'\nFret positions: [{frets}] in tuning: {tuning}')
     print(f'Sounded notes: {sounded_notes}')
     if sounded_chord is not None:
         print(f'  (detected chord: {sounded_chord})\n')
@@ -337,7 +387,7 @@ def chord_diagram(frets, fingerings=None, title=None, tuning='EADGBE', orientati
 
 standard = eadgbe = Guitar()
 dadgad = Guitar('DADGAD')
-dadgbe = dropD = Guitar('DADGBE')
+dadgbe = dropD = dropd = Guitar('DADGBE')
 
 if __name__ == '__main__':
     #
