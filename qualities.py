@@ -414,14 +414,12 @@ chord_types =  {'m': ChordQualifier(make={3:-1}),
                 'dim7': ChordQualifier(modify={3:-1, 5:-1}, add={7:-2}),
                 '7b5': ChordQualifier(add={7: -1}, modify={5:-1}),
 
-
                 # note: m7, m9 etc. are implicit concatenations of 'm' and '7', '9' etc.
                 # and mmaj7 is an implicit concatenation of 'm' and 'maj7'
 
                 # but maj7 is NOT a concatenation of 'maj' and '7', since '7' implies dominant:
                 'maj7': ChordQualifier(add={7: 0}),
                 # 'maj7b5': ChordQualifier(add={7: 0}, modify={5:-1}),
-
 
                 # explicit concatenations: (for chords that ought to be recognised during chord name searching)
                 'm6': ['m', '6'],
@@ -430,13 +428,14 @@ chord_types =  {'m': ChordQualifier(make={3:-1}),
                 'maj9': ['maj7', '♮9'],    # major 9th
                 'dm9': ['7', '♭9'],        # dominant minor 9th
                 'dim9': ['dim7', '♮9'],    # diminished 9th
+                'dmin9': ['dim7', '♭9'],   # diminished minor 9th
+                'hdmin9': ['hdim7', '♭9'],   # half diminished minor 9th
 
                 '11': ['9', '♮11'],        # dominant 11th
                 'maj11': ['maj9', '♮11'],  # major 11th
 
                 '13': ['11', '♮13'],               # dominant 13th
                 'maj13': ['maj11', '♯11', '♮13'],  # major 13th with a raised 11th
-
                 }
 
 
@@ -486,6 +485,10 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      '11': ['eleven', '11th', 'eleventh'],
                      '12': ['twelve', '12th', 'twelfth'],
                      '13': ['thirteen', '13th', 'thirteenth'],
+
+                     # special case, otherwise 'dmin9' doesn't parse correctly:
+                     'hdmin9': ['hdmin9', 'hdimm9', 'hdimmin9'],
+                     'dmin9': ['dmin9', 'dimm9', 'dimmin9'],
 
                       '#': ['♯', 'sharp', 'sharpened', 'raised'],
                       'b': ['♭', 'flat', 'flattened', 'lowered'],

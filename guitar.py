@@ -36,13 +36,16 @@ class Guitar:
         # parse tuning string into internal list of OctaveNotes:
         if tuning in tunings.keys():
             self.tuned_strings = tunings[tuning]
+            self.tuning = ''.join([s.chroma for s in self.tuned_strings])
+
         else:
             default_bass = String('E2')
-            tuning = tuning.strip()
             # separate out individual note chromas from the input string:
             tuning_chromas = NoteList([Note(n) for n in parse_out_note_names(tuning)])
             tuned_strings = tuning_chromas.force_octave(start_octave=2)
             self.tuned_strings = [String(s) for s in tuned_strings]
+            self.tuning = ''.join([s.chroma for s in self.tuned_strings])
+
 
         # open strings are relative to capo instead of to the neck:
         self.open_strings = [s + self.capo for s in self.tuned_strings]
@@ -191,10 +194,12 @@ def chord_diagram(frets, fingerings=None, title=None, tuning='EADGBE', orientati
 
     # if 'tuning' arg is a tuning str, instantiate it:
     if isinstance(tuning, str):
+        tuning = tuning
         guitar = Guitar(tuning)
     # otherwise, if it is an existing guitar object, just use it:
     elif isinstance(tuning, Guitar):
         guitar = tuning
+        tuning = guitar.tuning
 
     sounded_notes = guitar.fret(frets)
     sounded_chord = guitar.most_likely_chord(frets)
