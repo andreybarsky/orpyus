@@ -58,7 +58,7 @@ class Scale:
     """a hypothetical diatonic 7-note scale not built on any specific tonic,
     but defined by a series of Intervals from whatever its hypothetical tonic is"""
     def __init__(self, scale_name=None, intervals=None, mode=1, chromatic_intervals=None, stacked=True):
-        self.intervals, self.base_scale, self.rotation = self._parse_input(scale_name, intervals, mode, stacked)
+        self.intervals, self.base_scale_name, self.rotation = self._parse_input(scale_name, intervals, mode, stacked)
 
         # build degrees dict that maps ScaleDegrees to this scale's intervals:
         self.degree_intervals = {1: Interval(0)}
@@ -199,18 +199,6 @@ class Scale:
         """if item is an Interval, does it fit in our list of degree-intervals plus chromatic-intervals?"""
         if isinstance(item, (Interval, int)):
             return Interval(item) in self.intervals
-        #### I have realised this makes sense for Keys but not Scales - an AbstractChord being in a scale is dependent on its root
-        # elif isinstance(item, (AbstractChord, ChordFactors, str)):
-        #     # accept objects that cast to AbstractChords:
-        #     if isinstance(item, str):
-        #         item = AbstractChord(item)
-        #     elif isinstance(item, ChordFactors):
-        #         item = AbstractChord(factors=item)
-        #     assert isinstance(item, AbstractChord)
-        #     for i in item.intervals:
-        #         if i not in self.intervals:
-        #             return False
-        #     return True
         else:
             raise TypeError(f'Scale.__contains__ not defined for items of type: {type(item)}')
 
@@ -272,6 +260,10 @@ class Scale:
         """return a list of other names for this scale"""
         return list(set(mode_name_aliases[self.name]))
 
+    def rotate(self, rot):
+        """Returns the mode of this scale with intervals rotated by specified order."""
+        return Scale(intervals=self.intervals, mode=rot)
+
     @property
     def pentatonic(self):
         """returns the pentatonic subscale of the natural major or minor scales.
@@ -285,11 +277,16 @@ class Scale:
             preferred = list(ordered_pent_scales.keys())[0]
             return self.subscale(omit=preferred.omit, name=f'{self.name} pentatonic')
 
-    def compute_pentatonics(self, keep_quality=True):
+    def compute_pentatonics(self, preserve_character=False, keep_quality=True):
         """Given this scale and its degree-intervals,
         find the size-5 subset of its degree-intervals that maximises pairwise consonance"""
         candidates = []
-        possible_degrees_to_exclude = [d for d in self.degree_intervals.keys() if d != 1]
+        if preserve_character:
+            character = self.character
+            possible_degrees_to_exclude = [d for d, iv in self.degree_intervals.items() if ((d != 1) and (iv not in character))]
+        else:
+            possible_degrees_to_exclude = [d for d, iv in self.degree_intervals.items() if d != 1]
+
         for deg1 in possible_degrees_to_exclude:
             other_degrees_to_exclude = [d for d in possible_degrees_to_exclude if d not in {1, deg1}]
             for deg2 in other_degrees_to_exclude:
@@ -300,6 +297,26 @@ class Scale:
         sorted_cands = sorted(candidates, key = lambda x: (x.consonance), reverse=True)
         return {x: round(x.consonance,3) for x in sorted_cands}
 
+    @property
+    def character(self, verbose=False):
+        """returns the intervals of this mode that are different to its base scale"""
+        # catch a special case: if the base scale is natural major but this mode is minor-ish,
+        # we compare to the natural minor scale instead
+        if self.base_scale_name == 'natural major' and self.quality.minor:
+            base_scale_name = 'natural minor'
+        elif self.base_scale_name == 'melodic minor' and self.quality.major:
+            base_scale_name = 'melodic major'
+        else:
+            base_scale_name = self.base_scale_name
+
+        base_intervals = Scale(base_scale_name).intervals
+        scale_character = []
+        for iv_self, iv_base in zip(self.intervals, base_intervals):
+            if iv_self != iv_base:
+                scale_character.append(iv_self)
+        if verbose:
+            print(f'Character of {self.name} scale: (with respect to {base_scale_name})')
+        return IntervalList(scale_character)
 
     @property
     def blues(self):
@@ -350,6 +367,13 @@ class Scale:
         # return AbstractChord(intervals=chord_intervals, qualifiers=qualifiers)
         return AbstractChord(factors=chord_factors, qualifiers=qualifiers)
 
+    def chords(self, order=3):
+        """returns the list of chords built on every degree of this Scale"""
+        chord_list = []
+        for d, iv in self.degree_intervals.items():
+            chord_list.append(self.chord(d, order=order))
+        return chord_list
+
     def triad(self, degree, qualifiers=None):
         """wrapper for self.chord() to create a tetrad (i.e. 7-chord)
         on the chosen degree of this scale"""
@@ -364,7 +388,7 @@ class Scale:
         """returns a Subscale initialised from this Scale with the desired degrees"""
         return Subscale(parent_scale=self, degrees=degrees, omit=omit, chromatic_intervals=chromatic_intervals, assigned_name=name) # [self[s] for s in degrees]
 
-    def neighbouring_scales(self):
+    def find_neighbouring_scales(self):
         """return a list of Scale objects that differ from this one by only a semitone"""
         neighbours = {}
         for degree, intv in self.degree_intervals.items(): # try modifying each interval in this scale
@@ -891,7 +915,7 @@ def unit_test():
     test(Subscale('blues minor').intervals[3], Dim5)
 
     # test neighbours:
-    major_neighbours = Scale('natural major').neighbouring_scales()
+    major_neighbours = Scale('natural major').find_neighbouring_scales()
     print(f'Neighbours of natural major scale:')
     for a, sc in major_neighbours.items():
         print(f'with {a.name}: {sc}')
@@ -900,7 +924,7 @@ def unit_test():
     for intvs, names in interval_mode_names.items():
         name = names[0]
         sc = Scale(name)
-        neighbours = sc.neighbouring_scales()
+        neighbours = sc.find_neighbouring_scales()
         log(f'{name} scale has {len(neighbours)} neighbours')
 
     print('Valid chords from scale degrees:')
@@ -925,12 +949,8 @@ if __name__ == '__main__':
         # print(f'    unstacked intervals: {s.intervals.unstack()}')
         # print(f'------associated scale: {s}{alias_str}')
 
-    print(Scale('major').consonance)
-    print(Subscale('pentatonic minor').consonance)
 
-    # plot all scale consonances:
-
-
+    # display all scale consonances:
     include_subscales = False
     all_consonances = {}
     for ivs, scs in interval_mode_names.items():
@@ -980,6 +1000,6 @@ if __name__ == '__main__':
         print(f'  {value:.3f}       {name:{longest_name}}   {desc:{longest_desc}}      {", ".join(this_aliases)}')
 
     import numpy as np
-    print(f'Highest consonance: {np.max(cons_values)} ({cons_names[np.argmax(cons_values)]})')
-    print(f'Lowest consonance: {np.min(cons_values)} ({cons_names[np.argmin(cons_values)]})')
+    print(f'Highest consonance: {np.max(cons_values):.05f} ({cons_names[np.argmax(cons_values)]})')
+    print(f'Lowest consonance: {np.min(cons_values):.05f} ({cons_names[np.argmin(cons_values)]})')
     # import matplotlib.pyplot as plt
