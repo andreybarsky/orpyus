@@ -659,13 +659,15 @@ class NoteList(list):
                 # append the next ascending OctaveNote of that chroma:
                 octavenotes.append(octavenotes[-1].next(note.chroma))
 
-        if (auto_octave) and (octavenotes[-1].octave > max_octave):
+        # if (auto_octave) and (octavenotes[-1].octave > max_octave):
             # keep the chord below c5 if it's ended up too high:
-            octave_shift = wave_notes[-1] - max_octave
-            if octavenotes[0] - (12*octave_shift) < min_octave:
-                raise ValueError(f"NoteList's notes span too great of a pitch range: {octave_shift} octaves exceeds min={min_octave} and max={max_octave}")
 
-            octavenotes = [n - (12*octave_shift) for n in wave_notes]
+            ### TBI: sort out what I was trying to do here
+            # octave_shift = int(octavenotes[-1] - max_octave)
+            # if octavenotes[0] - (12*octave_shift) < min_octave:
+            #     raise ValueError(f"NoteList's notes span too great of a pitch range: {octave_shift} octaves exceeds min={min_octave} and max={max_octave}")
+
+            # octavenotes = [n - (12*octave_shift) for n in octavenotes]
 
         return octavenotes
 
@@ -703,7 +705,7 @@ class NoteList(list):
         melody_wave = arrange_melody(self._waves(duration, octave, type), delay=delay, norm=False, falloff=falloff)
         return melody_wave
 
-    def play(self, delay=None, duration=3, octave=None, falloff=True, block=False, type='KS', **kwargs):
+    def play(self, delay=0.2, duration=3, octave=None, falloff=True, block=False, type='KS', **kwargs):
         from audio import play_wave
         if delay is not None:
             wave = self._melody_wave(duration=duration, octave=octave, delay=delay, type=type, falloff=falloff, **kwargs)
