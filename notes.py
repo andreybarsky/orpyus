@@ -37,7 +37,26 @@ class Note:
     """a note/chroma/pitch-class defined in the abstract,
     i.e. not associated with a specific note inside an octave,
     such as: C or D#"""
-    def __init__(self, name=None, position=None, prefer_sharps=None, case_sensitive=True):
+    def __init__(self, name=None, position=None, prefer_sharps=None, case_sensitive=True, strip_octave=False):
+
+        if isinstance(name, Note):
+            # accept re-casting: just take the input note's name
+            name = name.chroma
+        elif isinstance(name, int):
+            # we've been passed a position int by mistake instead of a name,
+            # which is fine, silently correct:
+            position = name
+            name = None
+
+
+        # detect if we've been fed an OctaveNote name by accident:
+        if name is not None and name[-1].isdigit():
+            if not strip_octave:
+                raise ValueError(f"Looks like an OctaveNote name has mistakenly been passed to Note init: {name}")
+            else:
+                # parse everything but the numeric chars:
+                name = ''.join([n for n in name if not n.isdigit()])
+
         # set main object attributes from init args:
         self.name, self.position, self.prefer_sharps = self._parse_input(name, position, prefer_sharps, case_sensitive)
 
@@ -467,7 +486,9 @@ class OctaveNote(Note):
 
 class NoteList(list):
     """List subclass that is instantianted with an iterable of Note-like objects and forces them all to Note type"""
-    def __init__(self, *items):
+    def __init__(self, *items, strip_octave=True):
+        self.strip_octave = strip_octave
+
         if len(items) == 1:
             arg = items[0]
 
@@ -477,7 +498,7 @@ class NoteList(list):
 
             # now either way we should have an iterable of note-likes:
             try:
-                note_items = self._cast_notes(arg)
+                note_items = self._cast_notes(arg, strip_octave=strip_octave)
             except Exception as e:
                 print(f'Could not parse NoteList input as a series of notes: {arg}')
                 raise e
@@ -487,37 +508,33 @@ class NoteList(list):
 
         super().__init__(note_items)
 
-    @staticmethod
-    def _cast_notes(items):
+
+    def _recast(self, note_obj, strip_octave=None):
+        """accepts a Note or OctaveNote and re-casts it to the same type"""
+        if strip_octave is None:
+            strip_octave = self.strip_octave
+        if isinstance(note_obj, OctaveNote):
+            if strip_octave:
+                return Note(note_obj.position)
+            else:
+                return OctaveNote(note_obj.name)
+        elif isinstance(note_obj, Note):
+            return Note(note_obj.position)
+        else:
+            raise TypeError(f'Cannot recast non-Note object: {type(note_obj)}')
+
+    def _cast_notes(self, items, strip_octave):
         """accepts an iterable of Note objects, or strings that cast to Note objects,
         and returns them strictly as a list of Note objects"""
         note_items = []
         for item in items:
             if isinstance(item, str):
-                if parsing.is_valid_note_name(item):
-                    note_items.append(Note(item))
-                elif item[-1].isdigit():
-                    raise Exception("TBI error: we haven't implemented any OctaveNote handling in NoteList yet")
-                    # note_items.append(OctaveNote(item))
+                if parsing.begins_with_valid_note_name(item):
+                    note_items.append(Note(item, strip_octave=strip_octave))
                 else:
                     raise ValueError(f'{item} is a string but does not cast to a note name')
-            else:
-                # assume this is a Note object, initialise a note with that object's name
-                # (to avoid circular import errors)
-                item = Note(item.name)
-                note_items.append(item)
-            # if isinstance(item, Note):
-            #     # add note
-            #     note_items.append(item)
-            # elif parsing.is_valid_note_name(item):
-            #     # cast string to note
-            #     note_items.append(Note(item))
-            # elif isinstance(item, str) and item[-1].isdigit():
-            #     # cast string to octavenote
-            #     raise Exception("TBI error: we haven't implemented any OctaveNote handling in NoteList yet")
-            #     note_items.append(OctaveNote(item))
-            # else:
-            #     raise Exception('NoteList can only be initialised with Notes, or objects that cast to Notes')
+            elif isinstance(item, Note):
+                note_items.append(self._recast(item))
         return note_items
 
     def __repr__(self):
@@ -526,11 +543,11 @@ class NoteList(list):
 
     def append(self, other):
         """Cast any appendices to Notes"""
-        self.append(Note(other))
+        self.append(self._recast(other))
 
     def extend(self, other):
         """Cast any extensions to Notes"""
-        self.extend([Note(n) for n in other])
+        self.extend([self._recast(n) for n in other])
 
     def __add__(self, other):
         if isinstance(other, (int, Interval)):
@@ -642,13 +659,15 @@ class NoteList(list):
                 # append the next ascending OctaveNote of that chroma:
                 octavenotes.append(octavenotes[-1].next(note.chroma))
 
-        if (auto_octave) and (octavenotes[-1].octave > max_octave):
+        # if (auto_octave) and (octavenotes[-1].octave > max_octave):
             # keep the chord below c5 if it's ended up too high:
-            octave_shift = wave_notes[-1] - max_octave
-            if octavenotes[0] - (12*octave_shift) < min_octave:
-                raise ValueError(f"NoteList's notes span too great of a pitch range: {octave_shift} octaves exceeds min={min_octave} and max={max_octave}")
 
-            octavenotes = [n - (12*octave_shift) for n in wave_notes]
+            ### TBI: sort out what I was trying to do here
+            # octave_shift = int(octavenotes[-1] - max_octave)
+            # if octavenotes[0] - (12*octave_shift) < min_octave:
+            #     raise ValueError(f"NoteList's notes span too great of a pitch range: {octave_shift} octaves exceeds min={min_octave} and max={max_octave}")
+
+            # octavenotes = [n - (12*octave_shift) for n in octavenotes]
 
         return octavenotes
 
@@ -686,8 +705,12 @@ class NoteList(list):
         melody_wave = arrange_melody(self._waves(duration, octave, type), delay=delay, norm=False, falloff=falloff)
         return melody_wave
 
-    def play(self, delay=None, duration=3, octave=None, falloff=True, block=False, type='KS', **kwargs):
+    def play(self, delay=0.2, duration=3, octave=None, falloff=True, block=False, type='KS', **kwargs):
         from audio import play_wave
+        if octave is None and isinstance(self[0], OctaveNote):
+            # auto infer octave if this list starts with an octavenote:
+            octave = self[0].octave
+
         if delay is not None:
             wave = self._melody_wave(duration=duration, octave=octave, delay=delay, type=type, falloff=falloff, **kwargs)
         else:

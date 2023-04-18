@@ -404,20 +404,22 @@ class ChordQualifier:
 
 # chord 'types' are those used to characterise a chord in its completeness:
 
-chord_types =  {'m': ChordQualifier(make={3: -1}),
+chord_types =  {'m': ChordQualifier(make={3:-1}),
                 '5': ChordQualifier(remove=3, verify={5:0}),
                 'dim': ChordQualifier(modify={3:-1, 5:-1}),         # dimininished chord (m3+m3)
                 '+': ChordQualifier(modify={5:+1}, verify={3:0}),   # augmented chord (M3+M3)
                 '6': ChordQualifier(add=6),                         # 6 chord aka add6
 
-                '7': ChordQualifier(add={7: -1}), # dominant 7th
+                '7': ChordQualifier(add={7:-1}), # dominant 7th
                 'dim7': ChordQualifier(modify={3:-1, 5:-1}, add={7:-2}),
+                '7b5': ChordQualifier(add={7: -1}, modify={5:-1}),
 
                 # note: m7, m9 etc. are implicit concatenations of 'm' and '7', '9' etc.
                 # and mmaj7 is an implicit concatenation of 'm' and 'maj7'
 
                 # but maj7 is NOT a concatenation of 'maj' and '7', since '7' implies dominant:
                 'maj7': ChordQualifier(add={7: 0}),
+                # 'maj7b5': ChordQualifier(add={7: 0}, modify={5:-1}),
 
                 # explicit concatenations: (for chords that ought to be recognised during chord name searching)
                 'm6': ['m', '6'],
@@ -426,13 +428,14 @@ chord_types =  {'m': ChordQualifier(make={3: -1}),
                 'maj9': ['maj7', '♮9'],    # major 9th
                 'dm9': ['7', '♭9'],        # dominant minor 9th
                 'dim9': ['dim7', '♮9'],    # diminished 9th
+                'dmin9': ['dim7', '♭9'],   # diminished minor 9th
+                'hdmin9': ['hdim7', '♭9'],   # half diminished minor 9th
 
                 '11': ['9', '♮11'],        # dominant 11th
                 'maj11': ['maj9', '♮11'],  # major 11th
 
                 '13': ['11', '♮13'],               # dominant 13th
                 'maj13': ['maj11', '♯11', '♮13'],  # major 13th with a raised 11th
-
                 }
 
 
@@ -440,6 +443,10 @@ chord_types =  {'m': ChordQualifier(make={3: -1}),
 # note that this dict order matters, since it affects the order in which chords get named: (e.g. add9sus4 instead of sus4add9)
 chord_modifiers = { 'sus4': ChordQualifier(remove=3, add=4, verify={2:False, 3:0}),
                     'sus2': ChordQualifier(remove=3, add=2, verify={4:False, 3:0}),
+
+                    # why does including these slow down chord.unit_test() so much?
+                    'b5': ChordQualifier(verify={5:0}, make={5:-1}),
+                    '#5': ChordQualifier(verify={5:0}, make={5:+1}),
 
                     'add4': ChordQualifier(add=4, verify={9: False, 11:False}), # are these real? or just add11s
                     'add9': ChordQualifier(add={9:0}, verify={7: False, 2:False}),
@@ -462,7 +469,7 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      'dim': ['o', '°', 'diminished'],
                      '+': ['aug','augmented'],
                      # special case: all half-dim chords are 7ths, but 'hdim7' is clearer than 'hdim'
-                     'hdim7': ['ø', 'hdim', 'half diminished', 'half dim', 'half-diminished', 'half-dim'],
+                     'hdim7': ['ø', 'hdim', 'half diminished', 'half dim', 'half-diminished', 'half-dim', 'm7b5', 'm7♭5'],
                      'add': ['added'],
                      '(no5)': ['no5', '(omit5)'],
                      # bit of a kludge; but 'domX' always refers to an X chord, so we map 'dom' to nothing and it works fine
@@ -478,9 +485,16 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      '11': ['eleven', '11th', 'eleventh'],
                      '12': ['twelve', '12th', 'twelfth'],
                      '13': ['thirteen', '13th', 'thirteenth'],
-                      '♯': ['#', 'sharp', 'sharpened', 'raised'],
-                      '♭': ['b', 'flat', 'flattened', 'lowered'],
-                      '♮': ['with', 'include'],
+
+                     # special case, otherwise 'dmin9' doesn't parse correctly:
+                     'hdmin9': ['hdmin9', 'hdimm9', 'hdimmin9'],
+                     'dmin9': ['dmin9', 'dimm9', 'dimmin9'],
+
+                      '#': ['♯', 'sharp', 'sharpened', 'raised'],
+                      'b': ['♭', 'flat', 'flattened', 'lowered'],
+                      'N': ['♮', 'with', 'include'],
+                      # '♯5': ['#5', 'sharp5', 'raised fifth'],
+                      # '♭5': ['b5', 'flat5', 'lowered fifth'],
                      }
 
 alias_qualifiers = unpack_and_reverse_dict(qualifier_aliases)

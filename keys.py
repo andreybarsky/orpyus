@@ -265,6 +265,11 @@ class Key(Scale):
     def __hash__(self):
         return hash((self.notes, self.diatonic_intervals, self.intervals, self.chromatic_intervals))
 
+    def play(self, *args, **kwargs):
+        # add an octave over the top for playback:
+        full_notes = NoteList(list(self.notes) + [self.tonic])
+        full_notes.play(*args, **kwargs)
+
 
 class Subkey(Key, Subscale):
     """a Key that is built on a Subscale rather than a scale. Initialised as Subscale but also with a tonic."""

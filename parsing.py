@@ -209,6 +209,14 @@ def parse_out_note_names(note_string, graceful_fail=False):
 
     note_list = []
 
+    # try looking for obvious split chars first before attempting char-wise split:
+    for char in '-, ':
+        if char in note_string:
+            note_list = note_string.split(char)
+            if len(note_list) >= 2:
+                return note_list
+            # otherwise continue trying to split the string into notes as normal
+
     # use recursive note_split to break the string apart note-by-note:
     rest = note_string
     while len(rest) > 0:
@@ -317,6 +325,7 @@ def parse_alteration(alteration):
 
 def unit_test():
     test(parse_out_note_names('CbbBbAGbE##C'), ['Cbb', 'Bb', 'A', 'Gb', 'E##', 'C'])
+    test(parse_out_note_names('Cbb-Bb-A-Gb-E##-C'), ['Cbb', 'Bb', 'A', 'Gb', 'E##', 'C'])
     test(parse_alteration('b5'), {5:-1})
     test(parse_alteration('#11'), {11:+1})
     test(parse_alteration('7'), {7:0})

@@ -1,5 +1,5 @@
 from qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
-from parsing import degree_names, num_suffixes
+from parsing import degree_names, num_suffixes, offset_accidentals
 from util import rotate_list, least_common_multiple, euclidean_gcd, test
 from conversion import value_to_pitch
 import math
@@ -104,31 +104,16 @@ class Interval:
             return (left // gcd, right // gcd)
 
     @property
-    def old_consonance(self):
-        # # a very fuzzy notion of interval consonance:
-        if self.mod in [1, 6, 11]:
-            consonance = 0 # dissonant
-        elif self.mod in [0, 5, 7]:
-            consonance = 1 # perfectly consonant
-        else:
-            # we assign consonance rating as 1/d+1,
-            # where d is the distance from a perfect 5th (or 4th?)
-            consonance = round(1 / (1+(abs(5-self.mod))), 1)
-        return consonance
-
-    @property
     def consonance(self):
         """consonance of an interval, defined as
         the base2 log of the least common multiple of
         the sides of that interval's ratio"""
         l, r = self.ratio
-        # reduce ratio:
-        # gcd = euclidean_gcd(l,r)
-        # l, r = l // gcd, r // gcd
         # calculate least common multiple of simple form:
         lcm = least_common_multiple(l,r)
+        # log2 of that multiple:
         dissonance = math.log(lcm, 2)
-        # this is a number that ranges from 0 (for perfect unison)
+        # this ends up as a number that ranges from 0 (for perfect unison)
         # to just under 15, (for the 7-octave compound minor second, of width 85)
 
         # so we invert it into a consonance between 0-1:
@@ -224,11 +209,11 @@ class Interval:
         else:
             raise TypeError('Intervals can only be added to integers or other Intervals')
 
-    # def __radd__(self, other):
-    #     # if isinstance(other, (int, Interval)):
-    #     return self + other
-    #     # else:
-    #     #     return other + self
+    def __radd__(self, other):
+        # if isinstance(other, (int, Interval)):
+        return self + other
+        # else:
+        #     return other + self
 
     def __sub__(self, other):
         if isinstance(other, (int, Interval)):
@@ -365,6 +350,14 @@ class Interval:
             short_deg = f'{self.extended_degree}'
             return f'‹{sign_str}{self.quality.short_name}{short_deg}›'
 
+    # alternate str method:
+    @property
+    def factor_name(self):
+        # display this interval as an accidental and a degree:
+        acc = offset_accidentals[self.offset_from_default][0]
+        sign_str = '' if self.sign == 1 else '-'
+        return f'{sign_str}{acc}{self.extended_degree}'
+
     def __str__(self):
         return f'‹{self.value}:{self.name}›'
 
@@ -399,6 +392,11 @@ class IntervalList(list):
 
     def __str__(self):
         return f'𝄁{", ".join([i.short_name for i in self])} 𝄁'
+
+    # alternative str method:
+    def as_factors(self):
+        """returns this list's intervals represented as numeric degree factors instead of quality-intervals"""
+        return f'𝄁{", ".join([i.factor_name for i in self])} 𝄁'
 
     def __repr__(self):
         return str(self)
@@ -541,9 +539,6 @@ class IntervalList(list):
         inverted = positive.unique().sorted()
         # inverted = recentred.flatten()   # inverts negative intervals to their correct values
         # inverted = IntervalList(list(set([~i if i < 0 else i for i in recentred]))).sorted()
-
-
-
         return inverted
 
     def stack(self):
@@ -723,12 +718,6 @@ interval_ratios = {0: (1,1),  1: (16,15),  2: (9,8),    3: (6,5),
 #     lcm = least_common_multiple(l,r)
 #     return math.log(lcm, 2)
 
-
-new_consonances, old_consonances = [], []
-for i in range(12):
-    intv = Interval(i)
-    new_consonances.append(intv.consonance)
-    old_consonances.append(intv.old_consonance)
 
 
 def unit_test():
