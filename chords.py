@@ -409,10 +409,10 @@ class AbstractChord:
 
         # chords cannot be on unison, so we'll set the ceiling to 1 instead of 0.9333.
 
-        # and the empirically observed minimum is 0.5428 for the most dissonant defined chord, dimsus2,
-        # so we set that to be just above 0, and rescale the entire raw consonance range within those bounds:
-        min_cons = 0.54
+        # and the empirically observed minimum is just above 0.49 for the awful tritone plus minor ninth
+        # so we set that to be just around 0, and rescale the entire raw consonance range within those bounds:
         max_cons = 14/15
+        min_cons = 0.49
         rescaled_cons = (raw_cons - min_cons) / (max_cons - min_cons)
         return round(rescaled_cons, 3)
 
@@ -968,11 +968,16 @@ class Chord(AbstractChord):
 
 ##### attempt no2 at chord types/rarities:
 
-chord_names_by_rarity = { 0: ['', 'm', '7', 'm7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
-                          1: ['maj7', 'mmaj7', '+', 'sus4', 'sus2', 'add9', '(no5)'], # maj/mmaj 7s, augs, and common alterations like sus2/4 and add9
-                          2: ['dim', 'dim7', 'hdim7', '6', 'm6'], # diminised chords and 6ths
-                          3: ['add4', 'dm9'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (9,11,13)], # the five major types of extended chords, and dominant minor 9ths
+chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
+                          1: ['m7', 'maj7', 'dim', 'aug', 'sus4', 'add9'], # maj/mmaj 7s, augs, and common alterations like sus2/4 and add9
+                          2: ['mmaj7', 'dim7', 'hdim7', '6', 'm6', 'aug7', 'sus2'], # diminished chords and 6ths
+                          3: ['add4', 'dm9', 'dimM7', 'augM7'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (9,11,13)], # the five major types of extended chords, and dominant minor 9ths
                           4: ['add11', 'add13'], 5: [], 6: [], 7: []}
+
+# removed no5 - handled better by incomplete chord matching
+
+ordered_modifier_names = ['sus4', 'sus2', 'add9', 'add11', 'add13']
+modifier_names_by_rarity = {1: ['sus4', 'add9'], 2: ['sus2'], 3: ['add11'], 4: ['add13']}
 
 # these chord names cannot be modified:
 unmodifiable_chords = ['', '5', '(no5)', 'add4', 'add9', 'add11', 'add13']
@@ -985,6 +990,7 @@ factors_to_chord_names, intervals_to_chord_names = {}, {}
 # (while adding chord modifications/alterations as well)
 
 chord_name_rarities = unpack_and_reverse_dict(chord_names_by_rarity)
+modifier_name_rarities = unpack_and_reverse_dict(modifiers_by_rarity)
 
 new_rarities = {i: [] for i in range(8)}
 for rarity, chord_names in chord_names_by_rarity.items():
@@ -1008,7 +1014,8 @@ for rarity, chord_names in chord_names_by_rarity.items():
         if chord_name not in unmodifiable_chords:
             base_chord = AbstractChord(chord_name)
             # now: add chord modifications to each base chord as well, increasing rarity accordingly
-            for mod_name, modifier in qualities.chord_modifiers.items():
+            for mod_name in ordered_modifier_names:
+                modifier = qualities.chord_modifiers[mod_name] # fetch ChordQualifier object by name
                 # add a modification if it does not already exist by name and is valid on this base chord:
                 # (we check if chord_name is major because the modifiers on their own apply to major chords,
                 #  i.e. the chord 'sus2' implies ['' + 'sus2'])
@@ -1023,12 +1030,13 @@ for rarity, chord_names in chord_names_by_rarity.items():
                         intervals_to_chord_names[altered_intervals] = altered_name
 
                         # figure out the rarity of this modification and add it to the rarity dict:
-                        mod_rarity = chord_name_rarities[mod_name] if (mod_name in chord_name_rarities) else 3
+                        mod_rarity = modifier_name_rarities[mod_name]
                         altered_rarity = chord_name_rarities[chord_name] + mod_rarity
                         new_rarities[altered_rarity].append(altered_name)
 
                         # finally: do the same again, but one level deeper!
-                        for mod2_name, modifier2 in qualities.chord_modifiers.items():
+                        for mod_name2 in ordered_modifier_names:
+                            modifier2 = qualities.chord_modifiers[mod_name] # fetch ChordQualifier object by name
                             # do not apply the same modifier twice, and do so only if valid:
                             if (modifier2 is not modifier) and modifier2.valid_on(altered_factors):
                                 # and, special case, not if (no5) is the first mod, since it always comes last:
