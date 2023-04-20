@@ -1,8 +1,9 @@
 import notes as notes
 from notes import Note, OctaveNote, NoteList
 from chords import Chord, most_likely_chord, matching_chords
-from parsing import parse_out_note_names
-from util import test, transpose_nested_list
+import parsing
+from util import log, test, auto_split
+from display import Fretboard
 import pdb
 
 class String(OctaveNote):
@@ -41,7 +42,7 @@ class Guitar:
         else:
             default_bass = String('E2')
             # separate out individual note chromas from the input string:
-            tuning_chromas = NoteList([Note(n) for n in parse_out_note_names(tuning)])
+            tuning_chromas = NoteList([Note(n) for n in parsing.parse_out_note_names(tuning)])
             tuned_strings = tuning_chromas.force_octave(start_octave=2)
             self.tuned_strings = [String(s) for s in tuned_strings]
             self.tuning = ''.join([s.chroma for s in self.tuned_strings])
@@ -94,47 +95,34 @@ class Guitar:
     ### TBI: distinguish between fretting from neck and fretting from capo
     def fret(self, frets, from_capo=False):
         """simulates plucking each string according to the listed fret diagram, gets the
-        resulting notes, and returns them as a NoteList together with the
-        appropriate auto-detected Chord object"""
+        resulting notes, and returns them as a NoteList."""
         string_notes = []
 
-        if isinstance(frets, (list, tuple)):
-            for s, f in enumerate(frets):
-                if isinstance(f, int):
-                    if from_capo:
-                        # transpose the note that this string is tuned to upwards by f:
-                        string_notes.append(self.open_strings[s] + f)
-                    else:
-                        # from neck:
-                        if f in {0, self.capo}: # 'open', i.e. sounded from capo position
-                            string_notes.append(self.open_strings[s])
-                        else:
-                            if f < self.capo:
-                                raise Exception(f"Tried to fret on {f}, but capo on {self.capo} - can't fret beneath capo!")
-                            else:
-                                # relative to neck position, not capo position:
-                                string_notes.append(self.tuned_strings[s] + f)
-                elif f is None:
-                    # don't sound this string
-                    pass
-                else:
-                    raise ValueError(f'Passed iterable to Guitar.__call__, expected items to be ints or None, but received item #{s}: {type(fret)}')
+        fret_ints = parsing.parse_out_integers(frets)
 
-            notes = NoteList(string_notes, strip_octave=False)
-            return notes
-        elif isinstance(frets, str):
-            # re-cast and call recursively:
-            frets_list = [int(f) if f.isdigit() else None for f in frets]
-            return self.fret(frets_list)
-            # for s, f in enumerate(frets):
-            #     if f.isdigit():
-            #         # transpose the note that this string is tuned to upwards by f:
-            #         string_notes.append(self.open_strings[s] + int(f))
-            #     else:
-            #         # don't sound this string
-            #         pass
-        else:
-            raise TypeError(f'Guitar.fret() expected string or list of fret positions, but got: {type(frets)}')
+        for s, f in enumerate(fret_ints):
+            if isinstance(f, int):
+                if from_capo:
+                    # transpose the note that this string is tuned to upwards by f:
+                    string_notes.append(self.open_strings[s] + f)
+                else:
+                    # from neck:
+                    if f in {0, self.capo}: # 'open', i.e. sounded from capo position
+                        string_notes.append(self.open_strings[s])
+                    else:
+                        if f < self.capo:
+                            raise Exception(f"Tried to fret on {f}, but capo on {self.capo} - can't fret beneath capo!")
+                        else:
+                            # relative to neck position, not capo position:
+                            string_notes.append(self.tuned_strings[s] + f)
+            elif f is None:
+                # don't sound this string
+                pass
+            else:
+                raise ValueError(f'Passed iterable to Guitar.__call__, expected items to be ints or None, but received item #{s}: {type(fret)}')
+
+        notes = NoteList(string_notes, strip_octave=False)
+        return notes
 
 
     def __getitem__(self, frets):
@@ -146,7 +134,7 @@ class Guitar:
     def __call__(self, frets):
         """accepts a fretting pattern, prints out sounded notes, detected chord,
         and the chord diagram showing what note each string is playing"""
-        return chord_diagram(frets, tuning=self)
+        return self.query(frets)
 
     def matching_chords(self, frets, *args, **kwargs):
         """analyses this set of frets and detects what chords they might represent"""
@@ -157,6 +145,96 @@ class Guitar:
         """returns the most likely chord detected for this set of frets"""
         notelist = self[frets]
         return most_likely_chord(notelist, *args, **kwargs)
+
+    def query(self, frets):
+        """parses the frets passed, displays the sounded notes, the auto-detected chord,
+        and shows the resulting fret diagram"""
+        sounded_notes = self.fret(frets)
+        print(f'Sounded notes: {sounded_notes}')
+        sounded_chord = self.most_likely_chord(frets)
+        print(f'Detected chord notes: {sounded_chord}')
+
+        fret_ints = parsing.parse_out_integers(frets)
+        mute = [s+1 for s in range(len(fret_ints)) if fret_ints[s] is None]
+        string_contents = [(self.open_strings[s] + fret_ints[s]).chroma  if fret_ints[s] is not None  else None  for s in range(self.num_strings)]
+        ### TBI: capo support?
+        fret_cells = {(s+1,f):string_contents[s] for s,f in enumerate(fret_ints) if (f != 0 and f is not None)}
+        Fretboard(fret_cells, mute=mute).disp()
+
+
+    def locate_note(self, note, match_octave=False, max_fret=12):
+        """accepts a Note object, (or, if match_octave, an OctaveNote object)
+        and returns a list of tuple (string,fret) locations where that note appears"""
+        # keep a list of locations
+        note_locs = []
+        for s, string in enumerate(self.open_strings):
+            # if this open/capo'd string corresponds to that note:
+            if string.chroma == note.chroma:
+                # add (s,0) or (s,capo) to the list:
+                if not (match_octave and (string.value != note.value)):
+                    note_locs.append((s+1,self.capo))
+            else:
+                next_chosen_note = string.next(note.chroma)
+                distance_up = next_chosen_note - string # distance along the fretboard in intervals
+                next_loc = int(distance_up + self.capo)
+                if not ((match_octave) and (string.value+next_loc) != note.value):
+                    # if the note on this string isn't in the right octave (and we have asked to match octave), ignore it
+                    note_locs.append((s+1, next_loc))
+                # if the NEXT highest is within our max fret, append that too:
+                if next_loc + 12 <= max_fret:
+                    if not ((match_octave) and (string.value+next_loc+12) != note.value):
+                        # if the note on this string isn't in the right octave, ignore it
+                        note_locs.append((s+1, next_loc+12))
+        return note_locs
+
+    def show_octavenote(self,note, max_fret=12, preserve_accidental=True):
+        if isinstance(note, str):
+            note = OctaveNote(note, prefer_sharps=('#' in note) if preserve_accidental else None)
+        note_locs = self.locate_note(note, match_octave=True, max_fret=max_fret)
+        cells = {loc: note.name for loc in note_locs}
+        Fretboard(cells).disp(continue_strings=False)
+
+    def show_note(self, note, show_octave=True, max_fret=12, preserve_accidental=True):
+        if isinstance(note, (str, OctaveNote)):
+            # cast string to note, or discard octave information from octavenote:
+            note = Note(note, prefer_sharps=('#' in note) if preserve_accidental else None)
+        note_locs = self.locate_note(note, max_fret=max_fret)
+        if show_octave:
+            octavenotes = []
+            for (s,fret) in note_locs:
+                if fret == 0:
+                    oct = self.open_strings[s-1]
+                else:
+                    oct = self.tuned_strings[s-1] + fret
+                if preserve_accidental:
+                    oct = OctaveNote(oct.value, prefer_sharps=note.prefer_sharps)
+                octavenotes.append(oct)
+                cells = {loc: oct.name for loc, oct in zip(note_locs, octavenotes)}
+        else:
+            cells = {loc: note.chroma for loc in note_locs}
+        Fretboard(cells).disp(continue_strings=False)
+
+    def show_chord(self, chord, as_degrees=False, max_fret=12, preserve_accidental=True): # preserve accidentals?
+        """for a given Chord object (or name that casts to Chord),
+        show where the notes of that chord fall on the fretboard, starting from open."""
+        if isinstance(chord, str):
+            chord = Chord(chord, prefer_sharps=('#' in chord) if preserve_accidental else None)
+        cells = {}
+        root_locs = self.locate_note(chord.root, max_fret=max_fret)
+        for iv, note in zip(chord.intervals, chord.notes):
+            if not as_degrees: # then as notes
+                cell_val = note.name
+            else:
+                cell_val = iv
+            note_cells = {loc: note.name for loc in self.locate_note(note, max_fret=max_fret)}
+            cells.update(note_cells)
+        Fretboard(cells, highlight=root_locs).disp(continue_strings=False)
+
+
+    def show_abstract_chord(self, chord):
+        """for a given AbstractChord object (or name that casts to AbstractChord),
+        show where the notes of that chord fall on the fretboard starting from an arbitrary fret"""
+        pass
 
     def __str__(self):
         tuning_letters = [string.chroma for string in self.tuned_strings]
@@ -214,7 +292,7 @@ def chord_diagram(frets, fingerings=None, title=None, tuning='EADGBE', orientati
     else:
         print(f'  (unknown chord)\n')
 
-    tuning_notenames = parse_out_note_names(tuning)
+    tuning_notenames = parsing.parse_out_note_names(tuning)
     longest_tuning_note = max([len(n) for n in tuning_notenames]) # do we need 1 or 2 characters per string
 
     left_margin_size = longest_tuning_note+1
@@ -406,3 +484,6 @@ if __name__ == '__main__':
     chord_diagram('07675x') # E7?
     # extended chord:
     chord_diagram('x1881x')
+
+    standard.query('x1881x')
+    standard.query('x32010')

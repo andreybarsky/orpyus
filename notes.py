@@ -41,7 +41,7 @@ class Note:
 
         if isinstance(name, Note):
             # accept re-casting: just take the input note's name
-            name = name.chroma
+            name, prefer_sharps = name.chroma, name.prefer_sharps
         elif isinstance(name, int):
             # we've been passed a position int by mistake instead of a name,
             # which is fine, silently correct:
@@ -60,8 +60,11 @@ class Note:
         # set main object attributes from init args:
         self.name, self.position, self.prefer_sharps = self._parse_input(name, position, prefer_sharps, case_sensitive)
 
-        # string denoting pitch class: ('C#', 'Db', 'E', etc.)
+        # 'chroma' is the string denoting pitch class: ('C#', 'Db', 'E', etc.)
         self.chroma = self.name # these two are the same for Note class, but may be different for OctaveNote subclass
+
+        # boolean flag, is True for white notes:
+        self.natural = self.chroma in parsing.natural_note_names
 
         self.sharp_name = preferred_name(self.position, prefer_sharps=True)
         self.flat_name = preferred_name(self.position, prefer_sharps=False)
@@ -162,11 +165,7 @@ class Note:
     ## comparison operators:
     def __eq__(self, other):
         """Enharmonic equality comparison between Notes, returns True if
-        they have the same chroma (by comparing Note.position).
-
-        note that this does NOT compare the value of OctaveNotes;
-        C4 is equal to C5 because they are enharmonic.
-        to compare OctaveNote value, use C4.value == C5.value explicitly"""
+        they have the same chroma (by comparing Note.position)."""
 
         if isinstance(other, str) and parsing.is_valid_note_name(other):
             # cast to Note if possible
@@ -341,15 +340,19 @@ class OctaveNote(Note):
         assert isinstance(other, OctaveNote), "OctaveNotes can only be greater or less than other OctaveNotes"
         return self.value < other.value
 
-    def __eq__(self, other):
+    def __and__(self, other):
         """Enharmonic equivlence comparison: Compares with another Note
-        and returns True if both have the same position, but disregards note value.
-
-        (if OctaveNote value comparison is needed, you should compare OctaveNote.value directly)
-        """
+        and returns True if both have the same position, but disregards note value."""
 
         assert isinstance(other, Note), "OctaveNotes can only be enharmonic to other notes"
         return self.position == other.position
+
+    def __eq__(self, other):
+        """OctaveNotes are equal to other OctaveNotes that share their position and octave."""
+        if isinstance(other, OctaveNote):
+            return self.value == other.value
+        else:
+            raise TypeError(f'OctaveNote __eq__ only defined for other OctaveNotes, not: {type(other)}')
 
     def __hash__(self):
         """note and octavenote hash-equivalence is based on position alone, not value"""
@@ -391,6 +394,8 @@ class OctaveNote(Note):
         #     intervals = args
         #     # positions = [root] + [(self + interval).position for interval in intervals]
         #     return chords.ChordVoicing(self.name, intervals, octave=self.octave)
+
+
 
     #### utility methods for name-value-pitch conversion
 
