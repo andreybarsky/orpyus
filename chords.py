@@ -556,6 +556,11 @@ class Chord(AbstractChord):
         which specifies that this Chord is to be regarded as in a specific Key,
         affecting its sharp preference and arithmetic behaviours."""
 
+        # if prefer_sharps is not given, we parse the name to see if we've been asked for it:
+        if prefer_sharps is None and isinstance(name, str):
+            # have we been given the name of a tonic note with a sharp in it?
+            prefer_sharps = ('#' in name[1:3])
+
         # re-parse args to detect if 'name' is a list of notes, a list of intervals, or a dict of chordfactors:
         name, root, factors, intervals, notes = self._reparse_args(name, root, factors, intervals, notes)
 
@@ -772,7 +777,7 @@ class Chord(AbstractChord):
         else:
             return default
 
-    def _set_sharp_preference(self, prefer_sharps=None):
+    def _set_sharp_preference(self, prefer_sharps):
         """set the sharp preference of this Chord,
         and of all notes inside this Chord,
         including the tonic, root, and constituent factors"""

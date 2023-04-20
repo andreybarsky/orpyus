@@ -232,30 +232,21 @@ def parse_out_note_names(note_string, graceful_fail=False):
         note_list.append(note_name)
     return note_list
 
-    # first_note_fragment = note_string[:2]
-    # if is_accidental(first_note_fragment[-1]):
-    #     letter, accidental = first_note_fragment
-    #     first_note = letter + parse_accidental(accidental)
-    #     next_idx = 2
-    #
-    # else:
-    #     first_note = first_note_fragment[0]
-    #     next_idx = 1
-    #
-    # assert is_valid_note_name(first_note), f'{first_note} is not a valid note name'
-    # note_list = [first_note]
-    #
-    # while next_idx < len(note_string):
-    #     next_note_fragment = note_string[next_idx : next_idx+2]
-    #     if is_accidental(next_note_fragment[-1]):
-    #         letter, accidental = next_note_fragment
-    #         next_note = letter + parse_accidental(accidental)
-    #         next_idx += 2
-    #     else:
-    #         next_note = next_note_fragment[0]
-    #         next_idx += 1
-    #     note_list.append(next_note)
-    return note_list
+def parse_out_integers(integers, expected_len=None):
+    """accepts a string or list of integers, or strings of integers,
+    and returns a strict list of integers (or None object for non-integers)"""
+    if isinstance(integers, (list, tuple)):
+        ints_list = [int(i) if (isinstance(i, int) or i.isnumeric()) else None for i in integers]
+    elif isinstance(integers, str):
+        if ((expected_len is not None) and (len(integers) == expected_len)) or (expected_len is None):
+            # simply parse numbers out of string
+            ints_list = [int(i) if i.isdigit() else None for i in integers]
+        else:
+            # assume there must be some sep char:
+            ints_list = [int(i) if i.isnumeric() else None for i in auto_split(integers)]
+    else:
+        raise TypeError(f'Expected iterable or string for parse_out_integers input, but got {type(integers)}')
+    return ints_list
 
 def note_split(name, graceful_fail=False):
     """takes a string that contains a note in its first one or two characters
