@@ -50,6 +50,9 @@ def parse_accidental(acc, max_len=1):
 ######################################## note names
 generic_note_names = ['C', 'C# / Db', 'D', 'D# / Eb', 'E', 'F', 'F# / Gb', 'G', 'G# / Ab', 'A', 'A# / Bb', 'B']
 natural_note_names = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
+next_natural_note = {natural_note_names[i-1]:natural_note_names[i] for i in range(1,7)}
+next_natural_note['B'] = 'C'
+prev_natural_note = reverse_dict(next_natural_note)
 
 # map note names to keyboard positions (where C is 0)
 note_positions = {note_name:i for i, note_name in enumerate(generic_note_names)} # surjective mapping of all possible note names

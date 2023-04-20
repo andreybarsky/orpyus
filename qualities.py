@@ -423,7 +423,7 @@ chord_types =  {'m': ChordQualifier(make={3:-1}),
 
                 # explicit concatenations: (for chords that ought to be recognised during chord name searching)
                 'm6': ['m', '6'],
-                'hdim7': ['dim', '7'],    # half diminished 7th (diminished triad with minor 7th)
+                'hdim7': ['dim', '7'],    # half diminished 7th (diminished triad with minor 7th), also called m7b5
                 '9': ['7', '♮9'],          # i.e. dominant 9th
                 'maj9': ['maj7', '♮9'],    # major 9th
                 'dm9': ['7', '♭9'],        # dominant minor 9th
@@ -490,8 +490,8 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      'hdmin9': ['hdmin9', 'hdimm9', 'hdimmin9'],
                      'dmin9': ['dmin9', 'dimm9', 'dimmin9'],
 
-                      '#': ['♯', 'sharp', 'sharpened', 'raised'],
-                      'b': ['♭', 'flat', 'flattened', 'lowered'],
+                      '#': ['♯', 'sharp', 'sharpened', 'sharped', 'raised'],
+                      'b': ['♭', 'flat', 'flattened', 'flatted', 'lowered'],
                       'N': ['♮', 'with', 'include'],
                       # '♯5': ['#5', 'sharp5', 'raised fifth'],
                       # '♭5': ['b5', 'flat5', 'lowered fifth'],

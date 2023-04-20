@@ -198,6 +198,28 @@ class Key(Scale):
     def counterclockwise(self, value=1):
         return self.clockwise(-value)
 
+    def rotate(self, mode):
+        """rotates this Key to produce another mode of this Key's base scale, on the same tonic"""
+        rotated_scale = Scale.rotate(self, mode)
+        rotated_key = rotated_scale.on_tonic(self.tonic)
+        return rotated_key
+
+    # @property
+    # def modes(self):
+    #     return [self.rotate(m) for m in range(1,8)]
+
+    # return all the modes of this scale, starting from wherever it is:
+    @property
+    def parallel_modes(self):
+        """the 'parallel' modes of a Key are all its modes that start on the same tonic"""
+        return [self.rotate(m) for m in range(1,8)]
+
+    @property
+    def modes(self):
+        """the modes of a Key are the relative keys that share its notes but start on a different tonic
+        i.e. modes of C major are D dorian, E phrygian, etc."""
+        return [Key(notes=Key('C').notes.rotate(i)) for i in range(1,8)]
+
     def subscale(self, degrees=None, omit=None, chromatic_intervals=None, name=None):
         """as Scale.subscale, but adds this key's tonic as well and initialises a Subkey instead"""
         return Subkey(parent_scale=self, degrees=degrees, omit=omit, chromatic_intervals=chromatic_intervals, assigned_name=name, tonic=self.tonic) # [self[s] for s in degrees]
@@ -228,7 +250,7 @@ class Key(Scale):
     @property
     def relative_major(self):
         # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
-        assert self.quality.major, f'{self} is not major, and therefore has no relative minor'
+        assert self.quality.minor, f'{self} is not minor, and therefore has no relative major'
         rel_tonic = relative_majors[self.tonic.name]
         if self.rotation == 1 or 'minor' in self.scale_name: # i.e. not a mode
             rel_scale = self.scale_name.replace('minor', 'major') # a kludge but it works
@@ -337,7 +359,9 @@ class Subkey(Key, Subscale):
             # self.diatonic_notes = NoteList([self.tonic + i for i in self.diatonic_intervals.pad()])
 
         # update this Subkey's notes to prefer sharps/flats depending on its tonic (and maj/min/null quality):
+        self.is_natural = False
         self._set_sharp_preference()
+        assert self.is_subscale
 
     @property
     def name(self):
@@ -354,9 +378,9 @@ class Subkey(Key, Subscale):
 
 
 
-def matching_keys(chord_list=None, note_list=None, display=True,
+def matching_keys(chord_list=None, note_list=None, display=True, return_matches=False,
                     assume_tonic=False, require_tonic=True,
-                    upweight_roots=True,
+                    upweight_chord_roots=True, upweight_key_tonics=True, upweight_key_fifths=True,
                     # upweight_third=True, downweight_fifth=True,
                     min_recall=0.8, min_precision=0.7, min_likelihood=0.5, max_results=5):
     """from an unordered set of chords, return a dict of candidate keys that could match those chord.
@@ -389,6 +413,8 @@ def matching_keys(chord_list=None, note_list=None, display=True,
         # just use notes directly
         note_list = NoteList(note_list)
         note_counts = Counter(note_list)
+        if assume_tonic:
+            note_counts.update([note_list[0]])
     else:
         raise Exception(f'matching_keys requires one of: chord_list or note_list')
 
@@ -412,10 +438,20 @@ def matching_keys(chord_list=None, note_list=None, display=True,
         for intervals, mode_names in interval_mode_names.items():
             candidate_notes = [t] + [t + i for i in intervals]
 
-            precision, recall = precision_recall(unique_notes, candidate_notes, weights=note_counts)
+            # initialise candidate object:
+            # (this can be removed for a fast method; it's mostly for upweighting key fifths)
+            candidate = Key(notes=candidate_notes)
+            this_cand_weights = dict(note_counts)
+            if upweight_key_tonics:
+                # count the key's tonic 3 more times, because it's super important
+                this_cand_weights.update({candidate.tonic: 3})
+            if upweight_key_fifths:
+                # count the key's fifth 2 more times
+                this_cand_weights.update({candidate.base_degree_notes[5]: 2})
+
+            precision, recall = precision_recall(unique_notes, candidate_notes, weights=this_cand_weights)
 
             if recall >= min_recall and precision >= min_precision:
-                candidate = Key(notes=candidate_notes)
 
                 likelihood = candidate.likelihood
                 consonance = candidate.consonance
@@ -473,7 +509,7 @@ def matching_keys(chord_list=None, note_list=None, display=True,
             scores = f' {str(prec):{hspace}} {str(lik):{hspace}}  {str(rec):{hspace}}  {cons:.03f}'
             out_list.append(descriptor + scores)
         print('\n'.join(out_list))
-    else:
+    if return_matches:
         return {c: candidates[c] for c in sorted_cands}
 
 
