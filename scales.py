@@ -1,6 +1,6 @@
 from intervals import *
 # from scales import interval_scale_names, key_name_intervals
-from util import rotate_list, unpack_and_reverse_dict, check_all, log
+from util import rotate_list, reverse_dict, unpack_and_reverse_dict, check_all, log
 from chords import ChordFactors, AbstractChord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
 from qualities import ChordQualifier, Quality
 from parsing import num_suffixes, numerals_roman
@@ -32,6 +32,7 @@ standard_scale_suffixes = list([names[0] for names in interval_scale_names.value
 base_scale_names = {'natural major', 'melodic minor', 'harmonic minor', 'harmonic major'} # note that melodic major modes are just rotations of melodic minor modes
 # this is technically true in the reverse as well, but 'melodic minor' is more common / well-known than mel. major
 natural_scale_names = {'natural major', 'natural minor'}
+parallels = {'natural major': 'natural minor', 'natural minor': 'natural major'}
 
 # this dict maps base scale names to dicts that map scale degrees to the modes of that base scale
 mode_idx_names = {
@@ -65,7 +66,11 @@ class Scale:
         for d, i in enumerate(self.intervals):
             deg = d+2 # starting from 2
             self.degree_intervals[deg] = Interval(value=i.value, degree=deg)
-        self.interval_degrees = {i: d for d,i in self.degree_intervals.items()}
+        self.interval_degrees = reverse_dict(self.degree_intervals)
+
+        # base degrees and degrees are identical for Scale objects, but may differ for Subscales:
+        self.base_degree_intervals = self.degree_intervals
+        self.interval_base_degrees = self.interval_degrees
 
         assert len(self.degree_intervals) == 7, f"{scale_name} is not diatonic: has {len(self.degree_intervals)} degrees instead of 7"
         assert len(self.intervals) == 6, f"{scale_name} has {len(self.intervals)} intervals instead of the required 6"
@@ -84,7 +89,7 @@ class Scale:
 
         self.is_subscale = False
         self.assigned_name = None
-        self.is_natural = (self.name in {'natural major', 'natural minor'})
+        self.is_natural = (self.name in natural_scale_names)
 
     @staticmethod
     def _parse_input(name, intervals, mode, stacked):
@@ -304,6 +309,7 @@ class Scale:
         # we compare to the natural minor scale instead
         if self.base_scale_name == 'natural major' and self.quality.minor:
             base_scale_name = 'natural minor'
+            # same for melodic minor to melodic major:
         elif self.base_scale_name == 'melodic minor' and self.quality.major:
             base_scale_name = 'melodic major'
         else:
@@ -658,11 +664,17 @@ class Subscale(Scale):
         self.parent_scale = parent_scale
         self.borrowed_degrees = sorted(degrees)
 
+        # base degrees and degrees are the same for Scale objects,
+        # but may differ for Subscales depending on which degrees are borrowed:
+        self.base_degree_intervals = {d: parent_scale[d] for d in self.borrowed_degrees}
+        self.interval_base_degrees = reverse_dict(self.base_degree_intervals)
+
+
+        ### TBI: figure out consistency between scale/subscale degrees (should 'degrees' always be continuous, or always have a 5th, etc.)
 
         # as in Scale.init
         # ordered dict of this subscale's degrees with respect to parent, with gaps:
-        self.parent_degree_intervals = {d: parent_scale[d] for d in self.borrowed_degrees}
-        self.intervals = IntervalList(list(self.parent_degree_intervals.values()))
+        self.intervals = IntervalList(list(self.base_degree_intervals.values()))
         # ordered dict of this subscale's degrees with no gaps:
         self.degree_intervals = {d+1: self.intervals[d] for d in range(len(self.intervals))}
 
@@ -678,9 +690,10 @@ class Subscale(Scale):
 
         # subscales can have indeterminate quality if they lack a major/minor third:
         if 3 in self.borrowed_degrees:
-            self.quality = self.parent_degree_intervals[3].quality
+            self.quality = self.base_degree_intervals[3].quality
         else:
             self.quality = Quality('ind')
+
 
         self.is_subscale = True
 
