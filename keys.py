@@ -1,9 +1,9 @@
 from intervals import Interval, IntervalList
 from notes import Note, NoteList, sharp_major_tonics, sharp_minor_tonics, flat_major_tonics, flat_minor_tonics, relative_majors, relative_minors
-from scales import Scale, Subscale, interval_mode_names
+from scales import Scale, Subscale, interval_mode_names, parallels
 from chords import Chord, AbstractChord
 import parsing
-from util import check_all, precision_recall, test, log
+from util import check_all, precision_recall, reverse_dict, test, log
 
 from collections import Counter
 import pdb
@@ -50,10 +50,16 @@ class Key(Scale):
         # we don't store the unison interval in .interval attr, because of mode rotation
         padded_intervals = [Interval(0)] + self.diatonic_intervals
         self.note_intervals = {self.notes[i]: padded_intervals[i] for i in range(7)}
-        self.interval_notes = {padded_intervals[i]: self.notes[i] for i in range(7)}
+        self.interval_notes = reverse_dict(self.note_intervals)
+        # self.interval_notes = {padded_intervals[i]: self.notes[i] for i in range(7)}
 
         self.degree_notes = {d: self.notes[d-1] for d in range(1,8)}
-        self.note_degrees = {self.notes[d-1]: d for d in range(1,8)}
+        self.note_degrees = reverse_dict(self.degree_notes)
+        # self.note_degrees = {self.notes[d-1]: d for d in range(1,8)}
+
+        # these are the same for Key objects, but may differ for Subkeys:
+        self.base_degree_notes = self.degree_notes
+        self.note_base_degrees = self.note_degrees
 
         # used only for Keys with strange chromatic notes not built on integer degrees, like blues notes
         if self.chromatic_intervals is not None:
@@ -170,20 +176,6 @@ class Key(Scale):
         return Subkey(parent_scale=self, degrees=degrees, omit=omit, chromatic_intervals=chromatic_intervals, assigned_name=name, tonic=self.tonic) # [self[s] for s in degrees]
 
 
-    # @property
-    # def pentatonic(self):
-    #     """returns the pentatonic subscale of the natural major or minor scales.
-    #     will function for other scales, though is not well-defined."""
-    #     if self.quality.major and self.is_natural:
-    #         return self.subscale(degrees=[1,2,3,5,6])
-    #     elif self.quality.minor and self.is_natural:
-    #         return self.subscale(degrees=[1,3,4,5,7])
-    #     else:
-    #         ordered_pent_scales = self.compute_pentatonics()
-    #         preferred = list(ordered_pent_scales.keys())[0]
-    #         return self.subscale(omit=preferred.omit, name=f'{self.name} pentatonic')
-
-
     @property
     def relative_minor(self):
         # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
@@ -200,19 +192,6 @@ class Key(Scale):
             rel_intervals[1] = Interval(rel_intervals[1]-1, degree=rel_intervals[1].degree)
             return Key(tonic=rel_tonic, intervals=rel_intervals)
 
-        # new_factors = ChordFactors(self.factors)
-        # new_factors[3] -= 1 # flatten third
-        # return Chord(factors=new_factors, root=rel_root, inversion=self.inversion)
-
-    # @property
-    # def relative_major(self):
-    #     # assert not self.major, f'{self} is already major, and therefore has no relative major'
-    #     assert self.quality.minor, f'{self} is not minor, and therefore has no relative major'
-    #     rel_root = relative_majors[self.tonic.name]
-    #     new_factors = ChordFactors(self.factors)
-    #     new_factors[3] += 1 # raise third
-    #     return Chord(factors=new_factors, root=rel_root, inversion=self.inversion)
-
     @property
     def relative(self):
         if self.quality.major:
@@ -220,16 +199,20 @@ class Key(Scale):
         elif self.quality.minor:
             return self.relative_major
         else:
-            raise Exception(f'Chord {self} is neither major or minor, and therefore has no relative')
+            raise Exception(f'Key of {self.name} is neither major or minor, and therefore has no relative')
 
-    # def __invert__(self):
-    #     """~ operator returns the relative major/minor of a key"""
-    #     if self.major:
-    #         return self.relative_minor
-    #     elif self.minor:
-    #         return self.relative_major
-    #     else:
-    #         return self
+    @property
+    def parallel_minor(self):
+        if self.quality.major and self.is_natural:
+            return
+
+    @property
+    def parallel(self):
+
+
+    def __invert__(self):
+        """~ operator returns the parallel major/minor of a key"""
+        return self.parallel
 
     def __contains__(self, item):
         """if item is an Interval, does it fit in our list of degree-intervals plus chromatic-intervals?
@@ -276,7 +259,10 @@ class Subkey(Key, Subscale):
 
         # as Subscale.init:
         super(Key, self).__init__(subscale_name, parent_scale, degrees, omit, chromatic_intervals, assigned_name)
-        # (this sets self.base_scale, .quality, .intervals, .diatonic_intervals, .chromatic_intervals, .rotation)
+        # (this sets self.base_scale_name, .quality, .intervals, .diatonic_intervals, .chromatic_intervals, .rotation)
+
+        self.base_degree_notes = {d:self.tonic + iv for d,iv in self.base_degree_intervals.items()}
+        self.note_base_degrees = reverse_dict(self.base_degree_notes)
 
         # set Subkey-specific attributes: notes, degree_notes, etc.
         # as in Key.init:
@@ -285,8 +271,8 @@ class Subkey(Key, Subscale):
         self.diatonic_note_intervals = {self.diatonic_notes[i]: padded_diatonic_intervals[i] for i in range(len(self.diatonic_notes))}
         self.diatonic_interval_notes = {padded_diatonic_intervals[i]: self.diatonic_notes[i] for i in range(len(self.diatonic_notes))}
 
-        self.degree_notes = {d: self.diatonic_notes[d-1] for d in range(len(self.degree_intervals))}
-        self.note_degrees = {self.diatonic_notes[d-1]: d for d in range(len(self.degree_intervals))}
+        self.degree_notes = {d+1: self.diatonic_notes[d] for d in range(len(self.degree_intervals))}
+        self.note_degrees = {self.diatonic_notes[d]: d+1 for d in range(len(self.degree_intervals))}
 
         # TBI: this could use refactoring? no need to pad if we can just append/update dicts
 
