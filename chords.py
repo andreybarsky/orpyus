@@ -601,7 +601,7 @@ class Chord(AbstractChord):
         self.quality = qualities.Perfect if 3 not in self.factors else self.factor_intervals[3].quality
 
         # set sharp preference based on root note:
-        self._set_sharp_preference(prefer_sharps) ### TBI: move this up and make it affect root_notes etc. as well?
+        self._set_sharp_preference('#' in name if name is not None else prefer_sharps) ### TBI: move this up and make it affect root_notes etc. as well?
 
     @staticmethod
     def _reparse_args(name, root, factors, intervals, notes):
