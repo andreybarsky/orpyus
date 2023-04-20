@@ -92,8 +92,8 @@ class Key(Scale):
         return tonic, scale_name
 
     def _detect_sharp_preference(self, default=False):
-        """detect if a chord should prefer sharp or flat labelling
-        depending on its tonic and quality"""
+        """detect if this key's tonic note should prefer sharp or flat labelling
+        depending on its chroma and quality"""
         if (self.quality.major and self.tonic in sharp_major_tonics) or (self.quality.minor and self.tonic in sharp_minor_tonics):
             return True
         elif (self.quality.major and self.tonic in flat_major_tonics) or (self.quality.minor and self.tonic in flat_minor_tonics):
@@ -105,13 +105,40 @@ class Key(Scale):
         """set the sharp preference of this Key,
         and of all notes inside this Key"""
         if prefer_sharps is None:
-            # detect from object attributes
+            # detect from tonic and quality
             prefer_sharps = self._detect_sharp_preference()
 
-        self.prefer_sharps = prefer_sharps
         self.tonic._set_sharp_preference(prefer_sharps)
-        for n in self.notes:
-            n._set_sharp_preference(prefer_sharps)
+        # flat/sharp preference of a Key is decided by having one note letter per degree of the scale:
+
+        if self.is_natural or self.is_subscale:
+            # computation not needed for non-natural scales; and no idea how to handle subscales yet
+            # just assign same sharp preference as tonic to every note:
+            for n in self.notes:
+                n._set_sharp_preference(prefer_sharps)
+
+        else:
+            # compute flat/sharp preference by assigning one note to each natural note name
+            tonic_nat = self.tonic.chroma[0] # one of the few cases where note sharp preference matters
+            next_nat = parsing.next_natural_note[tonic_nat]
+            for d in range(2,8):
+                n = self.degree_notes[d]
+                if n.name == next_nat:
+                    # this is a natural note, so its sharp preference shouldn't matter,
+                    # but set it to the tonic's anyway for consistency
+                    n._set_sharp_preference(prefer_sharps)
+                else:
+                    # which accidental would make this note's chroma include the next natural note?
+                    if n.flat_name[0] == next_nat:
+                        n._set_sharp_preference(False)
+                    elif n.sharp_name[0] == next_nat:
+                        n._set_sharp_preference(True)
+                    else:
+                        # this note needs to be a double sharp or double flat or something
+                        log(f'Found a possible case for a double-sharp or double-flat: degree {d} ({n}) in scale: {self}')
+                        # fall back on same as tonic:
+                        n._set_sharp_preference(prefer_sharps)
+                next_nat = parsing.next_natural_note[next_nat]
 
 
     @property
@@ -177,20 +204,38 @@ class Key(Scale):
 
 
     @property
+    def parallel_minor(self):
+        if not self.quality.major:
+            raise Exception(f'{self.name} is not major, and therefore has no parallel minor')
+
+
+    @property
     def relative_minor(self):
         # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
         assert self.quality.major, f'{self} is not major, and therefore has no relative minor'
-
         rel_tonic = relative_minors[self.tonic.name]
-        if self.rotation == 1: # i.e. not a mode
+        if self.rotation == 1 or 'major' in self.scale_name: # i.e. not a mode
             rel_scale = self.scale_name.replace('major', 'minor') # a kludge but it works
             return Key(rel_scale, tonic=rel_tonic)
         else:
-            raise Exception('figure out what to do here - what are the relative minors/majors of non-natural scales?')
-            # just try lowering the third and see what happens
-            rel_intervals = IntervalList([i for i in self.intervals])
-            rel_intervals[1] = Interval(rel_intervals[1]-1, degree=rel_intervals[1].degree)
-            return Key(tonic=rel_tonic, intervals=rel_intervals)
+            raise Exception('Relative major/minor not defined for non-natural Keys')
+            # figure out what to do here - what are the relative minors/majors of non-natural scales?
+            # just try lowering the third and see what happens?
+            # rel_intervals = IntervalList([i for i in self.intervals])
+            # rel_intervals[1] = Interval(rel_intervals[1]-1, degree=rel_intervals[1].degree)
+            # return Key(tonic=rel_tonic, intervals=rel_intervals)
+
+    @property
+    def relative_major(self):
+        # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
+        assert self.quality.major, f'{self} is not major, and therefore has no relative minor'
+        rel_tonic = relative_majors[self.tonic.name]
+        if self.rotation == 1 or 'minor' in self.scale_name: # i.e. not a mode
+            rel_scale = self.scale_name.replace('minor', 'major') # a kludge but it works
+            return Key(rel_scale, tonic=rel_tonic)
+        else:
+            raise Exception('Relative major/minor not defined for non-natural Keys')
+
 
     @property
     def relative(self):
@@ -208,7 +253,12 @@ class Key(Scale):
 
     @property
     def parallel(self):
-
+        if self.quality.major and self.is_natural:
+            return self.parallel_minor
+        elif self.quality.minor and self.is_natural:
+            return self.parallel_major
+        else:
+            raise Exception('Parallel major/minor not defined for non-natural Keys')
 
     def __invert__(self):
         """~ operator returns the parallel major/minor of a key"""
