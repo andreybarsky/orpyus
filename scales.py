@@ -16,10 +16,10 @@ interval_scale_names = {
     IntervalList(Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', 'maj', 'M', 'major', 'natural major' ],
     IntervalList(Maj2, Min3, Per4, Per5, Min6, Min7): ['m', 'min', 'minor', 'natural minor' ],
 
-    IntervalList(Maj2, Maj3, Per4, Per5, Min6, Maj7): ['harmonic major', 'M harmonic', 'maj harmonic', 'harmonic major'],
-    IntervalList(Maj2, Min3, Per4, Per5, Min6, Maj7): ['harmonic minor', 'm harmonic', 'harmonic minor'],
-    IntervalList(Maj2, Maj3, Per4, Per5, Min6, Min7): ['melodic major', 'M melodic', 'melodic major', 'maj melodic', 'melodic major'],
-    IntervalList(Maj2, Min3, Per4, Per5, Maj6, Maj7): ['melodic minor', 'm melodic', 'jazz minor', 'melodic minor ascending', 'm melodic', 'melodic minor'], # note: ascending only
+    IntervalList(Maj2, Maj3, Per4, Per5, Min6, Maj7): ['harmonic major', 'M harmonic', 'major harmonic', 'maj harmonic', 'harmonic major'],
+    IntervalList(Maj2, Min3, Per4, Per5, Min6, Maj7): ['harmonic minor', 'm harmonic', 'minor harmonic', 'min harmonic', 'harmonic minor'],
+    IntervalList(Maj2, Maj3, Per4, Per5, Min6, Min7): ['melodic major', 'M melodic', 'major melodic', 'melodic major', 'maj melodic', 'melodic major'],
+    IntervalList(Maj2, Min3, Per4, Per5, Maj6, Maj7): ['melodic minor', 'm melodic', 'minor melodic', 'min melodic', 'jazz minor', 'melodic minor ascending','melodic minor'], # note: ascending only
     # "melodic minor" can refer to using the the natural minor scale when descending, but that is TBI
     }
 scale_name_intervals = unpack_and_reverse_dict(interval_scale_names)
@@ -286,7 +286,10 @@ class Scale:
         else:
             ordered_pent_scales = self.compute_pentatonics()
             preferred = list(ordered_pent_scales.keys())[0]
-            return self.subscale(omit=preferred.omit, name=f'{self.name} pentatonic')
+            if preferred in subscales_to_aliases:
+                return preferred
+            else:
+                return self.subscale(omit=preferred.omit, name=f'{self.name} pentatonic')
 
     def compute_pentatonics(self, preserve_character=False, keep_quality=True):
         """Given this scale and its degree-intervals,
@@ -734,6 +737,7 @@ class Subscale(Scale):
             proper_name = aliases[0]
             return proper_name
         elif self.assigned_name is not None:
+            # if we can't find a name in interval_subscale_names, use whatever was given at init:
             return self.assigned_name
         else:
             return 'unknown'
@@ -895,24 +899,24 @@ subscales_to_aliases = {  # major pentatonic type omissions:
                         Scale('major').subscale([1,2,3,5,6]): ['major pentatonic', 'pentatonic major', 'major pent', 'pent major', 'pentatonic', 'pent', 'major5', 'maj pentatonic'],
                         Scale('minor').subscale([1,2,3,5,6]): ['hirajoshi', 'japanese minor pentatonic', 'japanese minor'],
                        Scale('dorian').subscale([1,2,3,5,6]): ['dorian pentatonic'],
-                        Scale('major').subscale([1,2,3,5,6], chromatic_intervals=[Min3]): ['blues major', 'major blues', 'major blues hexatonic', 'blues major hexatonic'],
+                        Scale('major').subscale([1,2,3,5,6], chromatic_intervals=[Min3]): ['blues major', 'major blues', 'maj blues', 'major blues hexatonic', 'blues major hexatonic'],
 
                           # minor pentatonic type omissions:
                         Scale('minor').subscale([1,3,4,5,7]): ['minor pentatonic', 'pentatonic minor', 'minor pent', 'pent minor', 'm pent', 'minor5', 'm pentatonic'],
                         Scale('major').subscale([1,3,4,5,7]): ['okinawan pentatonic'],
-                        Scale('minor').subscale([1,3,4,5,7], chromatic_intervals=[Dim5]): ['blues minor', 'minor blues', 'minor blues hexatonic', 'm blues',  'blues minor hexatonic'],
+                        Scale('minor').subscale([1,3,4,5,7], chromatic_intervals=[Dim5]): ['blues minor', 'minor blues', 'blues minor hexatonic', 'minor blues hexatonic', 'm blues hexatonic', 'm blues'],
 
                           # other types:
-                        Scale('major').subscale([1,2,4,5,6]): ['blues major pentatonic (type B)'],
+                        Scale('major').subscale([1,2,4,5,6]): ['blues major pentatonic (omit:3,7)'],
                      Scale('phrygian').subscale([1,2,4,5,6]): ['kumoijoshi', 'kumoi', 'japanese pentatonic', 'japanese mode', 'japanese'],
 
-                        Scale('major').subscale([1,2,3,5,7]): ['blues major pentatonic (type A)'],
-                   Scale('mixolydian').subscale([1,2,3,5,7]): ['dominant pentatonic'],
+                        Scale('major').subscale([1,2,3,5,7]): ['blues major pentatonic (omit:4,6)'],
+                   Scale('mixolydian').subscale([1,2,3,5,7]): ['dominant pentatonic', 'pentatonic dominant', 'dom pentatonic'],
 
                         Scale('minor').subscale([1,2,4,5,7]): ['egyptian', 'egyptian pentatonic', 'suspended pentatonic', 'suspended'],
                       Scale('locrian').subscale([1,2,4,5,7]): ['iwato'],
 
-                        Scale('minor').subscale([1,3,4,6,7]): ['blues minor pentatonic', 'man gong'],
+                        Scale('minor').subscale([1,3,4,6,7]): ['blues minor pentatonic', 'minor blues pentatonic', 'blues minor pent', 'minor blues pent', 'm blues pent', 'man gong', 'm blues pentatonic'],
 
 
                        }

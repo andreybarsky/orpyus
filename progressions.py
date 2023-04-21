@@ -92,7 +92,16 @@ class Progression:
     as an ordered collection of AbstractChords,
     initialised as list: e.g. Progression(['I', 'IV', 'iii', 'V'])
     or as string separated by dashes, e.g.: Progression('I-IV-iii-V')"""
-    def __init__(self, numerals, scale=None):
+    def __init__(self, *numerals, scale=None):
+        """accepts one of two input schemes:
+        1. 'numerals' input is a list (or demarcated string) of upper/lower-case roman numerals denoting scale chords,
+            in which case we try and determine the scale that this progression is in from the cases.
+        2. 'numerals' input is a list of integers denoting scale chords, and 'scale' is a Scale object (or string that casts to Scale),
+            in which case we allocate major/minor quality to the chords based on the scale provided.
+            """
+
+        
+
         # self.intervals = []
 
         # TBI: make roman numerals incompatible with scale input?

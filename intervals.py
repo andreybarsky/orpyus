@@ -398,6 +398,11 @@ class IntervalList(list):
     def __repr__(self):
         return str(self)
 
+    @property
+    def as_factors(self):
+        # alternate string method, reports raised/lowered factor integers instead of major/minor/perfect degrees
+        return [iv.factor_name for iv in self]
+
     def __add__(self, other):
         """adds a scalar to each interval in this list,
         or accepts an iterable and performs point-wise addition."""

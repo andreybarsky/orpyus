@@ -138,23 +138,43 @@ class Guitar:
         and the chord diagram showing what note each string is playing"""
         return self.query(frets)
 
-    def find_key(self, string, frets, tonic=None, show_fretboard=True):
+        # TBI: find way to exclude frets from search? would need to modify precision_recall func probably
+    def find_key(self, cells=None,  string=None, frets=None, tonic=None, show_fretboard=True):
         """for a specified string, and the specified fret numbers on that string
         return the list of keys that those fretted notes are a match for"""
-        assert 0 < string <= self.num_strings, f"This guitar has no string {string}"
-        notes = [self.tuned_strings[string-1]+f for f in frets]
-        print(f'String {self.tuned_strings[string-1]}, frets {frets}: {notes}')
-        if tonic is None:
-            matches = matching_keys(note_list=notes, min_precision=0, require_tonic=False, return_matches=True)
+        if cells is not None:
+            # fill by dict that keys string to fret_list
+            assert string is None and frets is None
+            notes = []
+            for s,frets in cells.items():
+                this_string_notes = []
+                for f in frets:
+                    this_string_notes.append(self.tuned_strings[s-1]+f)
+                notes.extend(this_string_notes)
+                print(f'String {self.tuned_strings[s-1]}, frets {frets}: {this_string_notes}')
         else:
+            # fill by single string and its frets
+            assert string is not None and frets is not None
+            assert 0 < string <= self.num_strings, f"This guitar has no string {string}"
+            notes = [self.tuned_strings[string-1]+f for f in frets]
+            print(f'String {self.tuned_strings[string-1]}, frets {frets}: {notes}')
+
+
+        if tonic is not None:
             if isinstance(tonic, int):
-                tonic_note = self.tuned_strings[string-1]+tonic
+                assert string is not None
+                tonic_note = (self.tuned_strings[string-1]+tonic).note
             elif isinstance(tonic, str):
                 tonic_note = Note(tonic)
             elif isinstance(tonic, Note):
                 tonic_note = tonic
-            notes = [tonic_note] + notes
-            matches = matching_keys(note_list=notes, min_precision=0, require_tonic=True, return_matches=True)
+            notes = [tonic_note] + [n.note for n in notes if n.note != tonic_note]
+
+        # dynamically adjust min_precision by the number of notes provided
+        min_precision = len(notes) / 7
+
+        print(f'Requiring min_precision of: {min_precision}')
+        matches = matching_keys(note_list=notes, min_precision=0, require_tonic=(tonic is not None), return_matches=True)
 
         if show_fretboard:
             # show fretboard on the first 3 matches
@@ -188,7 +208,7 @@ class Guitar:
         Fretboard(fret_cells, mute=mute).disp()
 
 
-    def locate_note(self, note, match_octave=False, min_fret=0, max_fret=15):
+    def locate_note(self, note, match_octave=False, min_fret=0, max_fret=13):
         """accepts a Note object, (or, if match_octave, an OctaveNote object)
         and returns a list of tuple (string,fret) locations where that note appears"""
         # keep a list of locations
@@ -214,7 +234,7 @@ class Guitar:
                             note_locs.append((s+1, next_loc+12))
         return note_locs
 
-    def show_octavenote(self, note, max_fret=15, min_fret=0, preserve_accidental=True, *args, **kwargs):
+    def show_octavenote(self, note, max_fret=13, min_fret=0, preserve_accidental=True, *args, **kwargs):
         if isinstance(note, str):
             note = OctaveNote(note, prefer_sharps=('#' in note) if preserve_accidental else None)
         note_locs = self.locate_note(note, match_octave=True, max_fret=max_fret, min_fret=min_fret)
@@ -241,7 +261,7 @@ class Guitar:
             cells = {loc: note.chroma for loc in note_locs}
         Fretboard(cells, title=f'Note: {note.name} on {self}').disp(*args, **kwargs)
 
-    def show_chord(self, chord, as_intervals=False, max_fret=15, min_fret=0, preserve_accidental=True, title=None, show_index=True, *args, **kwargs): # preserve accidentals?
+    def show_chord(self, chord, as_intervals=True, max_fret=13, min_fret=0, preserve_accidental=True, title=None, show_index=True, *args, **kwargs): # preserve accidentals?
         """for a given Chord object (or name that casts to Chord),
         show where the notes of that chord fall on the fretboard, starting from open."""
         if isinstance(chord, str):
@@ -252,25 +272,25 @@ class Guitar:
             if not as_intervals: # then as notes
                 cell_val = note.name
             else:
-                cell_val = iv.factor_name
+                cell_val = f'{iv.factor_name:>3}:{note.name}'
             note_cells = {loc: cell_val for loc in self.locate_note(note, min_fret=min_fret, max_fret=max_fret)}
             cells.update(note_cells)
         if show_index:
             if as_intervals:
                 # replace note with interval on index labels as well
-                index = [(s.note - chord.root).factor_name if s.chroma in chord.notes else '' for s in self.tuned_strings ]
+                # index = [f'{(s.note - chord.root).factor_name}:' if s.chroma in chord.notes else '' for s in self.tuned_strings ]
+                index = [f'{(chord.factor_intervals[chord.note_factors[string.note]].factor_name):>3}:{string.chroma}'  if string.note in chord.notes  else ''  for string in self.tuned_strings ]
             else:
-                index = [s.chroma if s.chroma in chord.notes else '' for s in self.tuned_strings ]
-
-
+                index = [string.chroma if string.chroma in chord.notes else '' for string in self.tuned_strings ]
         else:
             index = ['']*self.num_strings # list of empty strings as index
 
         if title is None:
             title=f'Chord: {chord} on {self}'
+
         Fretboard(cells, index=index, highlight=root_locs, title=title).disp(*args, **kwargs)
 
-    def show_key(self, key, as_intervals=False, max_fret=15, fifths=False, show_index=True, highlight_pentatonic=True, *args, **kwargs):
+    def show_key(self, key, as_intervals=False, max_fret=13, fifths=False, show_index=True, highlight_pentatonic=True, *args, **kwargs):
         """for a given Key object (or name that casts to key),
         show where the notes of that key fall on the fretboard, starting from open."""
         if isinstance(key, str):
@@ -298,18 +318,20 @@ class Guitar:
             if not as_intervals: # then as notes
                 cell_val = note.name
             else:
-                cell_val = iv.factor_name
+                cell_val = f'{iv.factor_name:>3}:{note.name}'
             note_cells = {loc: cell_val for loc in self.locate_note(note, max_fret=max_fret)}
             cells.update(note_cells)
         if show_index:
             if as_intervals:
                 # replace note with interval on index labels as well
-                index = [(s.note - key.tonic).factor_name if s.chroma in key.notes else '' for s in self.tuned_strings ]
+                # index = [(s.note - key.tonic).factor_name if s.chroma in key.notes else '' for s in self.tuned_strings ]
+                index = [f'{(key.note_intervals[string.note].factor_name):>3}:{string.chroma:>2}'  if string.chroma in key.notes  else ''  for string in self.tuned_strings]
+
             else:
                 index = [s.chroma if s.chroma in key.notes else '' for s in self.tuned_strings ]
         else:
             index = ['']*self.num_strings # list of empty strings as index
-        Fretboard(cells, index=index, highlight=highlights, title=f'{key} on {self}').disp(*args, **kwargs)
+        Fretboard(cells, index=index, highlight=highlights, title=f'{key} on {self}').disp(*args, fret_size=7, **kwargs)
 
     def show_abstract_chord(self, chord, *args, **kwargs):
         """for a given AbstractChord object (or name that casts to AbstractChord),

@@ -590,11 +590,12 @@ class Chord(AbstractChord):
 
         # mapping of chord factors to intervals from tonic:
         self.factor_intervals = {i.extended_degree: i for i in self.root_intervals}
+        self.interval_factors = reverse_dict(self.factor_intervals)
         # mapping of chord factors to notes:
         self.factor_notes = {degree: (self.root + i) for degree, i in self.factor_intervals.items()}
+        self.note_factors = reverse_dict(self.factor_notes)
 
         # list of notes inside this chord, in root position:
-        # self.root_notes = NoteList([self.root + i for i in self.root_intervals])
         self.root_notes = NoteList(self.factor_notes.values())
 
         # discover the correct inversion parameters, as well as inverted notes / intervals if they differ from root position:

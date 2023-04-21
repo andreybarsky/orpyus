@@ -320,6 +320,11 @@ class Key(Scale):
     def __hash__(self):
         return hash((self.notes, self.diatonic_intervals, self.intervals, self.chromatic_intervals))
 
+    def play(self, *args, **kwargs):
+        # plays the notes in this key (we also add an octave over root on top for resolution)
+        played_notes = NoteList([n for n in self.notes] + [self.tonic])
+        played_notes.play(*args, **kwargs)
+
 
 class Subkey(Key, Subscale):
     """a Key that is built on a Subscale rather than a scale. Initialised as Subscale but also with a tonic."""
@@ -328,6 +333,8 @@ class Subkey(Key, Subscale):
 
         # get correct tonic and scale name from (key_name, tonic) input args:
         self.tonic, subscale_name = self._parse_tonic(subscale_name, tonic)
+
+
 
         # as Subscale.init:
         super(Key, self).__init__(subscale_name, parent_scale, degrees, omit, chromatic_intervals, assigned_name)
@@ -358,6 +365,11 @@ class Subkey(Key, Subscale):
             self.chromatic_notes = NoteList([self.tonic + i for i in self.chromatic_intervals])
             # self.diatonic_notes = NoteList([self.tonic + i for i in self.diatonic_intervals.pad()])
 
+        # take the tonic out of assigned name if one has been given:
+        if assigned_name is not None:
+            _, assigned_name = self._parse_tonic(assigned_name, None)
+            self.assigned_name = assigned_name
+
         # update this Subkey's notes to prefer sharps/flats depending on its tonic (and maj/min/null quality):
         self.is_natural = False
         self._set_sharp_preference()
@@ -380,8 +392,7 @@ class Subkey(Key, Subscale):
 
 def matching_keys(chord_list=None, note_list=None, display=True, return_matches=False,
                     assume_tonic=False, require_tonic=True,
-                    upweight_chord_roots=True, upweight_key_tonics=True, upweight_key_fifths=True,
-                    # upweight_third=True, downweight_fifth=True,
+                    upweight_chord_roots=True, upweight_key_tonics=True, upweight_pentatonics=False, # upweight_pentatonics might be broken
                     min_recall=0.8, min_precision=0.7, min_likelihood=0.5, max_results=5):
     """from an unordered set of chords, return a dict of candidate keys that could match those chord.
     we make no assumptions about the chord list, except in the case of assume_tonic, where we slightly
@@ -401,7 +412,7 @@ def matching_keys(chord_list=None, note_list=None, display=True, return_matches=
 
         for chord in chord_list:
             note_counts.update(chord.notes)
-            if upweight_roots:
+            if upweight_chord_roots:
                 # increase the weight of the root note too:
                 note_counts.update([chord.root])
 
@@ -443,11 +454,11 @@ def matching_keys(chord_list=None, note_list=None, display=True, return_matches=
             candidate = Key(notes=candidate_notes)
             this_cand_weights = dict(note_counts)
             if upweight_key_tonics:
-                # count the key's tonic 3 more times, because it's super important
-                this_cand_weights.update({candidate.tonic: 3})
-            if upweight_key_fifths:
-                # count the key's fifth 2 more times
-                this_cand_weights.update({candidate.base_degree_notes[5]: 2})
+                # count the key's tonic once more, because it's super important
+                this_cand_weights.update({candidate.tonic: 1})
+            if upweight_pentatonics:
+                # count the notes in this key's *pentatonic* scale as extra:
+                this_cand_weights.update({n:1 for n in candidate.pentatonic.notes})
 
             precision, recall = precision_recall(unique_notes, candidate_notes, weights=this_cand_weights)
 
@@ -477,6 +488,8 @@ def matching_keys(chord_list=None, note_list=None, display=True, return_matches=
             title = [f"Key matches for chords: {', '.join([c.name for c in chord_list])}"]
             if assume_tonic:
                 title.append(f'(upweighted first and last chords: {chord_list[0].name}, {chord_list[-1].name})')
+            if upweight_pentatonics:
+                title.append('(and upweighted pentatonics)')
         elif note_list is not None:
             title = [f"Key matches for notes: {', '.join([n.name for n in note_list])}"]
 
@@ -541,9 +554,9 @@ def unit_test():
     # or not:
     test(Chord('Fmmaj11') in Key('C'), False)
 
-    matching_keys(['C', Chord('F'), 'G7', 'Bdim'])
+    matching_keys(['C', Chord('F'), 'G7', 'Bdim'], upweight_pentatonics=False)
 
-    matching_keys(['Dm', 'Dsus4', 'Am', 'Asus4', 'E', 'E7', 'Asus4', 'Am7'], assume_tonic=True)
+    matching_keys(['Dm', 'Dsus4', 'Am', 'Asus4', 'E', 'E7', 'Asus4', 'Am7'], assume_tonic=True, upweight_pentatonics=True)
 
 
 if __name__ == '__main__':
