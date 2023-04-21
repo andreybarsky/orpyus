@@ -1,9 +1,9 @@
-from intervals import Interval, IntervalList
-from notes import Note, NoteList, sharp_major_tonics, sharp_minor_tonics, flat_major_tonics, flat_minor_tonics, relative_majors, relative_minors
-from scales import Scale, Subscale, interval_mode_names, parallels
-from chords import Chord, AbstractChord
-import parsing
-from util import check_all, precision_recall, reverse_dict, test, log
+from .intervals import Interval, IntervalList
+from .notes import Note, NoteList, sharp_major_tonics, sharp_minor_tonics, flat_major_tonics, flat_minor_tonics, relative_majors, relative_minors
+from .scales import Scale, Subscale, interval_mode_names, parallels
+from .chords import Chord, AbstractChord
+from . import parsing
+from .util import check_all, precision_recall, reverse_dict, test, log
 
 from collections import Counter
 import pdb

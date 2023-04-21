@@ -1,5 +1,5 @@
-from notes import OctaveNote
-from util import log, test
+from .notes import OctaveNote
+from .util import log, test
 
 import threading
 import pdb

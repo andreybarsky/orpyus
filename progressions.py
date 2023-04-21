@@ -1,9 +1,9 @@
-from intervals import Interval
-from chords import Chord
-from qualities import Major, Minor, Perfect, Diminished, parse_chord_qualifiers, ChordQualifier
-from scales import Scale, scale_name_intervals
-from util import reduce_aliases, auto_split, check_all, reverse_dict, test
-from parsing import roman_numerals, numerals_roman
+from .intervals import Interval
+from .chords import Chord
+from .qualities import Major, Minor, Perfect, Diminished, parse_chord_qualifiers, ChordQualifier
+from .scales import Scale, scale_name_intervals
+from .util import reduce_aliases, auto_split, check_all, reverse_dict, test
+from .parsing import roman_numerals, numerals_roman
 import pdb
 
 
@@ -100,7 +100,7 @@ class Progression:
             in which case we allocate major/minor quality to the chords based on the scale provided.
             """
 
-        
+
 
         # self.intervals = []
 

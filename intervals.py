@@ -1,7 +1,7 @@
-from qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
-from parsing import degree_names, num_suffixes, offset_accidentals
-from util import rotate_list, least_common_multiple, euclidean_gcd, test
-from conversion import value_to_pitch
+from .qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
+from .parsing import degree_names, num_suffixes, offset_accidentals
+from .util import rotate_list, least_common_multiple, euclidean_gcd, test
+from .conversion import value_to_pitch
 import math
 import pdb
 

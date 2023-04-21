@@ -1,10 +1,10 @@
-from intervals import *
+from .intervals import *
 # from scales import interval_scale_names, key_name_intervals
-from util import rotate_list, reverse_dict, unpack_and_reverse_dict, check_all, log
-from chords import ChordFactors, AbstractChord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
-from qualities import ChordQualifier, Quality
-from parsing import num_suffixes, numerals_roman
-import notes as notes
+from .util import rotate_list, reverse_dict, unpack_and_reverse_dict, check_all, log
+from .chords import ChordFactors, AbstractChord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
+from .qualities import ChordQualifier, Quality
+from .parsing import num_suffixes, numerals_roman
+from . import notes as notes
 import pdb
 
 

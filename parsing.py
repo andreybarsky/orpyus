@@ -1,6 +1,6 @@
 #### string parsing functions
 from collections import defaultdict
-from util import reverse_dict, unpack_and_reverse_dict, log, test
+from .util import reverse_dict, unpack_and_reverse_dict, log, test
 
 ######################################## accidentals
 

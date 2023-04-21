@@ -1,16 +1,14 @@
-import notes as notes
-from notes import Note, OctaveNote, NoteList
-from chords import AbstractChord, Chord, most_likely_chord, matching_chords
-from scales import Scale, Subscale
-from keys import Key, Subkey, matching_keys
-import parsing
-from util import log, test, auto_split
-from display import Fretboard
+from . import notes as notes
+from .notes import Note, OctaveNote, NoteList
+from .chords import AbstractChord, Chord, most_likely_chord, matching_chords
+from .scales import Scale, Subscale
+from .keys import Key, Subkey, matching_keys
+from . import parsing
+from .util import log, test, auto_split
+from .display import Fretboard
 import pdb
 
 class String(OctaveNote):
-    pass
-
     def __call__(self, fret):
         return self + fret
 

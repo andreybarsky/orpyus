@@ -1,12 +1,12 @@
 # new chord class with explicit factor recognition and compositional name generation/recognition
 
 # import notes
-from notes import Note, NoteList, chromatic_scale, relative_minors, relative_majors, sharp_minor_tonics, sharp_major_tonics, flat_minor_tonics, flat_major_tonics
-from intervals import Interval, IntervalList
-from util import log, test, precision_recall, rotate_list, check_all, auto_split, reverse_dict, unpack_and_reverse_dict
-import parsing
-import qualities
-from qualities import Quality, ChordQualifier, parse_chord_qualifiers
+from .notes import Note, NoteList, chromatic_scale, relative_minors, relative_majors, sharp_minor_tonics, sharp_major_tonics, flat_minor_tonics, flat_major_tonics
+from .intervals import Interval, IntervalList
+from .util import log, test, precision_recall, rotate_list, check_all, auto_split, reverse_dict, unpack_and_reverse_dict
+from . import parsing
+from . import qualities
+from .qualities import Quality, ChordQualifier, parse_chord_qualifiers
 
 from collections import defaultdict
 

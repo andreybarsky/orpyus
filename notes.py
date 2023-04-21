@@ -1,11 +1,11 @@
 # python library for handling musical notes, intervals, and chords
 
-from intervals import Interval, IntervalList
-import parsing
+from .intervals import Interval, IntervalList
+from . import parsing
 # from parsing import parsing.note_positions, preferred_note_names, parse_octavenote_name, is_flat, is_sharp, is_valid_note_name, parse_out_note_names
-import conversion as conv
+import .conversion as conv
 
-from util import log, test, rotate_list
+from .util import log, test, rotate_list
 
 import math
 import pdb

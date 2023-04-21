@@ -1,6 +1,6 @@
 # OOP representation of major/minor quality that is invertible and has a null (indeterminate) value
-from util import reverse_dict, unpack_and_reverse_dict, reduce_aliases, test, log
-from parsing import degree_names, is_valid_note_name, parse_alteration, accidental_offsets, offset_accidentals
+from .util import reverse_dict, unpack_and_reverse_dict, reduce_aliases, test, log
+from .parsing import degree_names, is_valid_note_name, parse_alteration, accidental_offsets, offset_accidentals
 
 import pdb
 
