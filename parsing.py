@@ -217,7 +217,13 @@ def parse_out_note_names(note_string, graceful_fail=False):
         if char in note_string:
             note_list = note_string.split(char)
             if len(note_list) >= 2:
-                return note_list
+                looks_valid = True
+                for note in note_list: # check if everything that has been split out looks like a note
+                    if not is_valid_note_name(note):
+                        looks_valid = False
+                        break
+                if looks_valid:
+                    return note_list
             # otherwise continue trying to split the string into notes as normal
 
     # use recursive note_split to break the string apart note-by-note:
@@ -232,7 +238,10 @@ def parse_out_note_names(note_string, graceful_fail=False):
                 raise ValueError(f'Error while parsing out note names from {note_string}: No valid note names found in {rest} (note names found so far: {note_list})')
 
         note_name, rest = result
-        note_list.append(note_name)
+        if is_valid_note_name(note_name):
+            note_list.append(note_name)
+        else:
+            raise Exception(f'Tried to parse out note names from string: {note_string}, but got invalid note name: {note_name}')
     return note_list
 
 def parse_out_integers(integers, expected_len=None):

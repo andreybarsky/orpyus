@@ -109,7 +109,10 @@ class Key(Scale):
             prefer_sharps = self._detect_sharp_preference()
 
         self.tonic._set_sharp_preference(prefer_sharps)
-        # flat/sharp preference of a Key is decided by having one note letter per degree of the scale:
+        # by default, the Key's prefer_sharps attribute is the same as the tonic:
+        self.prefer_sharps = prefer_sharps
+
+        # but in general, flat/sharp preference of a Key is decided by having one note letter per degree of the scale:
 
         if self.is_natural or self.is_subscale:
             # computation not needed for non-natural scales; and no idea how to handle subscales yet

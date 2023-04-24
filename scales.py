@@ -389,9 +389,9 @@ class Scale:
     def on_tonic(self, tonic):
         """returns a Key object corresponding to this Scale built on a specified tonic"""
         if isinstance(tonic, str):
-            tonic = Note(tonic)
+            tonic = notes.Note(tonic)
         # lazy import to avoid circular dependencies:
-        from keys import Key
+        from .keys import Key
         return Key(intervals=self.intervals, tonic=tonic)
 
     def chords(self, order=3):
@@ -926,7 +926,7 @@ subscale_name_intervals = unpack_and_reverse_dict(interval_subscale_names)
 ######################
 
 def unit_test():
-    from chords import AbstractChord
+    from .chords import AbstractChord
     # test mode retrieval by name:
     test(mode_name_intervals['natural major'], get_modes('natural major')[1])
 
