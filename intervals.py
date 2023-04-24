@@ -1,7 +1,7 @@
-from qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
-from parsing import degree_names, num_suffixes, offset_accidentals
-from util import rotate_list, least_common_multiple, euclidean_gcd, test
-from conversion import value_to_pitch
+from .qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
+from .parsing import degree_names, num_suffixes, offset_accidentals
+from .util import rotate_list, least_common_multiple, euclidean_gcd, test
+from .conversion import value_to_pitch
 import math
 import pdb
 
@@ -350,6 +350,7 @@ class Interval:
             short_deg = f'{self.extended_degree}'
             return f'‹{sign_str}{self.quality.short_name}{short_deg}›'
 
+<<<<<<< HEAD
     # alternate str method:
     @property
     def factor_name(self):
@@ -357,6 +358,17 @@ class Interval:
         acc = offset_accidentals[self.offset_from_default][0]
         sign_str = '' if self.sign == 1 else '-'
         return f'{sign_str}{acc}{self.extended_degree}'
+=======
+    @property
+    def factor_name(self):
+        if self.value == 0:
+            return '1'
+        else:
+            sign_str = '-' if self.sign == -1 else ''
+            short_deg = f'{self.extended_degree}'
+            accidental = offset_accidentals[self.offset_from_default][0]
+            return f'{sign_str}{accidental}{short_deg}'
+>>>>>>> development
 
     def __str__(self):
         return f'‹{self.value}:{self.name}›'
@@ -400,6 +412,11 @@ class IntervalList(list):
 
     def __repr__(self):
         return str(self)
+
+    @property
+    def as_factors(self):
+        # alternate string method, reports raised/lowered factor integers instead of major/minor/perfect degrees
+        return [iv.factor_name for iv in self]
 
     def __add__(self, other):
         """adds a scalar to each interval in this list,

@@ -1,9 +1,9 @@
-from intervals import Interval, IntervalList
-from notes import Note, NoteList, sharp_major_tonics, sharp_minor_tonics, flat_major_tonics, flat_minor_tonics, relative_majors, relative_minors
-from scales import Scale, Subscale, interval_mode_names
-from chords import Chord, AbstractChord
-import parsing
-from util import check_all, precision_recall, test, log
+from .intervals import Interval, IntervalList
+from .notes import Note, NoteList, sharp_major_tonics, sharp_minor_tonics, flat_major_tonics, flat_minor_tonics, relative_majors, relative_minors
+from .scales import Scale, Subscale, interval_mode_names, parallels
+from .chords import Chord, AbstractChord
+from . import parsing
+from .util import check_all, precision_recall, reverse_dict, test, log
 
 from collections import Counter
 import pdb
@@ -50,10 +50,16 @@ class Key(Scale):
         # we don't store the unison interval in .interval attr, because of mode rotation
         padded_intervals = [Interval(0)] + self.diatonic_intervals
         self.note_intervals = {self.notes[i]: padded_intervals[i] for i in range(7)}
-        self.interval_notes = {padded_intervals[i]: self.notes[i] for i in range(7)}
+        self.interval_notes = reverse_dict(self.note_intervals)
+        # self.interval_notes = {padded_intervals[i]: self.notes[i] for i in range(7)}
 
         self.degree_notes = {d: self.notes[d-1] for d in range(1,8)}
-        self.note_degrees = {self.notes[d-1]: d for d in range(1,8)}
+        self.note_degrees = reverse_dict(self.degree_notes)
+        # self.note_degrees = {self.notes[d-1]: d for d in range(1,8)}
+
+        # these are the same for Key objects, but may differ for Subkeys:
+        self.base_degree_notes = self.degree_notes
+        self.note_base_degrees = self.note_degrees
 
         # used only for Keys with strange chromatic notes not built on integer degrees, like blues notes
         if self.chromatic_intervals is not None:
@@ -86,8 +92,8 @@ class Key(Scale):
         return tonic, scale_name
 
     def _detect_sharp_preference(self, default=False):
-        """detect if a chord should prefer sharp or flat labelling
-        depending on its tonic and quality"""
+        """detect if this key's tonic note should prefer sharp or flat labelling
+        depending on its chroma and quality"""
         if (self.quality.major and self.tonic in sharp_major_tonics) or (self.quality.minor and self.tonic in sharp_minor_tonics):
             return True
         elif (self.quality.major and self.tonic in flat_major_tonics) or (self.quality.minor and self.tonic in flat_minor_tonics):
@@ -99,13 +105,43 @@ class Key(Scale):
         """set the sharp preference of this Key,
         and of all notes inside this Key"""
         if prefer_sharps is None:
-            # detect from object attributes
+            # detect from tonic and quality
             prefer_sharps = self._detect_sharp_preference()
 
-        self.prefer_sharps = prefer_sharps
         self.tonic._set_sharp_preference(prefer_sharps)
-        for n in self.notes:
-            n._set_sharp_preference(prefer_sharps)
+        # by default, the Key's prefer_sharps attribute is the same as the tonic:
+        self.prefer_sharps = prefer_sharps
+
+        # but in general, flat/sharp preference of a Key is decided by having one note letter per degree of the scale:
+
+        if self.is_natural or self.is_subscale:
+            # computation not needed for non-natural scales; and no idea how to handle subscales yet
+            # just assign same sharp preference as tonic to every note:
+            for n in self.notes:
+                n._set_sharp_preference(prefer_sharps)
+
+        else:
+            # compute flat/sharp preference by assigning one note to each natural note name
+            tonic_nat = self.tonic.chroma[0] # one of the few cases where note sharp preference matters
+            next_nat = parsing.next_natural_note[tonic_nat]
+            for d in range(2,8):
+                n = self.degree_notes[d]
+                if n.name == next_nat:
+                    # this is a natural note, so its sharp preference shouldn't matter,
+                    # but set it to the tonic's anyway for consistency
+                    n._set_sharp_preference(prefer_sharps)
+                else:
+                    # which accidental would make this note's chroma include the next natural note?
+                    if n.flat_name[0] == next_nat:
+                        n._set_sharp_preference(False)
+                    elif n.sharp_name[0] == next_nat:
+                        n._set_sharp_preference(True)
+                    else:
+                        # this note needs to be a double sharp or double flat or something
+                        log(f'Found a possible case for a double-sharp or double-flat: degree {d} ({n}) in scale: {self}')
+                        # fall back on same as tonic:
+                        n._set_sharp_preference(prefer_sharps)
+                next_nat = parsing.next_natural_note[next_nat]
 
 
     @property
@@ -165,53 +201,66 @@ class Key(Scale):
     def counterclockwise(self, value=1):
         return self.clockwise(-value)
 
+    def rotate(self, mode):
+        """rotates this Key to produce another mode of this Key's base scale, on the same tonic"""
+        rotated_scale = Scale.rotate(self, mode)
+        rotated_key = rotated_scale.on_tonic(self.tonic)
+        return rotated_key
+
+    # @property
+    # def modes(self):
+    #     return [self.rotate(m) for m in range(1,8)]
+
+    # return all the modes of this scale, starting from wherever it is:
+    @property
+    def parallel_modes(self):
+        """the 'parallel' modes of a Key are all its modes that start on the same tonic"""
+        return [self.rotate(m) for m in range(1,8)]
+
+    @property
+    def modes(self):
+        """the modes of a Key are the relative keys that share its notes but start on a different tonic
+        i.e. modes of C major are D dorian, E phrygian, etc."""
+        return [Key(notes=Key('C').notes.rotate(i)) for i in range(1,8)]
+
     def subscale(self, degrees=None, omit=None, chromatic_intervals=None, name=None):
         """as Scale.subscale, but adds this key's tonic as well and initialises a Subkey instead"""
         return Subkey(parent_scale=self, degrees=degrees, omit=omit, chromatic_intervals=chromatic_intervals, assigned_name=name, tonic=self.tonic) # [self[s] for s in degrees]
 
 
-    # @property
-    # def pentatonic(self):
-    #     """returns the pentatonic subscale of the natural major or minor scales.
-    #     will function for other scales, though is not well-defined."""
-    #     if self.quality.major and self.is_natural:
-    #         return self.subscale(degrees=[1,2,3,5,6])
-    #     elif self.quality.minor and self.is_natural:
-    #         return self.subscale(degrees=[1,3,4,5,7])
-    #     else:
-    #         ordered_pent_scales = self.compute_pentatonics()
-    #         preferred = list(ordered_pent_scales.keys())[0]
-    #         return self.subscale(omit=preferred.omit, name=f'{self.name} pentatonic')
+    @property
+    def parallel_minor(self):
+        if not self.quality.major:
+            raise Exception(f'{self.name} is not major, and therefore has no parallel minor')
 
 
     @property
     def relative_minor(self):
         # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
         assert self.quality.major, f'{self} is not major, and therefore has no relative minor'
-
         rel_tonic = relative_minors[self.tonic.name]
-        if self.rotation == 1: # i.e. not a mode
+        if self.rotation == 1 or 'major' in self.scale_name: # i.e. not a mode
             rel_scale = self.scale_name.replace('major', 'minor') # a kludge but it works
             return Key(rel_scale, tonic=rel_tonic)
         else:
-            raise Exception('figure out what to do here - what are the relative minors/majors of non-natural scales?')
-            # just try lowering the third and see what happens
-            rel_intervals = IntervalList([i for i in self.intervals])
-            rel_intervals[1] = Interval(rel_intervals[1]-1, degree=rel_intervals[1].degree)
-            return Key(tonic=rel_tonic, intervals=rel_intervals)
+            raise Exception('Relative major/minor not defined for non-natural Keys')
+            # figure out what to do here - what are the relative minors/majors of non-natural scales?
+            # just try lowering the third and see what happens?
+            # rel_intervals = IntervalList([i for i in self.intervals])
+            # rel_intervals[1] = Interval(rel_intervals[1]-1, degree=rel_intervals[1].degree)
+            # return Key(tonic=rel_tonic, intervals=rel_intervals)
 
-        # new_factors = ChordFactors(self.factors)
-        # new_factors[3] -= 1 # flatten third
-        # return Chord(factors=new_factors, root=rel_root, inversion=self.inversion)
+    @property
+    def relative_major(self):
+        # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
+        assert self.quality.minor, f'{self} is not minor, and therefore has no relative major'
+        rel_tonic = relative_majors[self.tonic.name]
+        if self.rotation == 1 or 'minor' in self.scale_name: # i.e. not a mode
+            rel_scale = self.scale_name.replace('minor', 'major') # a kludge but it works
+            return Key(rel_scale, tonic=rel_tonic)
+        else:
+            raise Exception('Relative major/minor not defined for non-natural Keys')
 
-    # @property
-    # def relative_major(self):
-    #     # assert not self.major, f'{self} is already major, and therefore has no relative major'
-    #     assert self.quality.minor, f'{self} is not minor, and therefore has no relative major'
-    #     rel_root = relative_majors[self.tonic.name]
-    #     new_factors = ChordFactors(self.factors)
-    #     new_factors[3] += 1 # raise third
-    #     return Chord(factors=new_factors, root=rel_root, inversion=self.inversion)
 
     @property
     def relative(self):
@@ -220,16 +269,25 @@ class Key(Scale):
         elif self.quality.minor:
             return self.relative_major
         else:
-            raise Exception(f'Chord {self} is neither major or minor, and therefore has no relative')
+            raise Exception(f'Key of {self.name} is neither major or minor, and therefore has no relative')
 
-    # def __invert__(self):
-    #     """~ operator returns the relative major/minor of a key"""
-    #     if self.major:
-    #         return self.relative_minor
-    #     elif self.minor:
-    #         return self.relative_major
-    #     else:
-    #         return self
+    @property
+    def parallel_minor(self):
+        if self.quality.major and self.is_natural:
+            return
+
+    @property
+    def parallel(self):
+        if self.quality.major and self.is_natural:
+            return self.parallel_minor
+        elif self.quality.minor and self.is_natural:
+            return self.parallel_major
+        else:
+            raise Exception('Parallel major/minor not defined for non-natural Keys')
+
+    def __invert__(self):
+        """~ operator returns the parallel major/minor of a key"""
+        return self.parallel
 
     def __contains__(self, item):
         """if item is an Interval, does it fit in our list of degree-intervals plus chromatic-intervals?
@@ -266,9 +324,9 @@ class Key(Scale):
         return hash((self.notes, self.diatonic_intervals, self.intervals, self.chromatic_intervals))
 
     def play(self, *args, **kwargs):
-        # add an octave over the top for playback:
-        full_notes = NoteList(list(self.notes) + [self.tonic])
-        full_notes.play(*args, **kwargs)
+        # plays the notes in this key (we also add an octave over root on top for resolution)
+        played_notes = NoteList([n for n in self.notes] + [self.tonic])
+        played_notes.play(*args, **kwargs)
 
 
 class Subkey(Key, Subscale):
@@ -279,9 +337,14 @@ class Subkey(Key, Subscale):
         # get correct tonic and scale name from (key_name, tonic) input args:
         self.tonic, subscale_name = self._parse_tonic(subscale_name, tonic)
 
+
+
         # as Subscale.init:
         super(Key, self).__init__(subscale_name, parent_scale, degrees, omit, chromatic_intervals, assigned_name)
-        # (this sets self.base_scale, .quality, .intervals, .diatonic_intervals, .chromatic_intervals, .rotation)
+        # (this sets self.base_scale_name, .quality, .intervals, .diatonic_intervals, .chromatic_intervals, .rotation)
+
+        self.base_degree_notes = {d:self.tonic + iv for d,iv in self.base_degree_intervals.items()}
+        self.note_base_degrees = reverse_dict(self.base_degree_notes)
 
         # set Subkey-specific attributes: notes, degree_notes, etc.
         # as in Key.init:
@@ -290,8 +353,8 @@ class Subkey(Key, Subscale):
         self.diatonic_note_intervals = {self.diatonic_notes[i]: padded_diatonic_intervals[i] for i in range(len(self.diatonic_notes))}
         self.diatonic_interval_notes = {padded_diatonic_intervals[i]: self.diatonic_notes[i] for i in range(len(self.diatonic_notes))}
 
-        self.degree_notes = {d: self.diatonic_notes[d-1] for d in range(len(self.degree_intervals))}
-        self.note_degrees = {self.diatonic_notes[d-1]: d for d in range(len(self.degree_intervals))}
+        self.degree_notes = {d+1: self.diatonic_notes[d] for d in range(len(self.degree_intervals))}
+        self.note_degrees = {self.diatonic_notes[d]: d+1 for d in range(len(self.degree_intervals))}
 
         # TBI: this could use refactoring? no need to pad if we can just append/update dicts
 
@@ -305,8 +368,15 @@ class Subkey(Key, Subscale):
             self.chromatic_notes = NoteList([self.tonic + i for i in self.chromatic_intervals])
             # self.diatonic_notes = NoteList([self.tonic + i for i in self.diatonic_intervals.pad()])
 
+        # take the tonic out of assigned name if one has been given:
+        if assigned_name is not None:
+            _, assigned_name = self._parse_tonic(assigned_name, None)
+            self.assigned_name = assigned_name
+
         # update this Subkey's notes to prefer sharps/flats depending on its tonic (and maj/min/null quality):
+        self.is_natural = False
         self._set_sharp_preference()
+        assert self.is_subscale
 
     @property
     def name(self):
@@ -323,10 +393,9 @@ class Subkey(Key, Subscale):
 
 
 
-def matching_keys(chord_list=None, note_list=None, display=True,
+def matching_keys(chord_list=None, note_list=None, display=True, return_matches=False,
                     assume_tonic=False, require_tonic=True,
-                    upweight_roots=True,
-                    # upweight_third=True, downweight_fifth=True,
+                    upweight_chord_roots=True, upweight_key_tonics=True, upweight_pentatonics=False, # upweight_pentatonics might be broken
                     min_recall=0.8, min_precision=0.7, min_likelihood=0.5, max_results=5):
     """from an unordered set of chords, return a dict of candidate keys that could match those chord.
     we make no assumptions about the chord list, except in the case of assume_tonic, where we slightly
@@ -346,7 +415,7 @@ def matching_keys(chord_list=None, note_list=None, display=True,
 
         for chord in chord_list:
             note_counts.update(chord.notes)
-            if upweight_roots:
+            if upweight_chord_roots:
                 # increase the weight of the root note too:
                 note_counts.update([chord.root])
 
@@ -358,6 +427,8 @@ def matching_keys(chord_list=None, note_list=None, display=True,
         # just use notes directly
         note_list = NoteList(note_list)
         note_counts = Counter(note_list)
+        if assume_tonic:
+            note_counts.update([note_list[0]])
     else:
         raise Exception(f'matching_keys requires one of: chord_list or note_list')
 
@@ -381,10 +452,20 @@ def matching_keys(chord_list=None, note_list=None, display=True,
         for intervals, mode_names in interval_mode_names.items():
             candidate_notes = [t] + [t + i for i in intervals]
 
-            precision, recall = precision_recall(unique_notes, candidate_notes, weights=note_counts)
+            # initialise candidate object:
+            # (this can be removed for a fast method; it's mostly for upweighting key fifths)
+            candidate = Key(notes=candidate_notes)
+            this_cand_weights = dict(note_counts)
+            if upweight_key_tonics:
+                # count the key's tonic once more, because it's super important
+                this_cand_weights.update({candidate.tonic: 1})
+            if upweight_pentatonics:
+                # count the notes in this key's *pentatonic* scale as extra:
+                this_cand_weights.update({n:1 for n in candidate.pentatonic.notes})
+
+            precision, recall = precision_recall(unique_notes, candidate_notes, weights=this_cand_weights)
 
             if recall >= min_recall and precision >= min_precision:
-                candidate = Key(notes=candidate_notes)
 
                 likelihood = candidate.likelihood
                 consonance = candidate.consonance
@@ -410,6 +491,8 @@ def matching_keys(chord_list=None, note_list=None, display=True,
             title = [f"Key matches for chords: {', '.join([c.name for c in chord_list])}"]
             if assume_tonic:
                 title.append(f'(upweighted first and last chords: {chord_list[0].name}, {chord_list[-1].name})')
+            if upweight_pentatonics:
+                title.append('(and upweighted pentatonics)')
         elif note_list is not None:
             title = [f"Key matches for notes: {', '.join([n.name for n in note_list])}"]
 
@@ -442,7 +525,7 @@ def matching_keys(chord_list=None, note_list=None, display=True,
             scores = f' {str(prec):{hspace}} {str(lik):{hspace}}  {str(rec):{hspace}}  {cons:.03f}'
             out_list.append(descriptor + scores)
         print('\n'.join(out_list))
-    else:
+    if return_matches:
         return {c: candidates[c] for c in sorted_cands}
 
 
@@ -474,9 +557,9 @@ def unit_test():
     # or not:
     test(Chord('Fmmaj11') in Key('C'), False)
 
-    matching_keys(['C', Chord('F'), 'G7', 'Bdim'])
+    matching_keys(['C', Chord('F'), 'G7', 'Bdim'], upweight_pentatonics=False)
 
-    matching_keys(['Dm', 'Dsus4', 'Am', 'Asus4', 'E', 'E7', 'Asus4', 'Am7'], assume_tonic=True)
+    matching_keys(['Dm', 'Dsus4', 'Am', 'Asus4', 'E', 'E7', 'Asus4', 'Am7'], assume_tonic=True, upweight_pentatonics=True)
 
 
 if __name__ == '__main__':

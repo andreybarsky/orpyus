@@ -1,11 +1,11 @@
 # python library for handling musical notes, intervals, and chords
 
-from intervals import Interval, IntervalList
-import parsing
+from .intervals import Interval, IntervalList
+from . import parsing
 # from parsing import parsing.note_positions, preferred_note_names, parse_octavenote_name, is_flat, is_sharp, is_valid_note_name, parse_out_note_names
-import conversion as conv
+from . import conversion as conv
 
-from util import log, test, rotate_list
+from .util import log, test, rotate_list
 
 import math
 import pdb
@@ -254,12 +254,12 @@ class OctaveNote(Note):
                 where the reference note A4 is 440 Hz"""
 
         # set main object attributes from init args:
-        self.chroma, self.value, self.pitch = self._parse_input(name, value, pitch, prefer_sharps)
+        self.chroma, self.value, self.pitch, self.prefer_sharps = self._parse_input(name, value, pitch, prefer_sharps)
         # compute octave, position, and name:
         self.octave, self.position = conv.oct_pos(self.value)
         self.name = f'{self.chroma}{self.octave}'
 
-        self.prefer_sharps = prefer_sharps
+        # self.prefer_sharps = prefer_sharps
 
     #### main input/arg-parsing private method:
     @staticmethod
@@ -271,7 +271,7 @@ class OctaveNote(Note):
 
         # accept OctaveNote as input, instantiate a new one with the same properties:
         if isinstance(name, OctaveNote):
-            return name.chroma, name.value, name.pitch
+            return name.chroma, name.value, name.pitch, name.prefer_sharps
         # accept Note as well:
         elif isinstance(name, Note):
             name = name.name
@@ -290,6 +290,19 @@ class OctaveNote(Note):
         ### the following block defines: chroma, value, and pitch
         if name is not None:
             log(f'Initialising OctaveNote with name: {name}')
+
+            # detect if sharp or flat:
+            if prefer_sharps is None:
+                # if no preference is set then we infer from the name argument supplied
+                if parsing.is_sharp_ish(name[1:-1]):
+                    prefer_sharps = True
+                elif parsing.is_flat_ish(name[1:-1]):  # len(name) == 2 and
+                    prefer_sharps = False
+                else: # fallback on global default
+                    prefer_sharps = False
+            else:
+                prefer_sharps = prefer_sharps
+
             chroma, octave = parsing.parse_octavenote_name(name)
             position = parsing.note_positions[chroma]
             value = conv.oct_pos_to_value(octave, position)
@@ -307,7 +320,7 @@ class OctaveNote(Note):
             value = conv.pitch_to_value(pitch, nearest=True)
             octave, position = conv.oct_pos(value)
             chroma = preferred_name(position, prefer_sharps=prefer_sharps)
-        return chroma, value, pitch
+        return chroma, value, pitch, prefer_sharps
 
     ## private utility function:
     def _set_sharp_preference(self, preference):
@@ -509,7 +522,7 @@ class NoteList(list):
                 raise e
         else:
             # we've been passed a series of items that we can unpack
-            note_items = self._cast_notes(items)
+            note_items = self._cast_notes(items, strip_octave=strip_octave)
 
         super().__init__(note_items)
 
@@ -679,11 +692,11 @@ class NoteList(list):
     def matching_chords(self, *args, **kwargs):
         """wrapper for chords.matching_chords function: displays or returns
         a listing of the possible chords that fit these (unordered) notes"""
-        import chords
+        from . import chords
         return chords.matching_chords(self, *args, **kwargs)
 
     def most_likely_chord(self, *args, **kwargs):
-        import chords
+        from . import chords
         return chords.most_likely_chord(self, *args, **kwargs)
 
     def _waves(self, duration, octave, type, falloff=False):
@@ -785,7 +798,7 @@ def unit_test():
     test(Note('E𝄫'), Note('C##'))
 
     # test matching chords:
-    test(NoteList('CEG').most_likely_chord()[0].intervals, IntervalList(0,4,7))
+    test(NoteList('CEG').most_likely_chord().intervals, IntervalList(0,4,7))
 
 if __name__ == '__main__':
     unit_test()

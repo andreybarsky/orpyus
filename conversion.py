@@ -1,4 +1,4 @@
-from parsing import is_accidental, parse_accidental
+from .parsing import is_accidental, parse_accidental
 import math
 
 #### name-value-pitch conversion functions for OctaveNotes

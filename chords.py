@@ -1,12 +1,12 @@
 # new chord class with explicit factor recognition and compositional name generation/recognition
 
 # import notes
-from notes import Note, NoteList, chromatic_scale, relative_minors, relative_majors, sharp_minor_tonics, sharp_major_tonics, flat_minor_tonics, flat_major_tonics
-from intervals import Interval, IntervalList
-from util import log, test, precision_recall, rotate_list, check_all, auto_split, reverse_dict, unpack_and_reverse_dict
-import parsing
-import qualities
-from qualities import Quality, ChordQualifier, parse_chord_qualifiers
+from .notes import Note, NoteList, chromatic_scale, relative_minors, relative_majors, sharp_minor_tonics, sharp_major_tonics, flat_minor_tonics, flat_major_tonics
+from .intervals import Interval, IntervalList
+from .util import log, test, precision_recall, rotate_list, check_all, auto_split, reverse_dict, unpack_and_reverse_dict
+from . import parsing
+from . import qualities
+from .qualities import Quality, ChordQualifier, parse_chord_qualifiers
 
 from collections import defaultdict
 
@@ -590,11 +590,12 @@ class Chord(AbstractChord):
 
         # mapping of chord factors to intervals from tonic:
         self.factor_intervals = {i.extended_degree: i for i in self.root_intervals}
+        self.interval_factors = reverse_dict(self.factor_intervals)
         # mapping of chord factors to notes:
         self.factor_notes = {degree: (self.root + i) for degree, i in self.factor_intervals.items()}
+        self.note_factors = reverse_dict(self.factor_notes)
 
         # list of notes inside this chord, in root position:
-        # self.root_notes = NoteList([self.root + i for i in self.root_intervals])
         self.root_notes = NoteList(self.factor_notes.values())
 
         # discover the correct inversion parameters, as well as inverted notes / intervals if they differ from root position:
@@ -883,9 +884,11 @@ class Chord(AbstractChord):
     def relative_minor(self):
         # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
         assert self.quality.major, f'{self} is not major, and therefore has no relative minor'
-        rel_root = relative_majors[self.root.name]
+        rel_root = relative_minors[self.root.name]
         new_factors = ChordFactors(self.factors)
         new_factors[3] -= 1 # flatten third
+        if 5 in self.factors: # if fifth is aug/dim, make it dim/aug
+            new_factors[5] = -self.factors[5]
         return Chord(factors=new_factors, root=rel_root, inversion=self.inversion)
 
     @property
@@ -895,6 +898,8 @@ class Chord(AbstractChord):
         rel_root = relative_majors[self.root.name]
         new_factors = ChordFactors(self.factors)
         new_factors[3] += 1 # raise third
+        if 5 in self.factors: # if fifth is aug/dim, make it dim/aug
+            new_factors[5] = -self.factors[5]
         return Chord(factors=new_factors, root=rel_root, inversion=self.inversion)
 
     @property
@@ -905,6 +910,39 @@ class Chord(AbstractChord):
             return self.relative_major
         else:
             raise Exception(f'Chord {self} is neither major or minor, and therefore has no relative')
+
+    @property
+    def parallel_minor(self):
+        if not self.quality.major_ish:
+            raise Exception(f'{self} is not major, and therefore has no parallel minor')
+        new_factors = ChordFactors(self.factors)
+        new_factors[3] -= 1 # flatten third
+        if 5 in self.factors: # if fifth is aug/dim, make it dim/aug
+            new_factors[5] = -self.factors[5]
+        return Chord(factors=new_factors, root=self.root, inversion=self.inversion)
+
+    @property
+    def parallel_major(self):
+        if not self.quality.minor_ish:
+            raise Exception(f'{self} is not minor, and therefore has no parallel major')
+        new_factors = ChordFactors(self.factors)
+        new_factors[3] += 1 # raise third
+        if 5 in self.factors: # if fifth is aug/dim, make it dim/aug
+            new_factors[5] = -self.factors[5]
+        return Chord(factors=new_factors, root=self.root, inversion=self.inversion)
+
+    @property
+    def parallel(self):
+        if self.quality.major:
+            return self.parallel_minor
+        elif self.quality.minor:
+            return self.parallel_major
+        else:
+            raise Exception(f'Chord {self} is neither major or minor, and therefore has no parallel')
+
+    def __neg__(self):
+        """returns the parallel major or minor (using negation operator '-')"""
+        return self.parallel
 
     def __invert__(self):
         """returns the relative major or minor (using inversion operator '~')"""
@@ -1285,6 +1323,11 @@ def unit_test(verbose=False):
 
     # test magic methods: transposition:
     test(Chord('Caug7') + Interval(4), Chord('Eaug7'))
+
+    # parallels and relatives:
+    test(Chord('C').parallel, Chord('Cm'))
+    test(Chord('C').relative, Chord('Am'))
+    test(~Chord('Caug'), Chord('Adim'))
 
     # test chord membership:
     test(4 in AbstractChord('sus4'), True)
