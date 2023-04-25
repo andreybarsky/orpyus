@@ -393,27 +393,28 @@ class Subkey(Key, Subscale):
 
 
 
-def matching_keys(chord_list=None, note_list=None, display=True, return_matches=False,
+def matching_keys(chords=None, notes=None, exclude=None,
+                    display=True, return_matches=False,
                     assume_tonic=False, require_tonic=True,
                     upweight_chord_roots=True, upweight_key_tonics=True, upweight_pentatonics=False, # upweight_pentatonics might be broken
                     min_recall=0.8, min_precision=0.7, min_likelihood=0.5, max_results=5):
     """from an unordered set of chords, return a dict of candidate keys that could match those chord.
     we make no assumptions about the chord list, except in the case of assume_tonic, where we slightly
-    privilege keys that have their tonic on the root of the starting chord in chord_list."""
+    privilege keys that have their tonic on the root of the starting chord in chord list."""
 
     # TBI: if this needs to be made faster, could we check across all Scale intervals, rather than across all Key notes?
 
-    if chord_list is not None:
-        assert isinstance(chord_list, (list, tuple)), f'chord_list input to matching_keys must be an iterable, but got: {type(chord_list)}'
-        chord_list = [Chord(c) if isinstance(c, str) else c for c in chord_list]
+    if chords is not None:
+        assert isinstance(chords, (list, tuple)), f'chord list input to matching_keys must be an iterable, but got: {type(chords)}'
+        chords = [Chord(c) if isinstance(c, str) else c for c in chords]
 
-        assert check_all(chord_list, 'isinstance', Chord), f"chord_list input to matching_keys must be a list of Chords (or strings that cast to Chords), but got: {[type(c)] for c in chord_list}"
+        assert check_all(chords, 'isinstance', Chord), f"chord list input to matching_keys must be a list of Chords (or strings that cast to Chords), but got: {[type(c) for c in chords]}"
 
-        # keep track of the number of times each note appears in our chord_list,
+        # keep track of the number of times each note appears in our chord list,
         # which will be the item weights to our precision_recall function:
         note_counts = Counter()
 
-        for chord in chord_list:
+        for chord in chords:
             note_counts.update(chord.notes)
             if upweight_chord_roots:
                 # increase the weight of the root note too:
@@ -421,59 +422,73 @@ def matching_keys(chord_list=None, note_list=None, display=True, return_matches=
 
         if assume_tonic:
             # upweight all the notes of the first and last chord
-            note_counts.update(chord_list[0].notes)
-            note_counts.update(chord_list[-1].notes)
-    elif note_list is not None:
+            note_counts.update(chords[0].notes)
+            note_counts.update(chords[-1].notes)
+    elif notes is not None:
         # just use notes directly
-        note_list = NoteList(note_list)
-        note_counts = Counter(note_list)
+        notes = NoteList(notes)
+        note_counts = Counter(notes)
         if assume_tonic:
-            note_counts.update([note_list[0]])
+            note_counts.update([notes[0]])
     else:
-        raise Exception(f'matching_keys requires one of: chord_list or note_list')
+        raise Exception(f'matching_keys requires one list of either: chords or notes')
 
+    if exclude is None:
+        exclude = [] # but should be a list of Note objects
+    elif exclude is not None:
+        assert isinstance(exclude[0], (str, Note)), "Objects to exclude must be Notes, or strings that cast to notes"
+        exclude = NoteList(exclude)
 
     unique_notes = list(note_counts.keys())
+
+    # set min precision to be at least the fraction of unique notes that have been given
+    min_precision = min([min_precision, len(unique_notes) / 7]) # at least the fraction of unique notes that have been given
 
     candidates = {} # we'll build a list of Key object candidates as we go
     # keying candidate Key objs to (rec, prec, likelihood, consonance) tuples
 
     if require_tonic:
-        # we only try building scales with their tonic on a root or bass of a chord in the chord_list
-        if chord_list is not None:
-            candidate_tonics = list(set([c.root for c in chord_list] + [c.bass for c in chord_list]))
+        # we only try building scales with their tonic on a root or bass of a chord in the chord list
+        if chords is not None:
+            candidate_tonics = list(set([c.root for c in chords] + [c.bass for c in chords]))
         else: # or the first note in the note list
-            candidate_tonics = [note_list[0]]
+            candidate_tonics = [notes[0]]
     else:
-        # we try building keys on any note that occurs in the chord_list:
+        # we try building keys on any note that occurs in the chord list:
         candidate_tonics = unique_notes
 
     for t in candidate_tonics:
         for intervals, mode_names in interval_mode_names.items():
             candidate_notes = [t] + [t + i for i in intervals]
 
-            # initialise candidate object:
-            # (this can be removed for a fast method; it's mostly for upweighting key fifths)
-            candidate = Key(notes=candidate_notes)
-            this_cand_weights = dict(note_counts)
-            if upweight_key_tonics:
-                # count the key's tonic once more, because it's super important
-                this_cand_weights.update({candidate.tonic: 1})
-            if upweight_pentatonics:
-                # count the notes in this key's *pentatonic* scale as extra:
-                this_cand_weights.update({n:1 for n in candidate.pentatonic.notes})
+            does_not_contain_exclusions = True
+            for exc in exclude:
+                if exc in candidate_notes:
+                    does_not_contain_exclusions = False
+                    break
+            if does_not_contain_exclusions:
+                # initialise candidate object:
+                # (this can be removed for a fast method; it's mostly for upweighting key fifths)
+                candidate = Key(notes=candidate_notes)
+                this_cand_weights = dict(note_counts)
+                if upweight_key_tonics:
+                    # count the key's tonic once more, because it's super important
+                    this_cand_weights.update({candidate.tonic: 1})
+                if upweight_pentatonics:
+                    # count the notes in this key's *pentatonic* scale as extra:
+                    this_cand_weights.update({n:1 for n in candidate.pentatonic.notes})
 
-            precision, recall = precision_recall(unique_notes, candidate_notes, weights=this_cand_weights)
+                precision, recall = precision_recall(unique_notes, candidate_notes, weights=this_cand_weights)
 
-            if recall >= min_recall and precision >= min_precision:
+                if recall >= min_recall and precision >= min_precision:
 
-                likelihood = candidate.likelihood
-                consonance = candidate.consonance
-                if likelihood >= min_likelihood:
-                    candidates[candidate] = {'precision': round(precision, 2),
-                                            'likelihood': round(likelihood,2),
-                                                'recall': round(recall,    2),
-                                            'consonance': round(consonance,3)}
+                    likelihood = candidate.likelihood
+                    consonance = candidate.consonance
+                    if likelihood >= min_likelihood:
+                        candidates[candidate] = {'precision': round(precision, 2),
+                                                'likelihood': round(likelihood,2),
+                                                    'recall': round(recall,    2),
+                                                'consonance': round(consonance,3)}
 
 
     # return sorted candidates dict: (note that unlike in matching_chords we sort by precision rather than recall first)
@@ -487,14 +502,14 @@ def matching_keys(chord_list=None, note_list=None, display=True, return_matches=
 
     if display:
         # print result as nice dataframe instead of returning a dict
-        if chord_list is not None:
-            title = [f"Key matches for chords: {', '.join([c.name for c in chord_list])}"]
+        if chords is not None:
+            title = [f"Key matches for chords: {', '.join([c.name for c in chords])}"]
             if assume_tonic:
-                title.append(f'(upweighted first and last chords: {chord_list[0].name}, {chord_list[-1].name})')
+                title.append(f'(upweighted first and last chords: {chords[0].name}, {chords[-1].name})')
             if upweight_pentatonics:
                 title.append('(and upweighted pentatonics)')
-        elif note_list is not None:
-            title = [f"Key matches for notes: {', '.join([n.name for n in note_list])}"]
+        elif notes is not None:
+            title = [f"Key matches for notes: {', '.join([n.name for n in notes])}"]
 
         title = ' '.join(title)
         print(title)

@@ -559,7 +559,9 @@ class Chord(AbstractChord):
         # if prefer_sharps is not given, we parse the name to see if we've been asked for it:
         if prefer_sharps is None and isinstance(name, str):
             # have we been given the name of a tonic note with a sharp in it?
-            prefer_sharps = ('#' in name[1:3])
+            if '#' in name[1:3]:
+                # prefer_sharps = ('#' in name[1:3])
+                prefer_sharps = True
 
         # re-parse args to detect if 'name' is a list of notes, a list of intervals, or a dict of chordfactors:
         name, root, factors, intervals, notes = self._reparse_args(name, root, factors, intervals, notes)

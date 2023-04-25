@@ -137,25 +137,28 @@ class Guitar:
         return self.query(frets)
 
         # TBI: find way to exclude frets from search? would need to modify precision_recall func probably
-    def find_key(self, cells=None,  string=None, frets=None, tonic=None, show_fretboard=True):
+    def find_key(self, include=None, exclude=None, string=None, frets=None, tonic=None, show_fretboard=True):
         """for a specified string, and the specified fret numbers on that string
         return the list of keys that those fretted notes are a match for"""
-        if cells is not None:
-            # fill by dict that keys string to fret_list
-            assert string is None and frets is None
-            notes = []
-            for s,frets in cells.items():
-                this_string_notes = []
-                for f in frets:
-                    this_string_notes.append(self.tuned_strings[s-1]+f)
-                notes.extend(this_string_notes)
-                print(f'String {self.tuned_strings[s-1]}, frets {frets}: {this_string_notes}')
-        else:
-            # fill by single string and its frets
-            assert string is not None and frets is not None
-            assert 0 < string <= self.num_strings, f"This guitar has no string {string}"
-            notes = [self.tuned_strings[string-1]+f for f in frets]
-            print(f'String {self.tuned_strings[string-1]}, frets {frets}: {notes}')
+
+        include_notes = []
+        exclude_notes = []
+        for dct, lst in zip([include, exclude], [include_notes, exclude_notes]):
+            if dct is not None:
+                # fill by dict that keys string to fret_list
+                # assert string is None and frets is None
+                for s,frets in dct.items():
+                    this_string_notes = []
+                    for f in frets:
+                        this_string_notes.append(self.tuned_strings[s-1]+f)
+                    lst.extend(this_string_notes)
+                    print(f'String {self.tuned_strings[s-1]}, frets {frets}: {this_string_notes}')
+            # else:
+            #     # fill by single string and its frets
+            #     # assert string is not None and frets is not None
+            #     assert 0 < string <= self.num_strings, f"This guitar has no string {string}"
+            #     include_notes = [self.tuned_strings[string-1]+f for f in frets]
+            #     print(f'String {self.tuned_strings[string-1]}, frets {frets}: {include_notes}')
 
 
         if tonic is not None:
@@ -169,16 +172,16 @@ class Guitar:
             notes = [tonic_note] + [n.note for n in notes if n.note != tonic_note]
 
         # dynamically adjust min_precision by the number of notes provided
-        min_precision = len(notes) / 7
+        min_precision = len(include_notes) / 7
 
         print(f'Requiring min_precision of: {min_precision}')
-        matches = matching_keys(note_list=notes, min_precision=0, require_tonic=(tonic is not None), return_matches=True)
+        matches = matching_keys(notes=include_notes, exclude=exclude_notes, min_precision=0, require_tonic=(tonic is not None), return_matches=True)
 
         if show_fretboard:
             # show fretboard on the first 3 matches
             for m in list(matches.keys())[:3]:
                 print()
-                self.show_key(m, as_intervals=True)
+                self.show_key(m)
 
     def matching_chords(self, frets, *args, **kwargs):
         """analyses this set of frets and detects what chords they might represent"""
@@ -347,7 +350,7 @@ class Guitar:
 
         #### finalise:
         if title is None:
-            title = f'{key.name} on {self}'
+            title = f'{key} on {self}'
         Fretboard(cells, index=index, highlight=highlights, title=title).disp(*args, fret_size=7, **kwargs)
 
     def show_abstract_chord(self, chord, *args, **kwargs):
@@ -357,7 +360,7 @@ class Guitar:
         if isinstance(chord, str):
             chord = AbstractChord(chord)
         a_chord = chord.on_root('A')
-        self.show_chord(a_chord, fret_labels=False, show_index=False, min_fret=4, max_fret=16, as_intervals=True, title=f'{chord} on {self}')
+        self.show_chord(a_chord, fret_labels=False, show_index=False, min_fret=4, max_fret=16, intervals_only=True, title=f'{chord} on {self}')
 
     def show_scale(self, scale, *args, **kwargs):
         """for a given abstract Scale object (or name that casts to Scale),
@@ -370,15 +373,19 @@ class Guitar:
                     scale = Scale(scale)
                 except Exception as e:
                     print(f'Could not cast string {scale} to Scale or Subscale object: {e}')
-        a_scale = scale.on_tonic('A')
-        self.show_key(a_scale, fret_labels=False, show_index=False, min_fret=5, max_fret=15, as_intervals=True, title=f'{scale.name} on {self})')
+        a_scale = scale.on_tonic('C')
+        self.show_key(a_scale, fret_labels=False, show_index=False, min_fret=3, max_fret=13, intervals_only=True, title=f'{scale} on {self})')
 
     def show(self, obj, *args, **kwargs):
         """wrapper around the show_note, show_chord, show_key etc. methods.
         accepts an arbitrary object and calls the relevant method to show it"""
-        names = ['Key', 'Key', 'Chord', 'Note', 'Note']
-        classes = [Subkey, Key, Chord, OctaveNote, Note]
-        funcs = self.show_key, self.show_key, self.show_chord, self.show_octavenote, self.show_note
+
+        classes = [Subkey, Key, Subscale, Scale,
+                   Chord, AbstractChord, OctaveNote, Note]
+        funcs = [self.show_key, self.show_key, self.show_scale, self.show_scale,
+                self.show_chord, self.show_abstract_chord, self.show_octavenote, self.show_note]
+        names = ['Key', 'Key', 'Scale', 'Scale',
+                 'Chord', 'Chord', 'Note', 'Note']
 
         found_type = False
         if not (isinstance(obj, str)): # for non strings, find the right class and function to use:
@@ -419,220 +426,6 @@ class Guitar:
 
 
 
-
-def chord_diagram(frets, fingerings=None, title=None, tuning='EADGBE', orientation='right', chars_between_frets=3):
-    """just takes list of frets as a single string
-    and outputs a nice ASCII chord diagram over six lines.
-
-    frets should be a string of six characters, either numeric or 'x' to indicate muted string
-    fingerings is an optional iterable of numerics, of the same length as non-muted strings.
-      if given, we place the fingering numbers into the diagram at the corresponding frets.
-      if not, we place the note names instead.
-
-    title is an optional string to display as the title of the diagram.
-      if None, it auto-detects the chord and displays its names as the title.
-      if you want no title, use '' instead.
-
-    orientation should be one of 'down' or 'right',
-    controls the direction of strings (from nut to bridge)"""
-
-    # if 'tuning' arg is a tuning str, instantiate it:
-    if isinstance(tuning, str):
-        tuning = tuning
-        guitar = Guitar(tuning)
-    # otherwise, if it is an existing guitar object, just use it:
-    elif isinstance(tuning, Guitar):
-        guitar = tuning
-        tuning = guitar.tuning
-
-    sounded_notes = guitar.fret(frets)
-    sounded_chord = guitar.most_likely_chord(frets)
-
-    print(f'\nFret positions: [{frets}] in tuning: {tuning}')
-    print(f'Sounded notes: {sounded_notes}')
-    if sounded_chord is not None:
-        print(f'  (detected chord: {sounded_chord})\n')
-        # set sharp preference of sounded notes accordingly:
-        for n in sounded_notes:
-            n._set_sharp_preference(sounded_chord.prefer_sharps)
-    else:
-        print(f'  (unknown chord)\n')
-
-    tuning_notenames = parsing.parse_out_note_names(tuning)
-    longest_tuning_note = max([len(n) for n in tuning_notenames]) # do we need 1 or 2 characters per string
-
-    left_margin_size = longest_tuning_note+1
-
-    sounded_notenames = [n.chroma for n in sounded_notes]
-    longest_sounded_note = max([len(n) for n in sounded_notenames])
-
-    ### parse fretting position numbers:
-    int_frets = []
-    fret_list = []
-    for fret in frets:
-        if fret.isdigit():
-            int_frets.append(int(fret))
-            fret_list.append(int(fret))
-        else:
-            fret_list.append(None)
-
-    ### get min and max extent of fretting positions, but be sensitive to all 0s:
-    fret_max = max(int_frets)
-    fret_min = 0 if fret_max == 0 else min([f for f in int_frets if f != 0]) # minimum nonzero fret
-    num_open_strings = sum([f==0 for f in int_frets])
-
-    ### determine length of diagram:
-    # open chords:
-    if fret_max <= 4:
-        num_frets_shown = max([fret_max, 3]) # diagram is at least 3 long, or 4 if we use the 4th fret
-        start_fret = 1
-
-    # chords high on the neck:
-    elif fret_min >= 4:
-        # truncate length of diagram
-        num_frets_shown = max([(fret_max - fret_min) + 1, 3]) # at least 3
-        start_fret = fret_min
-    # chords that span the whole fretboard for some reason:
-    else:
-        num_frets_shown = fret_max
-        start_fret = 1
-
-    if start_fret == 1:
-        open_leftborder    = '|'
-        played_leftborder  = '|'
-        muted_leftborder   = 'X'
-        index_leftborder   = ' '
-    else:
-        open_leftborder    = '--|'
-        played_leftborder  = '  |'
-        muted_leftborder   = 'X |'
-        # index_leftborder   = f' {start_fret-1:2}'    ### this one can be confusing
-                                                       #  as it puts muted Xs on the same
-                                                       # fret as the index label
-        index_leftborder   = '   '
-
-    sounded_rightborder = '--'
-    muted_rightborder   = '  '
-
-    # maybe a parameter?
-    # chars_between_frets = 3
-    # indices to control where fret labels get displayed:
-    fret_label_idx = round(chars_between_frets / 2) - 1
-    fret_label_len = chars_between_frets - fret_label_idx
-
-    empty_fret =   ' ' * chars_between_frets + '|'
-    sounded_fret = '-' * chars_between_frets + '|'
-    empty_idx =    ' ' * (chars_between_frets+1)
-
-    # note_pos is a downward counting iterator:
-    note_pos = len(sounded_notes)-1
-    rows = []
-
-    # loop backwards through strings/frets:
-    for s in range(5,-1,-1):
-
-        # start the list that will become the full string row string:
-        open_string_name = tuning_notenames[s]
-
-        left_margin = f'{open_string_name:{left_margin_size}}'
-
-        this_string = [left_margin]
-
-
-        # loop through strings backward
-        if fret_list[s] is None:
-            # muted string
-            this_string.append(muted_leftborder)
-            for f in range(num_frets_shown):
-                this_string.append(empty_fret)
-            this_string.append(muted_rightborder)
-
-        elif fret_list[s] == 0:
-            # open string
-            this_string.append(open_leftborder)
-            for f in range(num_frets_shown):
-                this_string.append(sounded_fret)
-            this_string.append(sounded_rightborder)
-
-            # this is a sounded note, so decrement the count:
-            note_pos -= 1
-
-        else:
-            # fretted string
-            fret_num = fret_list[s]
-
-            # start building the string string:
-            this_string.append(played_leftborder)
-            for f in range(start_fret, start_fret+num_frets_shown):
-                if f < fret_num:
-                    # string up to the fretting position is muted
-                    this_string.append(empty_fret)
-                elif f == fret_num:
-                    # create a list of chars that is the displayed fret here:
-                    disp_fret = list(empty_fret)
-                    if fingerings is not None:
-                        disp_char = f'{fingerings[note_pos]:{fret_label_len}}'
-                    else:
-                        disp_char = f'{sounded_notenames[note_pos]:{fret_label_len}}'
-
-                    note_pos -= 1
-                    disp_list = list(disp_char)
-
-                    # slice replacement char (as list of char/s) into disp_fret list:
-                    disp_fret[fret_label_idx : chars_between_frets] = disp_char
-                    # and convert back to string before appending:
-                    this_string.append(''.join(disp_fret))
-
-                elif f > fret_num:
-                    # rest of the string is sounded
-                    this_string.append(sounded_fret)
-            this_string.append(sounded_rightborder)
-        rows.append(''.join(this_string))
-
-    # finally add the index:
-
-    index_leftmargin = ' '*left_margin_size
-
-    index = [index_leftborder, index_leftmargin]
-    for f in range(start_fret, start_fret + num_frets_shown):
-        # convert strings to lists for slice replacement:
-        index_fret = list(empty_idx)
-        disp_f = list(f'{f:{fret_label_len}}')
-        # slice replace:
-        index_fret[fret_label_idx-1 : chars_between_frets-1] = disp_f
-        index.append(''.join(index_fret))
-    rows.append(''.join(index))
-
-    # finally, display:
-    if orientation == 'right':
-        pass # default behaviour
-    elif orientation == 'down':
-        rows = transpose_nested_list(rows)
-    else:
-        raise Exception("orientation must be one of: 'right' or 'down'")
-
-    disp = '\n'.join(rows)
-    print(disp)
-
-
-# example:
-### open chord:
-#        E |---|---|---|--
-#        B | C |---|---|--
-#        G |---|---|---|--
-#        D |   | E |---|--
-#        A |   |   | C |--
-#        E X   |   |   |--
-#            1   2   3
-#
-#        ### high chord: x5453x
-#        E --|---|---|---|--
-#        B   | C |---|---|--
-#        G   |   |   | C |--
-#        D   |   | F#|---|--
-#        A   |   |   | D |--
-#        E X |   |   |   |--
-#              3   4   5
 
 standard = eadgbe = Guitar()
 dadgad = Guitar('DADGAD')

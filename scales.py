@@ -790,6 +790,14 @@ class Subscale(Scale):
         #
 
 
+    def on_tonic(self, tonic):
+        """returns a Subkey object corresponding to this Subscale built on a specified tonic"""
+        if isinstance(tonic, str):
+            tonic = notes.Note(tonic)
+        # lazy import to avoid circular dependencies:
+        from .keys import Subkey
+        return Subkey(subscale_name=self.name, tonic=tonic)
+
 
 
 ################################################################################
