@@ -259,27 +259,31 @@ class Guitar:
             cells = {loc: note.chroma for loc in note_locs}
         Fretboard(cells, title=f'Note: {note.name} on {self}').disp(*args, **kwargs)
 
-    def show_chord(self, chord, as_intervals=True, max_fret=13, min_fret=0, preserve_accidental=True, title=None, show_index=True, *args, **kwargs): # preserve accidentals?
+    def show_chord(self, chord, intervals_only=False, notes_only=False, max_fret=13, min_fret=0, preserve_accidental=True, title=None, show_index=True, *args, **kwargs): # preserve accidentals?
         """for a given Chord object (or name that casts to Chord),
         show where the notes of that chord fall on the fretboard, starting from open."""
         if isinstance(chord, str):
             chord = Chord(chord, prefer_sharps=('#' in chord) if preserve_accidental else None)
         cells = {}
         root_locs = self.locate_note(chord.root, min_fret=min_fret, max_fret=max_fret)
+        # loop across all the notes in chord, find all their locations:
         for iv, note in zip(chord.intervals, chord.notes):
-            if not as_intervals: # then as notes
+            if intervals_only:
+                cell_val = iv.factor_name
+            elif notes_only:
                 cell_val = note.name
-            else:
+            else: # both
                 cell_val = f'{iv.factor_name:>3}:{note.name}'
             note_cells = {loc: cell_val for loc in self.locate_note(note, min_fret=min_fret, max_fret=max_fret)}
             cells.update(note_cells)
         if show_index:
-            if as_intervals:
+            if intervals_only:
                 # replace note with interval on index labels as well
-                # index = [f'{(s.note - chord.root).factor_name}:' if s.chroma in chord.notes else '' for s in self.tuned_strings ]
-                index = [f'{(chord.factor_intervals[chord.note_factors[string.note]].factor_name):>3}:{string.chroma}'  if string.note in chord.notes  else ''  for string in self.tuned_strings ]
-            else:
+                index = [f'{(chord.factor_intervals[chord.note_factors[string.note]].factor_name):>3}' if string.note in chord.notes else '' for s in self.tuned_strings ]
+            elif notes_only:
                 index = [string.chroma if string.chroma in chord.notes else '' for string in self.tuned_strings ]
+            else: # notes AND intervals:
+                index = [f'{(chord.factor_intervals[chord.note_factors[string.note]].factor_name):>3}:{string.chroma}'  if string.note in chord.notes  else ''  for string in self.tuned_strings ]
         else:
             index = ['']*self.num_strings # list of empty strings as index
 
@@ -288,7 +292,7 @@ class Guitar:
 
         Fretboard(cells, index=index, highlight=root_locs, title=title).disp(*args, **kwargs)
 
-    def show_key(self, key, as_intervals=False, max_fret=13, fifths=False, show_index=True, highlight_pentatonic=True, *args, **kwargs):
+    def show_key(self, key, intervals_only=False, notes_only=False, min_fret=0, max_fret=13, fifths=False, title=None, show_index=True, highlight_pentatonic=True, *args, **kwargs):
         """for a given Key object (or name that casts to key),
         show where the notes of that key fall on the fretboard, starting from open."""
         if isinstance(key, str):
@@ -313,23 +317,27 @@ class Guitar:
 
 
         for iv, note in zip(key.intervals.pad(), key.notes):
-            if not as_intervals: # then as notes
+            if intervals_only: # then as notes
+                cell_val = iv.factor_name
+            elif notes_only:
                 cell_val = note.name
             else:
                 cell_val = f'{iv.factor_name:>3}:{note.name}'
             note_cells = {loc: cell_val for loc in self.locate_note(note, max_fret=max_fret)}
             cells.update(note_cells)
         if show_index:
-            if as_intervals:
+            if intervals_only:
                 # replace note with interval on index labels as well
-                # index = [(s.note - key.tonic).factor_name if s.chroma in key.notes else '' for s in self.tuned_strings ]
-                index = [f'{(key.note_intervals[string.note].factor_name):>3}:{string.chroma:>2}'  if string.chroma in key.notes  else ''  for string in self.tuned_strings]
-
-            else:
+                index = [f'{(key.note_intervals[string.note].factor_name):>3}' if string.chroma in key.notes  else ''  for string in self.tuned_strings]
+            elif notes_only:
                 index = [s.chroma if s.chroma in key.notes else '' for s in self.tuned_strings ]
+            else: # notes AND intervals:
+                index = [f'{(key.note_intervals[string.note].factor_name):>3}:{string.chroma:>2}'  if string.chroma in key.notes  else ''  for string in self.tuned_strings]
         else:
             index = ['']*self.num_strings # list of empty strings as index
-        Fretboard(cells, index=index, highlight=highlights, title=f'{key} on {self}').disp(*args, fret_size=7, **kwargs)
+        if title is None:
+            title = f'{key.name} on {self}'
+        Fretboard(cells, index=index, highlight=highlights, title=title).disp(*args, fret_size=7, **kwargs)
 
     def show_abstract_chord(self, chord, *args, **kwargs):
         """for a given AbstractChord object (or name that casts to AbstractChord),
@@ -340,6 +348,19 @@ class Guitar:
         a_chord = chord.on_root('A')
         self.show_chord(a_chord, fret_labels=False, show_index=False, min_fret=4, max_fret=16, as_intervals=True, title=f'{chord} on {self}')
 
+    def show_scale(self, scale, *args, **kwargs):
+        """for a given abstract Scale object (or name that casts to Scale),
+        show where the notes of that scale fall on the fretboard starting from an arbitrary fret"""
+        if isinstance(scale, str):
+            try:
+                scale = Subscale(scale)
+            except:
+                try:
+                    scale = Scale(scale)
+                except Exception as e:
+                    print(f'Could not cast string {scale} to Scale or Subscale object: {e}')
+        a_scale = scale.on_tonic('A')
+        self.show_key(a_scale, fret_labels=False, show_index=False, min_fret=5, max_fret=15, as_intervals=True, title=f'{scale.name} on {self})')
 
     def show(self, obj, *args, **kwargs):
         """wrapper around the show_note, show_chord, show_key etc. methods.

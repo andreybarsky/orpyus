@@ -350,7 +350,7 @@ class Interval:
             short_deg = f'{self.extended_degree}'
             return f'‹{sign_str}{self.quality.short_name}{short_deg}›'
 
-<<<<<<< HEAD
+
     # alternate str method:
     @property
     def factor_name(self):
@@ -358,17 +358,7 @@ class Interval:
         acc = offset_accidentals[self.offset_from_default][0]
         sign_str = '' if self.sign == 1 else '-'
         return f'{sign_str}{acc}{self.extended_degree}'
-=======
-    @property
-    def factor_name(self):
-        if self.value == 0:
-            return '1'
-        else:
-            sign_str = '-' if self.sign == -1 else ''
-            short_deg = f'{self.extended_degree}'
-            accidental = offset_accidentals[self.offset_from_default][0]
-            return f'{sign_str}{accidental}{short_deg}'
->>>>>>> development
+
 
     def __str__(self):
         return f'‹{self.value}:{self.name}›'

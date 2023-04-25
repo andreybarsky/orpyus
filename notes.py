@@ -487,14 +487,14 @@ class OctaveNote(Note):
     def _wave(self, duration, type='KS', falloff=False):
         """Outputs a sine wave corresponding to this note,
         by default with exponential volume increase and falloff"""
-        from audio import synth_wave
+        from .audio import synth_wave
         # wave = sine_wave(freq=self.pitch, duration=duration)
         # use karplus-strong wave table synthesis for guitar-string timbre:
         wave = synth_wave(freq=self.pitch, duration=duration, type=type, falloff=falloff)
         return wave
 
     def play(self, duration=2, falloff=True, block=False):
-        from audio import play_wave
+        from .audio import play_wave
         # return self[4].play(duration=duration, falloff=falloff)
         wave = self._wave(duration=duration, falloff=falloff)
         play_wave(wave, block=block)
@@ -657,7 +657,7 @@ class NoteList(list):
                 # add octavenote to list:
                 octavenotes.append(self[0])
             else:
-                start_octave = 4
+                start_octave = 3
                 auto_octave = True
                 # cast abstract first note to octavenote:
                 octavenotes.append(self[0].in_octave(start_octave))
@@ -706,8 +706,8 @@ class NoteList(list):
         return waves
 
     def _chord_wave(self, duration, octave, delay=None, type='KS', falloff=True):
-        from audio import arrange_chord
-        from chords import most_likely_chord
+        from .audio import arrange_chord
+        from .chords import most_likely_chord
         if delay is None:
             print(f' synthesising chord: {(most_likely_chord(self)).name} in octave {octave}')
             chord_wave = arrange_chord(self._waves(duration, octave, type), norm=False, falloff=falloff)
@@ -717,14 +717,14 @@ class NoteList(list):
             return self._melody_wave(duration=duration, octave=octave, delay=delay, type=type, falloff=falloff)
 
     def _melody_wave(self, duration, octave, delay, type='KS', falloff=True):
-        from audio import arrange_melody
-        from chords import most_likely_chord
+        from .audio import arrange_melody
+        from .chords import most_likely_chord
         print(f' synthesising arpeggio: {(most_likely_chord(self)).name} in octave:{octave if octave is not None else "Default"} (w/ delay={delay})')
         melody_wave = arrange_melody(self._waves(duration, octave, type), delay=delay, norm=False, falloff=falloff)
         return melody_wave
 
     def play(self, delay=0.2, duration=3, octave=None, falloff=True, block=False, type='KS', **kwargs):
-        from audio import play_wave
+        from .audio import play_wave
         if octave is None and isinstance(self[0], OctaveNote):
             # auto infer octave if this list starts with an octavenote:
             octave = self[0].octave

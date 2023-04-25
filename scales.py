@@ -311,17 +311,36 @@ class Scale:
         sorted_cands = sorted(candidates, key = lambda x: (x.consonance), reverse=True)
         return {x: round(x.consonance,3) for x in sorted_cands}
 
+
+    def __sub__(self, other):
+        # subtraction with another scale produces the intervalwise difference
+        if isinstance(other, Scale):
+            assert len(self) == len(other)
+            return [iv.value for iv in (self.intervals - other.intervals)]
+        else:
+            raise TypeError(f'__sub__ not defined between Scale and: {type(other)}')
+
     @property
     def nearest_natural_scale(self):
         """return the natural scale that has the most intervallic overlap with this scale
         (defaulting to major in the rare event of a tie)"""
-        nat_min, nat_maj = Scale('natural minor'), Scale('natural major')
-        nat_min_overlap = [iv for iv in self.intervals if iv in nat_min.intervals]
-        nat_maj_overlap = [iv for iv in self.intervals if iv in nat_maj.intervals]
-        if len(nat_maj_overlap) >= len(nat_min_overlap):
-            return nat_maj
-        else:
-            return nat_min
+        # nat_min, nat_maj = Scale('natural minor'), Scale('natural major')
+        # nat_min_overlap = [iv for iv in self.intervals if iv in nat_min.intervals]
+        # nat_maj_overlap = [iv for iv in self.intervals if iv in nat_maj.intervals]
+        # if len(nat_maj_overlap) >= len(nat_min_overlap):
+        #     return nat_maj
+        # else:
+        #     return nat_min
+        diffs_from_major = self.intervals - scale_name_intervals['major']
+        dist_from_major = sum([abs(iv.value) for iv in diffs_from_major])
+
+        diffs_from_minor = self.intervals - scale_name_intervals['minor']
+        dist_from_minor = sum([abs(iv.value) for iv in diffs_from_minor])
+
+        if dist_from_major <= dist_from_minor:
+            return Scale('major')
+        elif dist_from_minor < dist_from_major:
+            return Scale('minor')
 
     @property
     def character(self, verbose=False):

@@ -1,3 +1,7 @@
+import util
+import parsing
+import conversion
+from qualities import *
 from intervals import *
 from notes import *
 from chords import *
