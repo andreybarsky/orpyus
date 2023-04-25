@@ -435,7 +435,7 @@ def matching_keys(chords=None, notes=None, exclude=None,
 
     if exclude is None:
         exclude = [] # but should be a list of Note objects
-    elif exclude is not None:
+    elif exclude is not None and len(exclude) > 0:
         assert isinstance(exclude[0], (str, Note)), "Objects to exclude must be Notes, or strings that cast to notes"
         exclude = NoteList(exclude)
 
