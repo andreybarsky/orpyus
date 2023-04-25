@@ -264,8 +264,10 @@ class Guitar:
         show where the notes of that chord fall on the fretboard, starting from open."""
         if isinstance(chord, str):
             chord = Chord(chord, prefer_sharps=('#' in chord) if preserve_accidental else None)
-        cells = {}
+
+        #### determine cell values:
         root_locs = self.locate_note(chord.root, min_fret=min_fret, max_fret=max_fret)
+        cells = {}
         # loop across all the notes in chord, find all their locations:
         for iv, note in zip(chord.intervals, chord.notes):
             if intervals_only:
@@ -276,6 +278,8 @@ class Guitar:
                 cell_val = f'{iv.factor_name:>3}:{note.name}'
             note_cells = {loc: cell_val for loc in self.locate_note(note, min_fret=min_fret, max_fret=max_fret)}
             cells.update(note_cells)
+
+        #### determine index / string labels:
         if show_index:
             if intervals_only:
                 # replace note with interval on index labels as well
@@ -287,12 +291,13 @@ class Guitar:
         else:
             index = ['']*self.num_strings # list of empty strings as index
 
+
+        #### finalise:
         if title is None:
             title=f'Chord: {chord} on {self}'
-
         Fretboard(cells, index=index, highlight=root_locs, title=title).disp(*args, **kwargs)
 
-    def show_key(self, key, intervals_only=False, notes_only=False, min_fret=0, max_fret=13, fifths=False, title=None, show_index=True, highlight_pentatonic=True, *args, **kwargs):
+    def show_key(self, key, intervals_only=False, notes_only=False, min_fret=0, max_fret=13, title=None, show_index=True, highlight_fifths=False, highlight_pentatonic=False, *args, **kwargs):
         """for a given Key object (or name that casts to key),
         show where the notes of that key fall on the fretboard, starting from open."""
         if isinstance(key, str):
@@ -301,12 +306,13 @@ class Guitar:
                 key = Subkey(key)
             else:
                 key = Key(key)
-        cells = {}
+
+        #### determine highlighted frets
         # highlight tonics:
         highlights = self.locate_note(key.tonic, max_fret=max_fret)
         if not highlight_pentatonic:
             # and, optionally, fifths:
-            if fifths:
+            if highlight_fifths:
                 if (isinstance(key, Subkey) and 5 in key.base_degree_notes) or (type(key) == Key):
                     highlights.extend(self.locate_note(key.base_degree_notes[5], max_fret=max_fret))
         elif highlight_pentatonic and not key.is_subscale:
@@ -315,7 +321,8 @@ class Guitar:
             for n in this_pentatonic.notes[1:]:
                 highlights.extend(self.locate_note(n, max_fret=max_fret))
 
-
+        #### determine cell values:
+        cells = {}
         for iv, note in zip(key.intervals.pad(), key.notes):
             if intervals_only: # then as notes
                 cell_val = iv.factor_name
@@ -325,6 +332,8 @@ class Guitar:
                 cell_val = f'{iv.factor_name:>3}:{note.name}'
             note_cells = {loc: cell_val for loc in self.locate_note(note, max_fret=max_fret)}
             cells.update(note_cells)
+
+        #### determine index / string labels
         if show_index:
             if intervals_only:
                 # replace note with interval on index labels as well
@@ -335,6 +344,8 @@ class Guitar:
                 index = [f'{(key.note_intervals[string.note].factor_name):>3}:{string.chroma:>2}'  if string.chroma in key.notes  else ''  for string in self.tuned_strings]
         else:
             index = ['']*self.num_strings # list of empty strings as index
+
+        #### finalise:
         if title is None:
             title = f'{key.name} on {self}'
         Fretboard(cells, index=index, highlight=highlights, title=title).disp(*args, fret_size=7, **kwargs)
