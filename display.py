@@ -117,8 +117,8 @@ class Fretboard:
         hl_left, hl_right = highlight_chars
 
         if start_fret == 1:
-            open_leftborder    = '|'
-            played_leftborder  = '|'
+            open_leftborder    = '‖'
+            played_leftborder  = '‖'
             muted_leftborder   = 'X'
             footer_leftborder   = ' ' * (index_width-1)
         else:

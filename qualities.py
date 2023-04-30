@@ -406,12 +406,12 @@ class ChordQualifier:
 
 chord_types =  {'m': ChordQualifier(make={3:-1}),
                 '5': ChordQualifier(remove=3, verify={5:0}),
-                'dim': ChordQualifier(modify={3:-1, 5:-1}),         # dimininished chord (m3+m3)
+                'dim': ChordQualifier(make={3:-1, 5:-1}),         # dimininished chord (m3+m3)
                 '+': ChordQualifier(modify={5:+1}, verify={3:0}),   # augmented chord (M3+M3)
                 '6': ChordQualifier(add=6),                         # 6 chord aka add6
 
                 '7': ChordQualifier(add={7:-1}), # dominant 7th
-                'dim7': ChordQualifier(modify={3:-1, 5:-1}, add={7:-2}),
+                'dim7': ChordQualifier(make={3:-1, 5:-1}, add={7:-2}),
                 '7b5': ChordQualifier(add={7: -1}, modify={5:-1}),
 
                 # note: m7, m9 etc. are implicit concatenations of 'm' and '7', '9' etc.
@@ -430,6 +430,7 @@ chord_types =  {'m': ChordQualifier(make={3:-1}),
                 'dim9': ['dim7', '♮9'],    # diminished 9th
                 'dmin9': ['dim7', '♭9'],   # diminished minor 9th
                 'hdmin9': ['hdim7', '♭9'],   # half diminished minor 9th
+                '7#9': ['7', '♯9'],        # dominant 7 sharp 9, i.e. Hendrix chord
 
                 '11': ['9', '♮11'],        # dominant 11th
                 'maj11': ['maj9', '♮11'],  # major 11th

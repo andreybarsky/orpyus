@@ -17,8 +17,6 @@ import pdb
 #                     }
 
 
-### (DONE!) TBI: seventh-chord ScaleDegrees that automatically use min/maj/dom/dim 7th modifiers
-
 ### TBI: progression completion feature that incorporates T-S-D-T progression logic:
 # I is tonic
 # V and viio are dominant
@@ -34,7 +32,8 @@ import pdb
 # c.f. root-motion theory (Meeus):
 # root motion by fifth is primary: descending-fifth motion represents the
 # prototypical “dominant” progression, while ascending-fifth motion is prototypically
-# “subdominant.” Meeus additionally allows two classes of “substitute” progression: rootprogression by third can “substitute” for a fifth-progression in the same direction; and
+# “subdominant.” Meeus additionally allows two classes of “substitute” progression:
+# rootprogression by third can “substitute” for a fifth-progression in the same direction; and
 # root-progression by step can “substitute” for a fifth-progression in the opposite direction
 
 
@@ -66,15 +65,22 @@ for arabic,roman in numerals_roman.items():
 # and the reverse mapping, for SDC.__repr__:
 degree_chords_roman = reverse_dict(roman_degree_chords)
 
+progression_aliases = dict(roman_degree_chords)
+# kludge: we have to specifically ignore 'dim' when reading roman numerals,
+# because it contains a roman numeral ('i')
+progression_aliases['dim'] = 'dim'
+
 def parse_roman_numeral(numeral):
     """given a (string) roman numeral, in upper or lower case,
     with a potential chord qualifier at the end,
     parse into a (degree:int, qualifiers:list) tuple"""
-    out = reduce_aliases(numeral, roman_degree_chords)
+    out = reduce_aliases(numeral, progression_aliases)
     assert isinstance(out[0], tuple) # an integer, quality tuple
     deg, quality = out[0]
-    # we should treat the quality (if minor) as a qualifier in its own right:
+
     qualifiers = []
+
+    # should we should treat the quality (if minor) as a qualifier in its own right?
     if quality.minor:
         quality_qualifier = ChordQualifier('minor')
         qualifiers.append(quality_qualifier)
@@ -100,31 +106,48 @@ class Progression:
             in which case we allocate major/minor quality to the chords based on the scale provided.
             """
 
-
-
-        # self.intervals = []
-
-        # TBI: make roman numerals incompatible with scale input?
-        # either give integer list and scale,
-        # or roman numerals and we auto-parse the scale
+        # unpack tuple arg:
+        if len(numerals) == 1:
+            numerals = numerals[0]
 
         if isinstance(numerals, str):
             split_numerals = auto_split(numerals, allow='°øΔ♯♭♮+𝄫𝄪')
             assert len(split_numerals) > 1, f"Expected a string of roman numerals separated by dashes (or other obvious separator), but got: {numerals[0]}"
             numerals = split_numerals
+        # is now an iterable of roman numeral strings OR of integers
+        if check_all(numerals, 'isinstance', str):
+            
+
+        elif isinstance(numerals, (list, tuple)):
+            # could be an iterable/list of integer scale chords or roman numeral strings
+
+
+
+
+        # case 1: parse roman numerals:
+
+            assert isinstance(numerals, (list, tuple)), "Expected a list or tuple of numeric degrees for Progression initialisation"
+            assert check_all(numerals, 'isinstance', (str)), "Expected input list to Progression to contain a series of roman numeral strings"
+            # TBI: allow abstract chords too?
+            # TBI: detect if these are abstract chord strings rather than roman numeral strings?
+
+            # parse roman numeral input
+            self.roman_degrees = numerals
+            degree_tuples = [parse_roman_numeral(n) for n in self.roman_degrees] # degree, quality, [qualifiers] tuples
+
+        elif isinstance(numerals, (list, tuple)):
+            # could be an iterable of integers, or roman numeral strings
+
         else:
             assert len(numerals) > 1, f"Progression must contain at least one roman numeral chord, but got: {numerals}"
-        assert isinstance(numerals, (list, tuple)), "Expected a list or tuple of numeric degrees for Progression initialisation"
-        assert check_all(numerals, 'isinstance', (str)), "Expected input list to Progression to contain a series of roman numeral strings"
-        # TBI: allow abstract chords too?
-        # TBI: detect if these are abstract chord strings rather than roman numeral strings?
 
-        # parse roman numeral input
-        self.roman_degrees = numerals
-        degree_tuples = [parse_roman_numeral(n) for n in self.roman_degrees] # degree, quality, [qualifiers] tuples
         self.root_degrees = [d[0] for d in degree_tuples]
+        self.chord_qualities = [d[1] for d in degree_tuples]
+        self.chord_qualifiers = [d[2] for d in degree_tuples]
 
 
+
+        # self.chords = [AbstractChord(qualifiers=qs) for qs in self.chord_qualifiers]
 
         ######## construct the scale that this progression is built on
         if isinstance(scale, str):
@@ -141,17 +164,17 @@ class Progression:
         ########
 
         # cast to AbstractChord objects:
-        self.chords = [self.scale.chord(d[0], qualifiers=d[2]) for d in degree_tuples]
+        self.chords = [self.scale.chord(d[0], qualifiers=qs) for qs in self.chord_qualifiers]
         # scaledegree, chord pairs:
         self.degree_chords = [(d, self.chords[i]) for i, d in enumerate(self.root_degrees)]
 
         # construct root movements:
-        self.chord_root_intervals = [self.scale.degree_intervals[d] for d in self.root_degrees]
+        self.chord_root_intervals_from_tonic = [self.scale.degree_intervals[d] for d in self.root_degrees]
         self.root_movement_degrees = []
         self.root_movement_intervals = []
         for i in range(1, len(self)):
             deg1, deg2 = self.root_degrees[i-1], self.root_degrees[i]
-            iv1, iv2 = self.chord_root_intervals[i-1], self.chord_root_intervals[i]
+            iv1, iv2 = self.chord_root_intervals_from_tonic[i-1], self.chord_root_intervals_from_tonic[i]
 
             # these are both degrees in range 1-7 (for diatonic scales at least)
             # and a movement from 7-1, for instance, should be represented as up1, as well as down6
@@ -176,7 +199,7 @@ class Progression:
         roman_chords_list = [f'{self.scale.roman_numeral(d)}{suffix_list[i]}' for i, (d,c) in enumerate(self.degree_chords)]
         # turn suffix qualifiers into superscript marks etc. where possible:
         roman_chords_str = "-".join([''.join(reduce_aliases(r, qualifier_marks)) for r in roman_chords_list])
-        return f'𝄆 {roman_chords_str} 𝄇  (in {scale_name})'
+        return f'Progression:  𝄆 {roman_chords_str} 𝄇  (in {scale_name})'
 
     def __len__(self):
         return len(self.chords)
@@ -189,7 +212,7 @@ class Progression:
 
 class ChordProgression(Progression):
     """Progression subtype defined using specific chords, also acts as container class for Chord objects"""
-    def __init__(self, chords):
+    def __init__(self, *chords):
         # parse chords arg:
         self.chords = []
         self.chord_count = {}
@@ -197,6 +220,9 @@ class ChordProgression(Progression):
         self.note_count = {}
 
         self.contains_duplicates = False
+
+        if len(chords) == 1:
+            chords = chords[0]
 
         for item in chords:
             if isinstance(item, Chord): # already a Chord object
@@ -261,6 +287,11 @@ class ChordProgression(Progression):
 
 
 def unit_test():
+    # test numeral parsing:
+    a, b, c = parse_roman_numeral('viidim')
+    test((a,b,c[0], c[1]), (7, Minor, ChordQualifier('minor'), ChordQualifier('diminished')))
+
+
     # test arithmetic operations on ScaleDegree objects:
     # test(ScaleDegree('I') + 3, ScaleDegree('IV'))
     # test(ScaleDegre('V') - 2, ScaleDegree('iii'))

@@ -169,7 +169,7 @@ class Guitar:
                 tonic_note = Note(tonic)
             elif isinstance(tonic, Note):
                 tonic_note = tonic
-            notes = [tonic_note] + [n.note for n in notes if n.note != tonic_note]
+            include_notes = [tonic_note] + [n.note for n in include_notes if n.note != tonic_note]
 
         # dynamically adjust min_precision by the number of notes provided
         min_precision = len(include_notes) / 7
@@ -344,7 +344,7 @@ class Guitar:
             elif notes_only:
                 index = [s.chroma if s.chroma in key.notes else '' for s in self.tuned_strings ]
             else: # notes AND intervals:
-                index = [f'{(key.note_intervals[string.note].factor_name):>3}:{string.chroma:>2}'  if string.chroma in key.notes  else ''  for string in self.tuned_strings]
+                index = [f'{(key.note_intervals[string.note].factor_name):>3}:{string.chroma}'  if string.chroma in key.notes  else ''  for string in self.tuned_strings]
         else:
             index = ['']*self.num_strings # list of empty strings as index
 
