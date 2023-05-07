@@ -115,11 +115,15 @@ class Progression:
             assert len(split_numerals) > 1, f"Expected a string of roman numerals separated by dashes (or other obvious separator), but got: {numerals[0]}"
             numerals = split_numerals
         # is now an iterable of roman numeral strings OR of integers
-        if check_all(numerals, 'isinstance', str):
-            
 
-        elif isinstance(numerals, (list, tuple)):
-            # could be an iterable/list of integer scale chords or roman numeral strings
+        if check_all(numerals, 'isinstance', str):
+            if scale is None:
+                # auto detect scale from numeral case
+                degree_tuples = [parse_roman_numeral(n) for n in numerals] # degree, quality, [qualifiers] tuples
+                self._detect_scale(degree_tuples)
+
+        elif check_all(numerals, 'isinstance', int):
+            assert scale is not None, f'Progression chords given as integers but scale arg not provided'
 
 
 
@@ -133,11 +137,11 @@ class Progression:
 
             # parse roman numeral input
             self.roman_degrees = numerals
-            degree_tuples = [parse_roman_numeral(n) for n in self.roman_degrees] # degree, quality, [qualifiers] tuples
+            degree_tuples = [parse_roman_numeral(n) for n in self.roman_degrees]
 
         elif isinstance(numerals, (list, tuple)):
             # could be an iterable of integers, or roman numeral strings
-
+            pass # ...
         else:
             assert len(numerals) > 1, f"Progression must contain at least one roman numeral chord, but got: {numerals}"
 
@@ -190,6 +194,9 @@ class Progression:
                 iv_down = 12-(iv2 - iv1)
             self.root_movement_degrees.append({'up':deg_up, 'down':deg_down})
             self.root_movement_intervals.append({'up':Interval(iv_up), 'down':Interval(iv_down)})
+
+    def _detect_scale(self, degree_tuples):
+        pass
 
     def __str__(self):
         scale_name = self.scale.name
