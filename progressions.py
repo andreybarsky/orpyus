@@ -1,3 +1,5 @@
+### this progressions module is incomplete, very WIP at the moment
+
 from .intervals import Interval
 from .chords import Chord, AbstractChord
 from .qualities import Major, Minor, Perfect, Diminished, parse_chord_qualifiers, ChordQualifier
@@ -9,7 +11,7 @@ from .parsing import roman_numerals, numerals_roman
 from collections import Counter
 import pdb
 
-import numpy as np
+# import numpy as np
 
 
 # IDEA / TO DO: model movements not just of chord roots, but of _every_ note in triad/tetrad chords,

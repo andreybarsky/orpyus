@@ -199,14 +199,14 @@ class Guitar:
         sounded_notes = self.fret(frets)
         print(f'Sounded notes: {sounded_notes}')
         sounded_chord = self.most_likely_chord(frets)
-        print(f'Detected chord notes: {sounded_chord}')
+        print(f'Detected chord: {sounded_chord}')
 
         fret_ints = parsing.parse_out_integers(frets)
         mute = [s+1 for s in range(len(fret_ints)) if fret_ints[s] is None]
         string_contents = [(self.open_strings[s] + fret_ints[s]).chroma  if fret_ints[s] is not None  else None  for s in range(self.num_strings)]
         ### TBI: capo support?
         fret_cells = {(s+1,f):string_contents[s] for s,f in enumerate(fret_ints) if (f != 0 and f is not None)}
-        Fretboard(fret_cells, mute=mute).disp()
+        Fretboard(fret_cells, index=self.tuning, mute=mute, title=f'Frets: {frets}').disp(continue_strings=True)
 
 
     def locate_note(self, note, match_octave=False, min_fret=0, max_fret=13):

@@ -1002,6 +1002,9 @@ def unit_test():
 
     Scale('harmonic minor').valid_chords(4, 6)
 
+    #### TBI: (bug?)
+    # Scale(intervals=[2,1,2,2,1,2], stacked=False) # returns error
+
 if __name__ == '__main__':
     unit_test()
 
@@ -1018,6 +1021,7 @@ if __name__ == '__main__':
         # print(f'  flattened intervals: {c.intervals.flatten()}')
         # print(f'    unstacked intervals: {s.intervals.unstack()}')
         # print(f'------associated scale: {s}{alias_str}')
+
 
 
     # display all scale consonances:
