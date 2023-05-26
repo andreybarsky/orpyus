@@ -3,23 +3,23 @@ A python library for handling music theory concepts and assisting music analysis
 
 Full documentation is forthcoming - for now, try some of the examples below.
 
-# Dependencies
+## Dependencies
 None. The main functionality only requires Python 3.8+ - I've deliberately tried to avoid external imports where possible to make cross-platform setup very easy and straightforward. 
 
-The optional *audio* module does have a few dependencies, all of which can be installed by pip: *numpy scipy matplotlib sounddevice*
-(it's also only been tested on Ubuntu Linux so far, I imagine that the current sounddevice implementation for audio output doesn't work on Windows or Mac)
+The optional *audio* module does have a few dependencies, all of which can be installed by pip: *numpy scipy matplotlib sounddevice*  
+(it's also only been tested on Ubuntu Linux so far, I suspect that my current sounddevice implementation for audio output won't work on Windows or Mac)
 
-# Setup
-Just git clone https://github.com/andreybarsky/orpyus/ to a root directory of your choice.
-Then navigate to the root directory (just *above* the orpyus directory itself) and enter an interactive Python interpreter. (recommend IPython)
-Then (interactively) try:
+## Setup
+Just git clone https://github.com/andreybarsky/orpyus/ to a root directory of your choice.  
+Then navigate to your chosen root directory (just *above* the orpyus directory itself) and enter an interactive Python interpreter. (recommend IPython)  
+Then (interactively) try:  
 ```
 from orpyus.chords import Chord
 Chord('Cmaj7')
 ```
-If that works (and outputs something) you should be able to import the rest of the modules and attempt the examples below.
+If that works (and outputs something) you should be able to import the rest of the modules and run the examples below.
 
-# Examples
+## Examples
 ```
 # import some useful classes and functions for the examples:
 from orpyus.chords import Chord, AbstractChord, matching_chords
@@ -28,7 +28,7 @@ from orpyus.keys import Key, matching_keys
 from orpyus.guitar import Guitar
 ```
 
-# Chords
+### Chords
 ```
 # chord recognition by name:
 Chord('Csus2')
@@ -55,8 +55,8 @@ matching_chords('CGFB')
 Chord('Cmaj7').play()
 ```
 
-# Scales/Keys
-Note that orpyus distinguishes between a 'Scale' like *natural minor*, which is described as an abstract series of intervals but not on any particular tonic, and a 'Key' like *C natural minor*, which is a Scale built on a specific tonic and therefore comprising a specific set of notes.
+### Scales/Keys
+Note that orpyus distinguishes between a 'Scale' like *natural minor*, which is described as an abstract series of intervals but not on any particular tonic, and a 'Key' like *C natural minor*, which is a Scale built on a specific tonic and therefore comprising a specific set of notes.  
 (this might not be a strictly musical distinction but it proved useful in the context of this program)
 ```
 ### Scales
@@ -111,7 +111,10 @@ matching_keys(notes=Chord('C13').notes) # (i.e. dominant 13) mixolydian
 Key('C lydian').play()
 ```
 
-# Guitar integration
+### Progressions
+(still under construction)
+
+### Guitar integration
 ```
 # guitar class can be initialised as default (EADGBE) tuning
 g = Guitar()
@@ -124,7 +127,7 @@ g2.distance_from_standard()
 g('x32013')
 g2('x32013')
 
-# and can find a matching key with respect to a set of played frets,
+# we can find a matching key with respect to a set of played frets,
 # using this currently clunky notation:
 g.find_key({1:[3], 2:[0,2,3], 3:[0,1]})
 # meaning: fret 3 on the 1st (E) string, frets 0, 2 and 3 and open on the 2nd (A) string, and frets 0 and 1 on the 3rd (D) string
@@ -134,6 +137,11 @@ g.find_key({1:[3], 2:[0,2,3], 3:[0,1]})
 # (which shows chord/scale degrees and note names by default)
 g.show_chord('C7')
 g.show_key('C dorian')
+
+# experimental: plug any orpyus object into the generic Guitar.show method:
+g.show(Chord('Cmmaj11'))
+g.show(Scale('minor'))
+g.show(Key('Am').pentatonic)
 ```
 
 Please let me know if you've been able to get this library to work and if you've had any problems/issues with it.
