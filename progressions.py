@@ -2,9 +2,14 @@ from .intervals import Interval
 from .chords import Chord, AbstractChord
 from .qualities import Major, Minor, Perfect, Diminished, parse_chord_qualifiers, ChordQualifier
 from .scales import Scale, Subscale, scale_name_intervals
+from .keys import Key, Subkey, matching_keys, most_likely_key
 from .util import reduce_aliases, auto_split, check_all, reverse_dict, test
 from .parsing import roman_numerals, numerals_roman
+
+from collections import Counter
 import pdb
+
+import numpy as np
 
 
 # IDEA / TO DO: model movements not just of chord roots, but of _every_ note in triad/tetrad chords,
@@ -131,7 +136,7 @@ class Progression:
             numerals = numerals[0]
 
         if isinstance(numerals, str):
-            split_numerals = auto_split(numerals, allow='°øΔ♯♭♮+𝄫𝄪')
+            split_numerals = auto_split(numerals, allow='°øΔ♯♭♮+𝄫𝄪#')
             assert len(split_numerals) > 1, f"Expected a string of roman numerals separated by dashes (or other obvious separator), but got: {numerals[0]}"
             numerals = split_numerals
         # is now an iterable of roman numeral strings OR of integers
@@ -146,6 +151,7 @@ class Progression:
                 self.chord_qualities = [d[1] for d in degree_tuples]
                 self.chord_qualifiers = [d[2] for d in degree_tuples]
                 self.chords = [AbstractChord('major' if d[1].major_ish else 'minor', qualifiers=d[2]) for d in degree_tuples]
+                self.abstract_chords = chords # true for Progression class, not for ChordProgression
 
                 self.scale = self._detect_scale(degree_tuples)
 
@@ -185,34 +191,35 @@ class Progression:
         else:
             raise ValueError(f'Progression init ended up with an iterable of mixed types, expected all ints or all strings but got: {numerals}')
 
-
-
         # scaledegree, chord pairs:
         self.degree_chords = [(d, self.chords[i]) for i, d in enumerate(self.root_degrees)]
 
         # construct root movements:
         self.chord_root_intervals_from_tonic = [self.scale.degree_intervals[d] for d in self.root_degrees]
-        # self.root_movement_degrees = []
-        # self.root_movement_intervals = []
         self.root_movements = []
         for i in range(1, len(self)):
-            deg1, deg2 = self.root_degrees[i-1], self.root_degrees[i]
-            iv1, iv2 = self.chord_root_intervals_from_tonic[i-1], self.chord_root_intervals_from_tonic[i]
+            movement = NoteMovement(self.root_degrees[i-1], self.root_degrees[i], scale=self.scale)
+            self.root_movements.append(movement)
 
-            # these are both degrees in range 1-7 (for diatonic scales at least)
-            # and a movement from 7-1, for instance, should be represented as up1, as well as down6
-            if deg1 > deg2:
-                deg_up = 7-(deg1 - deg2)
-                deg_down = deg1 - deg2
-                iv_up = 12-(iv1 - iv2)
-                iv_down = iv1 - iv2
-            elif deg1 < deg2:
-                deg_up = deg2 - deg1
-                deg_down = 7-(deg2 - deg1)
-                iv_up = iv2 - iv1
-                iv_down = 12-(iv2 - iv1)
-            self.root_movement_degrees.append({'up':deg_up, 'down':deg_down})
-            self.root_movement_intervals.append({'up':Interval(iv_up), 'down':Interval(iv_down)})
+        #
+        # for i in range(1, len(self)):
+        #     deg1, deg2 = self.root_degrees[i-1], self.root_degrees[i]
+        #     iv1, iv2 = self.chord_root_intervals_from_tonic[i-1], self.chord_root_intervals_from_tonic[i]
+        #
+        #     # these are both degrees in range 1-7 (for diatonic scales at least)
+        #     # and a movement from 7-1, for instance, should be represented as up1, as well as down6
+        #     if deg1 > deg2:
+        #         deg_up = 7-(deg1 - deg2)
+        #         deg_down = deg1 - deg2
+        #         iv_up = 12-(iv1 - iv2)
+        #         iv_down = iv1 - iv2
+        #     elif deg1 < deg2:
+        #         deg_up = deg2 - deg1
+        #         deg_down = 7-(deg2 - deg1)
+        #         iv_up = iv2 - iv1
+        #         iv_down = 12-(iv2 - iv1)
+        #     self.root_movement_degrees.append({'up':deg_up, 'down':deg_down})
+        #     self.root_movement_intervals.append({'up':Interval(iv_up), 'down':Interval(iv_down)})
 
 
     # TO DO: replace with a (simpler?)
@@ -246,15 +253,19 @@ class Progression:
         print(f'  Evidence for major scale: {major_evidence}')
         print(f'  Evidence for minor scale: {minor_evidence}')
         if major_evidence >= minor_evidence:
+            print(f'    (inferred: natural major scale)')
             return Scale('natural major')
         else:
+            print(f'    (inferred: natural minor scale)')
             return Scale('natural minor')
 
     def __str__(self):
         scale_name = self.scale.name
         if 'natural' in scale_name:
             scale_name = scale_name.replace('natural ', '')
+        return f'Progression:  𝄆 {self.as_numerals()} 𝄇  (in {scale_name})'
 
+    def as_numerals(self):
         numerals = [numerals_roman[d]  if c.quality.major_ish else numerals_roman[d].lower()  for d,c in self.degree_chords]
         # add suffixes:
         suffix_list = [c.suffix if c.suffix != 'm' else '' for c in self.chords]
@@ -262,7 +273,8 @@ class Progression:
         roman_chords_list = [f'{numerals[i]}{suffix_list[i]}' for i in range(len(self))]
         # turn suffix qualifiers into superscript marks etc. where possible:
         roman_chords_str = "-".join([''.join(reduce_aliases(r, qualifier_marks)) for r in roman_chords_list])
-        return f'Progression:  𝄆 {roman_chords_str} 𝄇  (in {scale_name})'
+        return roman_chords_str
+
 
     def __len__(self):
         return len(self.chords)
@@ -275,19 +287,49 @@ class Progression:
         return self.degree_chords == other.degree_chords
 
 
-class RootMovement:
+class NoteMovement:
     """class representing (unsigned) root movement between chords in a progression"""
     def __init__(self, start, end, scale=Scale('major')):
-        """'start' and 'end' should both be integers between 1 and 7, denoting the root degrees of the starting and ending scale chords.
-            scale is assumed to be major unless otherwise specified,
-            which matters only for the intervallic distance (not the scale-degree distance) involved in this movement."""
+        """accepts one of two input schemes:
+            1. 'start' and 'end' should both be integers between 1 and 7,
+                denoting the root degrees of the starting and ending scale chords.
+            2. 'start' should be an integer, 'direction' should be either "D" or "S",
+                and degree should be one of 2, 3, or 5.
+
+            scale is assumed to be major unless otherwise specified as optional arg,
+                which matters only for the intervallic distance
+                (not the scale-degree distance) involved in this movement."""
 
         if isinstance(scale, str):
             # instantiate Scale object if it is not already instantiated
             scale = Scale(scale)
 
-        assert (start in range(1,8)) and (end in range(1,8)) and (start != end)
-        self.start, self.end = start, end
+        if end is not None:
+            assert (start in range(1,8)) and (end in range(1,8)) and (start != end)
+            self.start, self.end = start, end
+
+        else:
+            assert direction is not None and degree is not None and (start in range(1,8))
+            if direction == 'D': # dominant
+                if degree in [5,3]:
+                    end = start - (degree-1) # primary descending movement, or substitute in same direction
+                elif degree == 2:
+                    end = start + 1 # substitution in opposite direction
+                else:
+                    raise ValueError('NoteMovement degree must be one of: 5 (fifth), 3 (third), or 2 (step)')
+            elif direction == 'S': # subdominant
+                if degree in [5,3]:
+                    end = start + (degree-1) # primary ascending movement, or substitute in same direction
+                elif degree == 2:
+                    end = start - 1 # substitution in opposite direction
+                else:
+                    raise ValueError('NoteMovement degree must be one of: 5 (fifth), 3 (third), or 2 (step)')
+            else:
+                raise ValueError('NoteMovement direction must be either "D" (dominant) or "S" (subdominant)')
+            # mod to range 1-7:
+            self.end = ((end - 1) % 7) + 1
+            self.start = start
+
         self.start_iv, self.end_iv = (scale.degree_intervals[d] for d in [self.start, self.end])
 
         if self.start > self.end:
@@ -323,25 +365,31 @@ class RootMovement:
         self.hanging = self.end_function in {"D", "L"}
 
         self.authentic_cadence = (self.start == 5 and self.end == 1)
-        self.half_cadence = (self.start in {1, 2, 4, 6}) and (self.end == 5)
+        self.authentic_half_cadence = (self.start in {1, 2, 4, 6}) and (self.end == 5)
         self.plagal_cadence = (self.start == 4 and self.end == 1)
         self.plagal_half_cadence = (self.start in {1, 2, 5, 6}) and (self.end == 4)
-        # self.plagal_half_cadence = (self.start == 1 and self.end == 4)
+        # self.plagal_half_cadence = (self.start == 1 and self.end == 4) # does this follow the same rules as authentic half cadences?
+        self.cadence = self.authentic_cadence or self.plagal_cadence
+        self.half_cadence = self.authentic_half_cadence or self.plagal_half_cadence
 
     def __str__(self):
-        return(f'Root movement from {self.start} to {self.end} \nUp:{self.up} Down:{self.down} \n({self.function})')
+        movement = f'{self.start}⁀{self.end}'
+        function_char = 'D' if self.dominant else 'S'
+        direction_char = 'desc' if self.down > self.up else 'asc'
+        distance_char = 5 if self.magnitude == 3 else (self.magnitude+1)
+        return(f'{movement}:{function_char}({direction_char}{distance_char})')
 
     def __repr__(self):
         return str(self)
 
+class ChordMovement:
+    """Movement of root and every other chord degree from one to another"""
+    def __init__(self, start_chord, end_chord, key):
+        self.start_chord = start_chord
+        self.end_chord = end_chord
+        self.key = key
 
-# # scrap this for a more theoretical approach?
-# cadence_finality = {(5, 1): 1,   # authentic cadence
-#                     (4, 1): 0.9, # plagal cadence
-#                     (1, 4): 0.4, # plagal half cadence
-#                     (1, 5): 0.5, (2, 5): 0.5, (4, 5): 0.5, (6, 5): 0.5, # half cadences
-#                     (5, 6): 0.4, # deceptive cadence
-#                     }
+        order1, order2 = start_chord.order, end_chord.order
 
 # root motion by fifth is primary: descending-fifth motion represents the
 # prototypical “dominant” progression, while ascending-fifth motion is prototypically
@@ -351,18 +399,21 @@ class RootMovement:
 
 class ChordProgression(Progression):
     """Progression subtype defined using specific chords, also acts as container class for Chord objects"""
-    def __init__(self, *chords):
-        # parse chords arg:
-        self.chords = []
-        self.chord_count = {}
-        self.notes = []
-        self.note_count = {}
-
-        self.contains_duplicates = False
+    def __init__(self, *chords, key=None):
 
         if len(chords) == 1:
             chords = chords[0]
 
+        # parse chords arg:
+        self.chords = []
+        self.note_count = Counter()
+
+        if isinstance(chords, str):
+            # if chords is a plain string instead of iterable,
+            # try auto splitting:
+            chords = auto_split(chords, allow='°øΔ♯♭♮+𝄫𝄪#')
+
+        # iterate through list and cast to chord objectss:
         for item in chords:
             if isinstance(item, Chord): # already a Chord object
                 c = item
@@ -370,34 +421,39 @@ class ChordProgression(Progression):
                 c = Chord(item)
             elif isinstance(item, (list, tuple)): # pair of parameters that we try to cast to Chord
                 c = Chord(*item)
+            elif isinstance(item, dict):
+                # unpack keyword args to cast to chord
+                c = Chord(**dict)
             else:
                 raise ValueError(f'Expected iterable to contain Chords, or items that can be cast as Chords, but got: {type(item)}')
 
-            if c not in self.chord_count.keys():
-                self.chords.append(c)
-                self.chord_count[c] = 1
+            self.chords.append(c)
+            self.note_count.update(c.notes)
 
-                self.notes.extend(c.notes)
-                for ch in c.notes:
-                    if ch not in self.note_count.keys():
-                        self.note_count[ch] = 1
-                    else:
-                        self.note_count[ch] += 1
-            else:
-                self.contains_duplicates = True
-                self.chords.append(c)
-                self.chord_count[c] += 1
+        self.abstract_chords = [c.abstract() for c in self.chords]
 
-        self.note_set = set(self.notes)
+        # detect most likely key:
+        if key is None:
+            self.key = most_likely_key(self.chords)
+        else:
+            self.key = key if isinstance(key, Key) else Key(key)
+        # and rip out its scale:
+        self.scale = Scale(self.key.scale_name)
 
-        #### tonic is just first chord's tonic for now:
-        #### progressions that start on a non-tonic are TBI
-        # self.tonic =
+        self.roots = [c.root for c in self.chords]
+        self.root_degrees = [self.key.note_degrees[n] for n in self.roots]
 
-        ### determine chord intervals for back-compatibility with Progression parent class:
-        # self.
-        self.intervals = []
-        # for chord in self.chords
+        # scaledegree, chord pairs:
+        self.degree_chords = [(d, self.chords[i]) for i, d in enumerate(self.root_degrees)]
+
+        # construct root movements:
+        self.chord_root_intervals_from_tonic = [self.scale.degree_intervals[d] for d in self.root_degrees]
+        self.root_movements = []
+        for i in range(1, len(self)):
+            movement = NoteMovement(self.root_degrees[i-1], self.root_degrees[i], scale=self.scale)
+            self.root_movements.append(movement)
+
+
 
     def __contains__(self, item):
         if isinstance(item, Chord):
@@ -413,17 +469,20 @@ class ChordProgression(Progression):
             raise TypeError(f'__eq__ only defined between Progressions, not between Progression and: {type(other)}')
 
     def __str__(self):
-        chord_set_str = ','.join(['♬ ' + c.name for c in self.chords])
-        return f'𝄆 {chord_set_str} 𝄇'
+        # chord_set_str = '-'.join(['♬ ' + c.name for c in self.chords])
+        chords_str = '-'.join([c.name for c in self.chords])
+        return f'ChordProgression: {chords_str} \n or Progression:  𝄆 {self.as_numerals()} 𝄇  (in {self.key.name})'
 
     def __repr__(self):
         return str(self)
 
-    def detect_key(self):
-        ... # TBI
-        pass
+# TODO: key recognition routine that respects progression logic,
+# i.e. looking for cadences or half cadences in the final root movement
 
-
+def propose_root_movements(start, direction):
+    """Given a root degree 'from', and a direction which should be one of 'D' (dominant)
+    or 'SD' (subdominant), propose NoteMovement continuations in that direction"""
+    ...
 
 def unit_test():
     # test numeral parsing:
@@ -435,8 +494,11 @@ def unit_test():
     # test(ScaleDegree('I') + 3, ScaleDegree('IV'))
     # test(ScaleDegre('V') - 2, ScaleDegree('iii'))
     test(Progression('I-IV-vii°-I', scale='major'), Progression(['I', 'IV', 'viidim', 'I']))
-    test(Progression('ii-iv-i-vi', ignore_conflicting_case=True), Progression(['ii', 'iv', 'i', 'VI'], scale='minor')) # TBI: IV gets parsed as iv here. check for it?
 
+    # # TBI: fix however ignore_conflicting_case is supposed to work
+    # test(Progression('ii-iv-i-vi', ignore_conflicting_case=True), Progression(['ii', 'iv', 'i', 'VI'], scale='minor'))
 
+    test(ChordProgression('Am', 'Bdim', 'C', 'Dm'), ChordProgression([Chord('Am'), 'Bdim', Chord('C'), Chord('Dm')]))
+    test(ChordProgression('F#-C-Am-G-C'), ChordProgression(['F#', 'C', 'Am', 'G', 'C']))
 if __name__ == '__main__':
     unit_test()

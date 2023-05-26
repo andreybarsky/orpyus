@@ -113,7 +113,7 @@ class Scale:
                 else:
                     new_intervals = IntervalList(name.intervals)
 
-                return new_intervals, inp.base_scale, inp.rotation
+                return new_intervals, name.base_scale, name.rotation
             elif isinstance(name, str):
                 if name in mode_lookup:
                     base_scale, rotation = mode_lookup[name]

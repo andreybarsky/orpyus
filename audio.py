@@ -5,8 +5,8 @@ import threading
 import pdb
 
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import ticker as mticker
+# import matplotlib.pyplot as plt
+# from matplotlib import ticker as mticker
 from scipy.fft import fft, ifft
 import sounddevice as sd
 

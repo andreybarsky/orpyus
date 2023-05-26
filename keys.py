@@ -394,9 +394,6 @@ class Subkey(Key, Subscale):
     # def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, chromatic_intervals=None, assigned_name=None):
 
 
-
-
-
 def matching_keys(chords=None, notes=None, exclude=None,
                     display=True, return_matches=False,
                     assume_tonic=False, require_tonic=True,
@@ -426,6 +423,8 @@ def matching_keys(chords=None, notes=None, exclude=None,
 
         if assume_tonic:
             # upweight all the notes of the first and last chord
+            first_assumed_tonic = chords[0].root
+            last_assumed_tonic = chords[-1].root
             note_counts.update(chords[0].notes)
             note_counts.update(chords[-1].notes)
     elif notes is not None:
@@ -434,6 +433,8 @@ def matching_keys(chords=None, notes=None, exclude=None,
         note_counts = Counter(notes)
         if assume_tonic:
             note_counts.update([notes[0]])
+            first_assumed_tonic = notes[0]
+            last_assumed_tonic = notes[-1]
     else:
         raise Exception(f'matching_keys requires one list of either: chords or notes')
 
@@ -487,6 +488,14 @@ def matching_keys(chords=None, notes=None, exclude=None,
                 if recall >= min_recall and precision >= min_precision:
 
                     likelihood = candidate.likelihood
+
+                    if assume_tonic:
+                        # slightly upweight the likelihood of keys with tonics that are the roots of the first or last chord:
+                        if candidate.tonic == first_assumed_tonic:
+                            likelihood += 0.051
+                        if candidate.tonic == last_assumed_tonic:
+                            likelihood += 0.049
+
                     consonance = candidate.consonance
                     if likelihood >= min_likelihood:
                         candidates[candidate] = {'precision': round(precision, 2),
@@ -548,8 +557,14 @@ def matching_keys(chords=None, notes=None, exclude=None,
         return {c: candidates[c] for c in sorted_cands}
 
 
-
-
+def most_likely_key(*args, **kwargs):
+    """wrapper around matching_keys that simply returns the single most likely Key as an object"""
+    matches = matching_keys(*args, display=False, return_matches=True, **kwargs)
+    if len(matches) == 0:
+        # re run with no minimums
+        matches = matching_keys(*args, display=False, min_recall=0, min_precision=0, min_likelihood=0, return_matches=True, **kwargs)
+    # return top match:
+    return list(matches.keys())[0]
 
 def unit_test():
     # 3 types of initialisation:

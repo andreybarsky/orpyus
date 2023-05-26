@@ -426,7 +426,7 @@ chord_types =  {'m': ChordQualifier(make={3:-1}),
                 'hdim7': ['dim', '7'],    # half diminished 7th (diminished triad with minor 7th), also called m7b5
                 '9': ['7', '♮9'],          # i.e. dominant 9th
                 'maj9': ['maj7', '♮9'],    # major 9th
-                'dm9': ['7', '♭9'],        # dominant minor 9th
+                '7b9': ['7', '♭9'],        # dominant minor 9th, i.e. dm9
                 'dim9': ['dim7', '♮9'],    # diminished 9th
                 'dmin9': ['dim7', '♭9'],   # diminished minor 9th
                 'hdmin9': ['hdim7', '♭9'],   # half diminished minor 9th

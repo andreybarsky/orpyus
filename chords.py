@@ -1028,7 +1028,7 @@ class Chord(AbstractChord):
 chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
                           1: ['m7', 'maj7', 'dim', 'aug', 'sus4', 'add9'], # maj/mmaj 7s, augs, and common alterations like sus2/4 and add9
                           2: ['mmaj7', 'dim7', 'hdim7', '6', 'm6', 'aug7', 'sus2'], # diminished chords and 6ths
-                          3: ['7b5', '7#9', 'add4', 'dm9', 'dmin9', 'hdmin9', 'dimM7', 'augM7'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (9,11,13)], # the five major types of extended chords, and dominant minor 9ths
+                          3: ['7b5', '7#9', 'add4', '7b9', 'dmin9', 'hdmin9', 'dimM7', 'augM7'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (9,11,13)], # the five major types of extended chords, and dominant minor 9ths
                           4: ['add11', 'add13'], 5: [], 6: [], 7: []}
 
 # removed no5 - handled better by incomplete chord matching
