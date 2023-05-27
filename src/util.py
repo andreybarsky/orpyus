@@ -1,7 +1,6 @@
 import string
 import time
 import inspect
-import pdb
 
 VERBOSE = False
 
@@ -104,7 +103,7 @@ def precision_recall(target, candidate, weights=None):
     recall = relevant_retrieved / num_relevant        # i.e. completeness
 
     if precision > 1:
-        pdb.set_trace()
+        from ipdb import set_trace; set_trace(context=30)
 
     return precision, recall
 

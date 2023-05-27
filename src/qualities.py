@@ -2,7 +2,6 @@
 from .util import reverse_dict, unpack_and_reverse_dict, reduce_aliases, test, log
 from .parsing import degree_names, is_valid_note_name, parse_alteration, accidental_offsets, offset_accidentals
 
-import pdb
 
 # TBI: double dim/aug qualities?
 
@@ -574,7 +573,7 @@ def cast_qualifiers(qual, verbose=False):
         # is an iterable of acceptable objects, so call recursively
         for each_qual in qual:
             if verbose:
-                import pdb; pdb.set_trace()
+                from ipdb import set_trace; set_trace(context=30)
                 print(f'Recursively going down a level to parse: {each_qual} (which is an item in a list)')
             qual_list.extend(cast_qualifiers(each_qual, verbose=verbose))
     else:

@@ -3,7 +3,6 @@ from .parsing import degree_names, num_suffixes, offset_accidentals
 from .util import rotate_list, least_common_multiple, euclidean_gcd, test
 from .conversion import value_to_pitch
 import math
-import pdb
 
 class Interval:
     """a signed distance between notes, defined in semitones and degrees (whole-tones).

@@ -8,7 +8,6 @@ from . import conversion as conv
 from .util import log, test, rotate_list
 
 import math
-import pdb
 
 ### TBI: enharmonic equivalence operator? &? ^?
 

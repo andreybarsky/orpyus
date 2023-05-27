@@ -5,7 +5,6 @@ from .chords import ChordFactors, AbstractChord, chord_names_by_rarity, chord_na
 from .qualities import ChordQualifier, Quality
 from .parsing import num_suffixes, numerals_roman
 from . import notes as notes
-import pdb
 
 
 # standard keys are: natural/melodic/harmonic majors and minors
@@ -912,7 +911,7 @@ for base in mode_bases:
 
         if mode_intervals_from_tonic in interval_mode_names:
             print(f'Key clash! we want to add {this_mode_names} as a key, but its intervals ({mode_intervals_from_tonic}) are already in interval_mode_names as: {interval_mode_names[mode_intervals_from_tonic]}')
-            import pdb; pdb.set_trace()
+            from ipdb import set_trace; set_trace(context=30)
         else:
             interval_mode_names[mode_intervals_from_tonic] = full_name_list + this_mode_names
 

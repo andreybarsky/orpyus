@@ -10,7 +10,7 @@ from .qualities import Quality, ChordQualifier, parse_chord_qualifiers
 
 from collections import defaultdict
 
-import pdb
+from ipdb import set_trace
 
 
 
@@ -349,7 +349,7 @@ class AbstractChord:
             print(f' ++ Could not find chord by factors ({self.factors}), but found it by root intervals ({self.root_intervals}): {suf}')
             return suf
         elif self.intervals in intervals_to_chord_names:
-            pdb.set_trace() # what is going on here
+            set_trace(context=30) # what is going on here
             print(f' ++++ Could not find chord by factors ({self.factors}), but found it by inverted intervals: {self.intervals}')
             return intervals_to_chord_names[self.intervals] + f' (inverted from {self.root})'
         elif self.factors == _major_triad:
@@ -739,7 +739,7 @@ class Chord(AbstractChord):
                     inversion = x
                     break
             if isinstance(inversion, str):
-                pdb.set_trace()
+                set_trace(context=30)
 
         # infer inverted note order by finding the bass's place in our root_notes notelist:
         # bass_place = [i for i, n in enumerate(self.root_notes) if n == bass][0]
@@ -1309,67 +1309,3 @@ class ChordVoicing(Chord):
                     octave = octave
                     root = Note(root).in_octave(octave)
             return root, octave, name
-
-
-def unit_test(verbose=False):
-    log.verbose=verbose
-
-    # test inversion by factor/bass, AbstractChord->Chord initialisation, and unusual note names:
-    test(Chord('E#m7/C'), AbstractChord('m7/2').on_root('F'))
-    test(Chord('E#m7/C'), AbstractChord('m7/2').on_bass('C'))
-    # test correct production of root notes/intervals and inverted notes/intervals:
-    test(Chord('Am/C').root_notes, Chord('Am').root_notes)
-    test(Chord('Am/C').root_intervals, Chord('Am').root_intervals)
-    test(Chord('Am/C').notes, Chord('C6(no5)').notes)
-    test(Chord('Am/C').intervals, Chord('C6(no5)').intervals)
-
-    # test magic methods: transposition:
-    test(Chord('Caug7') + Interval(4), Chord('Eaug7'))
-
-    # parallels and relatives:
-    test(Chord('C').parallel, Chord('Cm'))
-    test(Chord('C').relative, Chord('Am'))
-    test(~Chord('Caug'), Chord('Adim'))
-
-    # test chord membership:
-    test(4 in AbstractChord('sus4'), True)
-    test(Interval(4) in AbstractChord('sus4'), False)
-    test('C' in Chord('Am'), True)
-
-    # test chord matching by notes:
-    print(matching_chords('CEA'))
-
-    # test chord abstraction:
-    test(Chord('Cmaj7sus2').abstract(), AbstractChord('maj7sus2'))
-
-    # test chord factor init by strings and lists:
-    test(ChordFactors('1-♭3-b5'), ChordFactors(['1', '♭3', 'b5']))
-
-    # test chord inversion identification from intervals:
-    test(AbstractChord(intervals=[0, 4, 9]), AbstractChord('m/1'))
-
-    # test recursive init for non-existent bass note inversions:
-    test(Chord('D/C#'), Chord('Dmaj7/C#'))
-    test(Chord('Amaj7/B'), Chord('B13sus4'))
-
-    # test arg re-parsing
-    test(Chord('CEA'), Chord(notes='CEA'))
-    # (this one also tests automatic chord factor detection from uninitialised intervals:
-    # Interval(8) is a minor sixth by default but here we parse it as the fifth in an aug chord)
-    test(Chord([4,8], root='C'), Chord('C+'))
-
-    # test repeated interval parsing:
-    test(Chord('CEGCEGC'), Chord('C'))
-    test(Chord('CEGDGD'), Chord('Cadd9'))
-
-    # chord init by re-casting:
-    test(Chord(Chord('Cdim9/Eb')), Chord('Cdim9/Eb'))
-
-    log.verbose = False
-
-    test(most_likely_chord('CEAB'), Chord('Amadd9/C'))
-
-
-
-if __name__ == '__main__':
-    unit_test()

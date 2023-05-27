@@ -6,7 +6,6 @@ from .keys import Key, Subkey, matching_keys
 from . import parsing
 from .util import log, test, auto_split
 from .display import Fretboard
-import pdb
 
 class String(OctaveNote):
     def __call__(self, fret):
