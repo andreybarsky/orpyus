@@ -10,7 +10,8 @@ setup(name='orpyus',
       author_email='andrey.barsky@gmail.com',
       install_requires=['numpy', 'scipy', 'matplotlib', 'sounddevice'],
       extras_require={
-        'dev': [ 'pytest', 'ipdb' ]
+        'dev': [ 'ipdb' ]
+        'test': [ 'pytest' ]
       },
       package_dir = {'orpyus': 'src'}
      )
