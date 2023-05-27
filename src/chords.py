@@ -10,7 +10,7 @@ from .qualities import Quality, ChordQualifier, parse_chord_qualifiers
 
 from collections import defaultdict
 
-from ipdb import set_trace
+from pdb import set_trace
 
 
 
@@ -346,11 +346,11 @@ class AbstractChord:
             return factors_to_chord_names[self.factors] + inv_string
         elif self.root_intervals in intervals_to_chord_names:
             suf = intervals_to_chord_names[self.root_intervals] + inv_string
-            print(f' ++ Could not find chord by factors ({self.factors}), but found it by root intervals ({self.root_intervals}): {suf}')
+            log(f' ++ Could not find chord by factors ({self.factors}), but found it by root intervals ({self.root_intervals}): {suf}')
             return suf
         elif self.intervals in intervals_to_chord_names:
-            set_trace(context=30) # what is going on here
-            print(f' ++++ Could not find chord by factors ({self.factors}), but found it by inverted intervals: {self.intervals}')
+            # set_trace(context=30) # what is going on here
+            log(f' ++++ Could not find chord by factors ({self.factors}), but found it by inverted intervals: {self.intervals}')
             return intervals_to_chord_names[self.intervals] + f' (inverted from {self.root})'
         elif self.factors == _major_triad:
             return ''
