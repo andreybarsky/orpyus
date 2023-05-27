@@ -4,20 +4,36 @@ A python library for handling music theory concepts and assisting music analysis
 Full documentation is forthcoming - for now, try some of the examples below.
 
 ## Dependencies
-None. The main functionality only requires Python 3.8+ - I've deliberately tried to avoid external imports where possible to make cross-platform setup very easy and straightforward. 
+The main package only requires Python 3.8+ - I've deliberately tried to avoid external imports where possible to make it lightweight and cross-platform - but the optional `audio` module depends on `numpy` and `sounddevice`, which will be installed as part of the setup process below.
 
-The optional *audio* module does have a few dependencies, all of which can be installed by pip: *numpy scipy matplotlib sounddevice*  
-(it's also only been tested on Ubuntu Linux so far, I suspect that my current sounddevice implementation for audio output won't work on Windows or Mac)
+This library has only been tested on Ubuntu Linux so far, but should in principle run fine anywhere - please let me know if you have success (or encounter problems) running it on Windows or Mac.
 
 ## Setup
-Just git clone https://github.com/andreybarsky/orpyus/ to a root directory of your choice.  
-Then navigate to your chosen root directory (just *above* the orpyus directory itself) and enter an interactive Python interpreter. (recommend IPython)  
-Then (interactively) try:  
+
+First, ensure pip/setuptools/wheel are up-to-date:
+```
+pip install -U pip setuptools wheel
+```
+
+Clone the repo to a directory of your choice and navigate there:
+```
+git clone https://github.com/andreybarsky/orpyus/
+cd orpyus
+```
+
+Build the package wheels and install them:
+```
+pip wheel . -w dist
+pip install dist/orpyus*.whl
+```
+
+That should add the `orpyus` package to your Python environment. Try it by opening a Python interpreter and running:
 ```
 from orpyus.chords import Chord
 Chord('Cmaj7')
 ```
-If that works (and outputs something) you should be able to import the rest of the modules and run the examples below.
+If that seems to run correctly, you should be able to import the rest of the modules and try the examples below.
+(I recommend using interactively with something like IPython, some of the output looks nicer)
 
 ## Examples
 ```
@@ -144,4 +160,4 @@ g.show(Scale('minor'))
 g.show(Key('Am').pentatonic)
 ```
 
-Please let me know if you've been able to get this library to work and if you've had any problems/issues with it.
+Please get in touch if you have any issues with getting the library to work, if you encounter any bugs, or if you manage to do anything cool/interesting with it!
