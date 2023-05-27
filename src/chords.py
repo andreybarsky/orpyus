@@ -10,7 +10,7 @@ from .qualities import Quality, ChordQualifier, parse_chord_qualifiers
 
 from collections import defaultdict
 
-import pdb
+from ipdb import set_trace
 
 
 
@@ -349,7 +349,7 @@ class AbstractChord:
             print(f' ++ Could not find chord by factors ({self.factors}), but found it by root intervals ({self.root_intervals}): {suf}')
             return suf
         elif self.intervals in intervals_to_chord_names:
-            pdb.set_trace() # what is going on here
+            set_trace(context=30) # what is going on here
             print(f' ++++ Could not find chord by factors ({self.factors}), but found it by inverted intervals: {self.intervals}')
             return intervals_to_chord_names[self.intervals] + f' (inverted from {self.root})'
         elif self.factors == _major_triad:
@@ -739,7 +739,7 @@ class Chord(AbstractChord):
                     inversion = x
                     break
             if isinstance(inversion, str):
-                pdb.set_trace()
+                set_trace(context=30)
 
         # infer inverted note order by finding the bass's place in our root_notes notelist:
         # bass_place = [i for i, n in enumerate(self.root_notes) if n == bass][0]

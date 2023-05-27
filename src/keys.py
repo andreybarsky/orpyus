@@ -6,7 +6,7 @@ from . import parsing
 from .util import check_all, precision_recall, reverse_dict, test, log
 
 from collections import Counter
-import pdb
+from ipdb import set_trace
 
 # natural notes in order of which are flattened/sharpened in a key signature:
 flat_order = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
@@ -199,7 +199,7 @@ class Key(Scale):
         # instantiate new key object: (just in case???)
         new_key = co5s[new_co5s_pos]
         new_key = new_key if self.major else new_key.relative_minor
-        pdb.set_trace()
+        set_trace(context=30)
         return Key(new_key.tonic, new_key.suffix)
 
     def counterclockwise(self, value=1):

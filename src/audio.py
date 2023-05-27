@@ -2,7 +2,6 @@ from .notes import OctaveNote
 from .util import log, test
 
 import threading
-import pdb
 
 import numpy as np
 # import matplotlib.pyplot as plt
@@ -195,7 +194,7 @@ def play_wave2(wave, amplitude=1):
     duration_secs = int(len(wave) // 44.1)
 
     def callback(outdata, frames, time, status):
-        # import pdb; pdb.set_trace()
+        # from pdb import set_trace; set_trace(context=30)
         nonlocal current_frame
         if status:
             print(status)

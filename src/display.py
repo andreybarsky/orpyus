@@ -1,7 +1,6 @@
 from . import parsing
 from .util import log, test
 import math
-import pdb
 
 
 class Fretboard:
