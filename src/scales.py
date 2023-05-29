@@ -55,6 +55,8 @@ mode_idx_names = {
 
 
 ### TBI: should scales be able to be modified by ChordQualifiers or something similar, like ChordFactors can?
+
+### TBI: Scales should accept arbitrary degree alterations as init, like 'lydian b3' or whatever
 class Scale:
     """a hypothetical diatonic 7-note scale not built on any specific tonic,
     but defined by a series of Intervals from whatever its hypothetical tonic is"""
@@ -201,7 +203,7 @@ class Scale:
         return 7
 
     def __contains__(self, item):
-        """if item is an Interval, does it fit in our list of degree-intervals plus chromatic-intervals?"""
+        """if item is an Interval, does it fit in our list of diatonic-degree-intervals plus chromatic-intervals?"""
         if isinstance(item, (Interval, int)):
             return Interval(item) in self.intervals
         else:
@@ -927,29 +929,39 @@ for base in mode_bases:
 # important output: reverse dict that maps all scale/mode names to their intervals:
 mode_name_intervals = unpack_and_reverse_dict(interval_mode_names)
 ######################
+
+# pre-initialised scales for efficient import by other modules:
+NaturalMajor = Scale('major')
+Dorian = Scale('dorian')
+Phrygian = Scale('phrygian')
+Lydian = Scale('lydian')
+Mixolydian = Scale('mixolydian')
+NaturalMinor = Scale('minor')
+Locrian = Scale('locrian')
+
 # subscale definitions:
 subscales_to_aliases = {  # major pentatonic type omissions:
-                        Scale('major').subscale([1,2,3,5,6]): ['major pentatonic', 'pentatonic major', 'major pent', 'pent major', 'pentatonic', 'pent', 'major5', 'maj pentatonic'],
-                        Scale('minor').subscale([1,2,3,5,6]): ['hirajoshi', 'japanese minor pentatonic', 'japanese minor'],
-                       Scale('dorian').subscale([1,2,3,5,6]): ['dorian pentatonic'],
-                        Scale('major').subscale([1,2,3,5,6], chromatic_intervals=[Min3]): ['blues major', 'major blues', 'maj blues', 'major blues hexatonic', 'blues major hexatonic'],
+                            NaturalMajor.subscale([1,2,3,5,6]): ['major pentatonic', 'pentatonic major', 'major pent', 'pent major', 'pentatonic', 'pent', 'major5', 'maj pentatonic'],
+                            NaturalMinor.subscale([1,2,3,5,6]): ['hirajoshi', 'japanese minor pentatonic', 'japanese minor'],
+                                  Dorian.subscale([1,2,3,5,6]): ['dorian pentatonic'],
+                            NaturalMajor.subscale([1,2,3,5,6], chromatic_intervals=[Min3]): ['blues major', 'major blues', 'maj blues', 'major blues hexatonic', 'blues major hexatonic'],
 
                           # minor pentatonic type omissions:
-                        Scale('minor').subscale([1,3,4,5,7]): ['minor pentatonic', 'pentatonic minor', 'minor pent', 'pent minor', 'm pent', 'minor5', 'm pentatonic'],
-                        Scale('major').subscale([1,3,4,5,7]): ['okinawan pentatonic'],
-                        Scale('minor').subscale([1,3,4,5,7], chromatic_intervals=[Dim5]): ['blues minor', 'minor blues', 'blues minor hexatonic', 'minor blues hexatonic', 'm blues hexatonic', 'm blues'],
+                            NaturalMinor.subscale([1,3,4,5,7]): ['minor pentatonic', 'pentatonic minor', 'minor pent', 'pent minor', 'm pent', 'minor5', 'm pentatonic'],
+                            NaturalMajor.subscale([1,3,4,5,7]): ['okinawan pentatonic'],
+                            NaturalMinor.subscale([1,3,4,5,7], chromatic_intervals=[Dim5]): ['blues minor', 'minor blues', 'blues minor hexatonic', 'minor blues hexatonic', 'm blues hexatonic', 'm blues'],
 
                           # other types:
-                        Scale('major').subscale([1,2,4,5,6]): ['blues major pentatonic (omit:3,7)'],
-                     Scale('phrygian').subscale([1,2,4,5,6]): ['kumoijoshi', 'kumoi', 'japanese pentatonic', 'japanese mode', 'japanese'],
+                            NaturalMajor.subscale([1,2,4,5,6]): ['blues major pentatonic (omit:3,7)'],
+                                Phrygian.subscale([1,2,4,5,6]): ['kumoijoshi', 'kumoi', 'japanese pentatonic', 'japanese mode', 'japanese'],
 
-                        Scale('major').subscale([1,2,3,5,7]): ['blues major pentatonic (omit:4,6)'],
-                   Scale('mixolydian').subscale([1,2,3,5,7]): ['dominant pentatonic', 'pentatonic dominant', 'dom pentatonic'],
+                            NaturalMajor.subscale([1,2,3,5,7]): ['blues major pentatonic (omit:4,6)'],
+                              Mixolydian.subscale([1,2,3,5,7]): ['dominant pentatonic', 'pentatonic dominant', 'dom pentatonic'],
 
-                        Scale('minor').subscale([1,2,4,5,7]): ['egyptian', 'egyptian pentatonic', 'suspended pentatonic', 'suspended'],
-                      Scale('locrian').subscale([1,2,4,5,7]): ['iwato'],
+                            NaturalMajor.subscale([1,2,4,5,7]): ['egyptian', 'egyptian pentatonic', 'suspended pentatonic', 'suspended'],
+                                 Locrian.subscale([1,2,4,5,7]): ['iwato'],
 
-                        Scale('minor').subscale([1,3,4,6,7]): ['blues minor pentatonic', 'minor blues pentatonic', 'blues minor pent', 'minor blues pent', 'm blues pent', 'man gong', 'm blues pentatonic'],
+                            NaturalMinor.subscale([1,3,4,6,7]): ['blues minor pentatonic', 'minor blues pentatonic', 'blues minor pent', 'minor blues pent', 'm blues pent', 'man gong', 'm blues pentatonic'],
 
 
                        }
