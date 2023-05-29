@@ -184,7 +184,7 @@ class Interval:
             # (except if there's been a sign change)
             if (self.mod == 0):
                 # (but don't worry about it for addition/subtraction of unisons themselves)
-                return Interval(new_value)
+                return Interval.from_cache(new_value)
             elif int(other) % 12 == 0:
                 octave_of_addition = int(other) // 12
                 # new_degree = ((((self.sign * self.extended_degree) + octave_of_addition) - 1) % 7) + 1
@@ -200,7 +200,8 @@ class Interval:
 
                 result = Interval(new_value, new_ext_degree)
             else:
-                result = Interval(new_value)
+                # return cached interval if it exists:
+                result = Interval.from_cache(new_value)
             return result
         # elif isinstance(other, int):
         #     # cast to interval and call again recursively:
@@ -226,7 +227,7 @@ class Interval:
 
     def __mod__(self, m):
         """performs modulo on self.value and returns resulting interval"""
-        return Interval(self.value % m)
+        return Interval.from_cache(self.value % m)
 
     def __neg__(self):
         if self.value == 0:
@@ -365,6 +366,15 @@ class Interval:
     def __repr__(self):
         return str(self)
 
+    @staticmethod
+    def from_cache(value):
+        # return a cached Interval object with this value if it exists,
+        # otherwise initialise a new one
+        if value in cached_intervals:
+            return cached_intervals[value]
+        else:
+            return Interval(value)
+
 class IntervalList(list):
     """List subclass that is instantianted with an iterable of Interval-like objects and forces them all to Interval type".
     useful for representing the attributes of e.g. AbstractChords and Scales."""
@@ -385,8 +395,8 @@ class IntervalList(list):
                 # add note
                 interval_items.append(item)
             elif isinstance(item, int):
-                # cast int to interval
-                interval_items.append(Interval(item))
+                # cast int to interval (using cache if it exists)
+                interval_items.append(Interval.from_cache(item))
             else:
                 raise Exception('IntervalList can only be initialised with Intervals, or ints that cast to Intervals')
         return interval_items
@@ -681,6 +691,8 @@ MajorThirteenth = MajThirteenth = Major13th = Major13 = Maj13 = Maj13th = M13 = 
 AugmentedThirteenth = AugThirteenth = Augmented13th = Aug13th = Aug13 = Interval(22, degree=13)
 
 common_intervals = [P1, m2, M2, m3, M3, P4, Dim5, Per5, m6, M6, m7, M7, P8, m9, M9, m10, M10, P11, P12, m13, M13]
+# cache common intervals by semitone value for efficiency:
+cached_intervals = {c.value: c for c in common_intervals}
 
 # interval whole-number ratios according to five-limit tuning just intonation:
 interval_ratios = {0: (1,1),  1: (16,15),  2: (9,8),    3: (6,5),
