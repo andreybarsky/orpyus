@@ -60,7 +60,7 @@ mode_idx_names = {
 class Scale:
     """a hypothetical diatonic 7-note scale not built on any specific tonic,
     but defined by a series of Intervals from whatever its hypothetical tonic is"""
-    def __init__(self, scale_name=None, intervals=None, mode=1, chromatic_intervals=None, stacked=True):
+    def __init__(self, scale_name=None, intervals=None, mode=1, chromatic_intervals=None, stacked=True, alias=None):
         self.intervals, self.base_scale_name, self.rotation = self._parse_input(scale_name, intervals, mode, stacked)
 
         # build degrees dict that maps ScaleDegrees to this scale's intervals:
@@ -86,11 +86,14 @@ class Scale:
             self.intervals = self._add_chromatic_intervals(chromatic_intervals)
             # these exist in the list of intervals, but no degree maps onto them
             self.chromatic_intervals = IntervalList(chromatic_intervals)
+            self.diatonic = False
         else:
+            # TBI - should this be emptylist instad?
             self.chromatic_intervals = None
+            self.diatonic = True
 
         self.is_subscale = False
-        self.assigned_name = None
+        self.assigned_name = alias
         self.is_natural = (self.name in natural_scale_names)
 
     @staticmethod
@@ -243,6 +246,9 @@ class Scale:
         """name of a Scale is the last entry in interval_mode_names for its intervals"""
         if self.intervals in interval_mode_names:
             return interval_mode_names[self.intervals][-1]
+        elif self.assigned_name is not None:
+            # fall back on alias if one was provided
+            return self.assigned_name
         else:
             return 'unknown'
 
@@ -258,6 +264,11 @@ class Scale:
             return interval_scale_names[self.intervals][0] # first item in interval_scale_names is the short suffix form
         elif self.intervals in interval_mode_names:
             suf = interval_mode_names[self.intervals][-1]
+        elif self.diatonic_intervals in interval_scale_names:
+            # call this an chromatic form of a diatonic scale
+            return interval_scale_names[self.diatonic_intervals][0] + ' [chromatic]'
+        elif self.diatonic_intervals in interval_mode_names:
+            suf = interval_mode_names[self.diatonic_intervals][-1] + ' [chromatic]'
         else:
             suf = '(?)'
         return suf
@@ -669,13 +680,21 @@ class Scale:
             suffix = chord.suffix
         return f'{roman}{suffix}'
 
-    def play(self, on='G3', **kwargs):
+    def play(self, on='G3', up=True, down=False, **kwargs):
+        ## if duration is not set, use a smaller default duration than that for chords:
+        if 'duration' not in kwargs:
+            kwargs['duration'] = 1.0
         # Scales don't have tonics, but we can just pick one arbitrarily:
         starting_note = notes.OctaveNote(on)
-        full_notes = notes.NoteList([starting_note + iv for iv in self.intervals.pad(left=True, right=True)], strip_octave=False)
+        assert up or down, "Scale must be played up or down or both, but not neither"
+        notes_up = notes.NoteList([starting_note + iv for iv in self.intervals.pad(left=True, right=True)], strip_octave=False)
+        full_notes = notes_up if up else NoteList([])
+        if down:
+            notes_down = full_notes[-2::-1]
+            full_notes.extend(notes_down)
         full_notes.play(**kwargs)
 
-
+### TBI: should Subscale and DiatonicScale be subclasses of a GenericScale class?
 class Subscale(Scale):
     """a scale that contains a subset of the diatonic 7 intervals,
     such as a pentatonic or hexatonic scale.
@@ -939,17 +958,20 @@ Mixolydian = Scale('mixolydian')
 NaturalMinor = Scale('minor')
 Locrian = Scale('locrian')
 
+# special 'full minor' scale that includes notes of natural, melodic and harmonic minors:
+FullMinor = Scale('minor', chromatic_intervals=[M6, M7], alias='full minor')
+
 # subscale definitions:
 subscales_to_aliases = {  # major pentatonic type omissions:
                             NaturalMajor.subscale([1,2,3,5,6]): ['major pentatonic', 'pentatonic major', 'major pent', 'pent major', 'pentatonic', 'pent', 'major5', 'maj pentatonic'],
                             NaturalMinor.subscale([1,2,3,5,6]): ['hirajoshi', 'japanese minor pentatonic', 'japanese minor'],
                                   Dorian.subscale([1,2,3,5,6]): ['dorian pentatonic'],
-                            NaturalMajor.subscale([1,2,3,5,6], chromatic_intervals=[Min3]): ['blues major', 'major blues', 'maj blues', 'major blues hexatonic', 'blues major hexatonic'],
+                            NaturalMajor.subscale([1,2,3,5,6], chromatic_intervals=[m3]): ['blues major', 'major blues', 'maj blues', 'major blues hexatonic', 'blues major hexatonic'],
 
                           # minor pentatonic type omissions:
                             NaturalMinor.subscale([1,3,4,5,7]): ['minor pentatonic', 'pentatonic minor', 'minor pent', 'pent minor', 'm pent', 'minor5', 'm pentatonic'],
                             NaturalMajor.subscale([1,3,4,5,7]): ['okinawan pentatonic'],
-                            NaturalMinor.subscale([1,3,4,5,7], chromatic_intervals=[Dim5]): ['blues minor', 'minor blues', 'blues minor hexatonic', 'minor blues hexatonic', 'm blues hexatonic', 'm blues'],
+                            NaturalMinor.subscale([1,3,4,5,7], chromatic_intervals=[d5]): ['blues minor', 'minor blues', 'blues minor hexatonic', 'minor blues hexatonic', 'm blues hexatonic', 'm blues'],
 
                           # other types:
                             NaturalMajor.subscale([1,2,4,5,6]): ['blues major pentatonic (omit:3,7)'],
