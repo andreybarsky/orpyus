@@ -179,8 +179,10 @@ class Scale:
         return sanitised_intervals
 
     def _add_chromatic_intervals(self, chromatic_intervals):
-        assert isinstance(chromatic_intervals, (list, tuple)), f'chromatic_intervals must be an iterable of Interval objects'
-        assert check_all(chromatic_intervals, 'isinstance', Interval), f'chromatic_intervals contains non-Interval object/s'
+        # cast as intervallist if non-Interval objects provided or if solo Interval outside list:
+        chromatic_intervals = IntervalList(chromatic_intervals)
+        # assert isinstance(chromatic_intervals, (list, tuple)), f'chromatic_intervals must be an iterable of Interval objects'
+        # assert check_all(chromatic_intervals, 'isinstance', Interval), f'chromatic_intervals contains non-Interval object/s'
         new_intervals = [i for i in self.intervals]
         existing_interval_values = set([i.value for i in self.intervals])
         for ci in chromatic_intervals:
@@ -233,7 +235,13 @@ class Scale:
         return hash((self.diatonic_intervals, self.intervals, self.chromatic_intervals))
 
     def __str__(self):
-        return f'𝄢 {self.name} scale  {self.intervals.pad()}'
+        if self.diatonic:
+            iv_names = [iv.short_name for iv in self.intervals]
+        else:
+            # show diatonic intervals as in normal interval list, and chromatic intervals in square brackets
+            iv_names = [f'[{iv.short_name}]' if iv in self.chromatic_intervals  else iv.short_name  for iv in self.intervals]
+        iv_str = f'𝄁{", ".join(iv_names)} 𝄁'
+        return f'𝄢 {self.name} scale  {iv_str}'
 
     def __repr__(self):
         return str(self)
@@ -249,6 +257,9 @@ class Scale:
         elif self.assigned_name is not None:
             # fall back on alias if one was provided
             return self.assigned_name
+        elif self.diatonic_intervals in interval_mode_names:
+            # otherwise call this a chromatic version of its diatonic parent:
+            return interval_mode_names[self.diatonic_intervals][-1] + ' [chromatic]'
         else:
             return 'unknown'
 
@@ -263,15 +274,14 @@ class Scale:
         if self.intervals in interval_scale_names:
             return interval_scale_names[self.intervals][0] # first item in interval_scale_names is the short suffix form
         elif self.intervals in interval_mode_names:
-            suf = interval_mode_names[self.intervals][-1]
+            return interval_mode_names[self.intervals][-1]
         elif self.diatonic_intervals in interval_scale_names:
             # call this an chromatic form of a diatonic scale
             return interval_scale_names[self.diatonic_intervals][0] + ' [chromatic]'
         elif self.diatonic_intervals in interval_mode_names:
-            suf = interval_mode_names[self.diatonic_intervals][-1] + ' [chromatic]'
+            return interval_mode_names[self.diatonic_intervals][-1] + ' [chromatic]'
         else:
-            suf = '(?)'
-        return suf
+            return '(?)'
 
     @property
     def aliases(self):
