@@ -18,7 +18,7 @@ co5s_counterclockwise = {Note('C')-(7*i) : Note('C')-(7*(i+1)) for i in range(12
 
 class Key(Scale):
     """a Scale that is also rooted on a tonic, and therefore associated with a set of notes"""
-    def __init__(self, scale_name=None, intervals=None, tonic=None, notes=None, mode=1, chromatic_intervals=None, stacked=True):
+    def __init__(self, scale_name=None, intervals=None, tonic=None, notes=None, mode=1, chromatic_intervals=None, chromatic_notes=None, stacked=True):
         """Initialised in one of three ways:
 
         1. from 'notes' arg, as a list or string of Notes or Note-like objects,
@@ -44,14 +44,30 @@ class Key(Scale):
         # get correct tonic and scale name from (key_name, tonic) input args:
         self.tonic, scale_name = self._parse_tonic(scale_name, tonic)
 
+        if chromatic_notes is not None:
+            assert chromatic_intervals is None, 'Key init can only include ONE of chromatic_notes or chromatic_intervals, but both are supplied'
+            # though TBI, this could be fixed to be more generous
+            chromatic_notes = NoteList(chromatic_notes)
+            # re-parse into chromatic intervals and let Scale init handle it
+            chromatic_intervals = [n - self.tonic for n in chromatic_notes]
+
         # initialise everything else as Scale class does:
         super().__init__(scale_name, intervals, mode, chromatic_intervals, stacked)
         # (this sets self.base_scale, .quality, .intervals, .diatonic_intervals, .chromatic_intervals, .rotation)
 
         # set Key-specific attributes: notes, degree_notes, etc.
-        self.notes = NoteList([self.tonic] + [self.tonic + i for i in self.diatonic_intervals])
+        self.notes = NoteList([self.tonic] + [self.tonic + i for i in self.intervals])
 
-        # we don't store the unison interval in .interval attr, because of mode rotation
+        # used only for Keys with strange chromatic notes not built on integer degrees, like blues notes
+        if self.chromatic_intervals is not None:
+            self.chromatic_notes = NoteList([self.tonic + i for i in self.chromatic_intervals])
+            self.diatonic_notes = NoteList([self.tonic + i for i in self.diatonic_intervals.pad()])
+        else:
+            self.chromatic_notes = None
+            self.diatonic_notes = self.notes
+
+        # we don't store the unison interval in the Scale.interval attr, because of mode rotation
+        # so we pad them here:
         padded_intervals = [Interval(0)] + self.diatonic_intervals
         self.note_intervals = {self.notes[i]: padded_intervals[i] for i in range(7)}
         self.interval_notes = reverse_dict(self.note_intervals)
@@ -65,10 +81,7 @@ class Key(Scale):
         self.base_degree_notes = self.degree_notes
         self.note_base_degrees = self.note_degrees
 
-        # used only for Keys with strange chromatic notes not built on integer degrees, like blues notes
-        if self.chromatic_intervals is not None:
-            self.chromatic_notes = NoteList([self.tonic + i for i in self.chromatic_intervals])
-            self.diatonic_notes = NoteList([self.tonic + i for i in self.diatonic_intervals.pad()])
+
 
         # update this Key's notes to prefer sharps/flats depending on its tonic:
         self._set_sharp_preference()
@@ -165,7 +178,13 @@ class Key(Scale):
         return f'{self.tonic.name}{gap}{suffix}'
 
     def __str__(self):
-        return f'𝄞 Key of {self.name}  {self.notes}'
+        if self.diatonic:
+            note_names = [n.name for n in self.notes]
+        else:
+            # show diatonic notes as in normal note list, and chromatic notes in square brackets
+            note_names = [f'[{n}]' if n in self.chromatic_notes  else str(n)  for n in self.notes]
+        notes_str = ', '.join(note_names)
+        return f'𝄞 Key of {self.name} 𝄃 {notes_str} 𝄂'
 
     def chord(self, degree, order=3, qualifiers=None):
         """overwrites Scale.chord, returns a Chord object instead of an AbstractChord"""
