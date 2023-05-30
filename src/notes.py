@@ -526,6 +526,7 @@ class NoteList(list):
         super().__init__(note_items)
 
 
+    # TBI: is this needed or does it just cause bloat? (might be needed for sharp-preference inside KeyChords etc.)
     def _recast(self, note_obj, strip_octave=None):
         """accepts a Note or OctaveNote and re-casts it to the same type"""
         if strip_octave is None:
@@ -559,12 +560,15 @@ class NoteList(list):
         return f'𝄃{", ".join([str(n) for n in self])} 𝄂'
 
     def append(self, other):
-        """Cast any appendices to Notes"""
-        self.append(self._recast(other))
+        """Cast any appendands to Notes"""
+        super().append(self._recast(other))
 
     def extend(self, other):
         """Cast any extensions to Notes"""
-        self.extend([self._recast(n) for n in other])
+        assert isinstance(other, (list, tuple)), "Can only extend NoteList by a list or tuple"
+        for n in other:
+            self.append(n)
+        # self.extend([self._recast(n) for n in other])
 
     def __add__(self, other):
         if isinstance(other, (int, Interval)):
@@ -708,7 +712,8 @@ class NoteList(list):
         from .audio import arrange_chord
         from .chords import most_likely_chord
         if delay is None:
-            print(f' synthesising chord: {(most_likely_chord(self)).name} in octave {octave}')
+            # print(f' synthesising chord: {(most_likely_chord(self)).name} in octave {octave}')
+            log(f' synthesising chord: {(most_likely_chord(self)).name} in octave {octave}')
             chord_wave = arrange_chord(self._waves(duration, octave, type), norm=False, falloff=falloff)
             return chord_wave
         else:
@@ -718,7 +723,8 @@ class NoteList(list):
     def _melody_wave(self, duration, octave, delay, type='KS', falloff=True):
         from .audio import arrange_melody
         from .chords import most_likely_chord
-        print(f' synthesising arpeggio: {(most_likely_chord(self)).name} in octave:{octave if octave is not None else "Default"} (w/ delay={delay})')
+        # log(f' synthesising arpeggio: {(most_likely_chord(self)).name} in octave:{octave if octave is not None else "Default"} (w/ delay={delay})')
+        log(f' synthesising arpeggio from notes: {self} in octave:{octave if octave is not None else "Default"} (w/ delay={delay})')
         melody_wave = arrange_melody(self._waves(duration, octave, type), delay=delay, norm=False, falloff=falloff)
         return melody_wave
 
