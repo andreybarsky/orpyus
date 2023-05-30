@@ -634,30 +634,30 @@ default_degree_intervals = {
 
 # interval aliases:
 
-Unison = PerfectFirst = Perfect1st = Perfect1 = Per1 = Per1st = P1 = Interval(0)
+Unison = PerfectFirst = Perfect1st = Perfect1 = Per1 = Per1st = P1 = Rt = Interval(0)
 
 MinorSecond = MinSecond = Minor2nd = Minor2 = Min2 = Min2nd = m2 = Interval(1)
 MajorSecond = MajSecond = Major2nd = Major2 = Maj2 = Maj2nd = M2 = Interval(2)
 
-DiminishedThird = DimThird = Diminished3rd = Dim3rd = Dim3 = Interval(2, degree=3)
+DiminishedThird = DimThird = Diminished3rd = Dim3rd = Dim3 = d3 = Interval(2, degree=3)
 MinorThird = MinThird = Minor3rd = Minor3 = Min3 = Min3rd = m3 = Interval(3)
 MajorThird = MajThird = Major3rd = Major3 = Maj3 = Maj3rd = M3 = Interval(4)
-AugmentedThird = AugThird = Augmented3rd = Aug3rd = Aug3 = Interval(5, degree=3)
+AugmentedThird = AugThird = Augmented3rd = Aug3rd = Aug3 = A3 = Interval(5, degree=3)
 
-DiminishedFourth = DimFourth = Diminished4th = Dim4th = Dim4 = Interval(4, degree=4)
+DiminishedFourth = DimFourth = Diminished4th = Dim4th = Dim4 = d4 = Interval(4, degree=4)
 PerfectFourth = PerFourth = Perfect4th = Perfect4 = Fourth = Per4 = Per4th = P4 = Interval(5)
-AugmentedFourth = AugFourth = Augmented4th = Aug4th = Aug4 = Interval(6, degree=4)
+AugmentedFourth = AugFourth = Augmented4th = Aug4th = Aug4 = A4 = Interval(6, degree=4)
 
-DiminishedFifth = DimFifth = Diminished5th = Dim5th = Dim5 = Interval(6, degree=5)
+DiminishedFifth = DimFifth = Diminished5th = Dim5th = Dim5 = d5 = Interval(6, degree=5)
 PerfectFifth = PerFifth = Perfect5th = Perfect5 = Fifth = Per5 = Per5th = P5 = Interval(7)
-AugmentedFifth = AugFifth = Augmented5th = Aug5th = Aug5 = Interval(8, degree=5)
+AugmentedFifth = AugFifth = Augmented5th = Aug5th = Aug5 = A5 = Interval(8, degree=5)
 
-DiminishedSixth = DimSixth = Diminished6th = Dim6th = Dim6 = Interval(7, degree=6)
+DiminishedSixth = DimSixth = Diminished6th = Dim6th = Dim6 = d6 = Interval(7, degree=6)
 MinorSixth = MinSixth = Minor6th = Minor6 = Min6 = Min6th = m6 = Interval(8)
 MajorSixth = MajSixth = Major6th = Major6 = Maj6 = Maj6th = M6 = Interval(9)
-AugmentedSixth = AugSixth = Augmented6th = Aug6th = Aug6 = Interval(10, degree=6)
+AugmentedSixth = AugSixth = Augmented6th = Aug6th = Aug6 = A6 = Interval(10, degree=6)
 
-DiminishedSeventh = DimSeventh = Diminished7th = Dim7th = Dim7 = Interval(9, degree=7)
+DiminishedSeventh = DimSeventh = Diminished7th = Dim7th = Dim7 = d7 = Interval(9, degree=7)
 MinorSeventh = MinSeventh = Minor7th = Minor7 = Min7 = Min7th = m7 = Interval(10)
 MajorSeventh = MajSeventh = Major7th = Major7 = Maj7 = Maj7th = M7 = Interval(11)
 
@@ -669,28 +669,28 @@ MajorNinth = MajNinth = Major9th = Major9 = Maj9 = Maj9th = M9 = Interval(14)
 AugmentedNinth = AugNinth = Augmented9th = Aug9th = Aug9 = Interval(15, degree=9)
 
 # compound thirds
-DiminishedTenth = DimTenth = Diminished10th = Dim10th = Dim10 = Interval(14, degree=10)
+DiminishedTenth = DimTenth = Diminished10th = Dim10th = Dim10 = d10 = Interval(14, degree=10)
 MinorTenth = MinTenth = Minor10th = Minor10 = Min10 = Min10th = m10 = Interval(15)
 MajorTenth = MajTenth = Major10th = Major10 = Maj10 = Maj10th = M10 = Interval(16)
-AugmentedTenth = AugTenth = Augmented10th = Aug10th = Aug10 = Interval(17, degree=10)
+AugmentedTenth = AugTenth = Augmented10th = Aug10th = Aug10 = A10 = Interval(17, degree=10)
 
 # compound fourths
-DiminishedEleventh = DimEleventh = Diminished11th = Dim11th = Dim11 = Interval(16, degree=11)
+DiminishedEleventh = DimEleventh = Diminished11th = Dim11th = Dim11 = d11 = Interval(16, degree=11)
 PerfectEleventh = PerEleventh = Perfect11th = Perfect11 = Per11 = P11 = Interval(17)
-AugmentedEleventh = AugEleventh = Augmented11th = Aug11th = Aug11 = Interval(18, degree=11)
+AugmentedEleventh = AugEleventh = Augmented11th = Aug11th = Aug11 = A11 = Interval(18, degree=11)
 
 # compound fifths
-DiminishedTwelfth = DimTwelfth = Diminished12th = Dim12th = Dim12 = Interval(18, degree=12)
+DiminishedTwelfth = DimTwelfth = Diminished12th = Dim12th = Dim12 = d12 = Interval(18, degree=12)
 PerfectTwelfth = PerTwelfth = Perfect12th = Perfect12 = Per12 = P12 = Interval(19)
-AugmentedTwelfth = AugTwelfth = Augmented12th = Aug12th = Aug12 = Interval(20, degree=12)
+AugmentedTwelfth = AugTwelfth = Augmented12th = Aug12th = Aug12 = A12 = Interval(20, degree=12)
 
 # compound sixths
-DiminishedThirteenth = DimThirteenth = Diminished13th = Dim13th = Dim13 = Interval(19, degree=13)
+DiminishedThirteenth = DimThirteenth = Diminished13th = Dim13th = Dim13 = d13 = Interval(19, degree=13)
 MinorThirteenth = MinThirteenth = Minor13th = Minor13 = Min13 = Min13th = m13 = Interval(20)
 MajorThirteenth = MajThirteenth = Major13th = Major13 = Maj13 = Maj13th = M13 = Interval(21)
-AugmentedThirteenth = AugThirteenth = Augmented13th = Aug13th = Aug13 = Interval(22, degree=13)
+AugmentedThirteenth = AugThirteenth = Augmented13th = Aug13th = Aug13 = A13 = Interval(22, degree=13)
 
-common_intervals = [P1, m2, M2, m3, M3, P4, Dim5, Per5, m6, M6, m7, M7, P8, m9, M9, m10, M10, P11, P12, m13, M13]
+common_intervals = [P1, m2, M2, m3, M3, P4, d5, P5, m6, M6, m7, M7, P8, m9, M9, m10, M10, P11, P12, m13, M13]
 # cache common intervals by semitone value for efficiency:
 cached_intervals = {c.value: c for c in common_intervals}
 
