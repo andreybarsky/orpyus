@@ -75,11 +75,11 @@ class Quality:
     @property
     def name(self):
         if self.major_ish:
-            return self.name[:3].capitalize()
+            return self.full_name[:3].capitalize()
         elif self.perfect:
             return 'Ind'
         elif self.minor_ish:
-            return self.name[:3].lower()
+            return self.full_name[:3]
 
     @property
     def short_name(self):
@@ -87,6 +87,12 @@ class Quality:
             return self.full_name[0].upper()
         elif self.minor_ish:
             return self.full_name[0]
+
+    def __str__(self):
+        return f'~{self.name}~'
+
+    def __repr__(self):
+        return str(self)
 
     def __invert__(self):
         """invert major to minor, aug to dim, or vice versa"""
@@ -99,11 +105,7 @@ class Quality:
     def __hash__(self):
         return hash(str(self))
 
-    def __str__(self):
-        return f'~{self.name}~'
 
-    def __repr__(self):
-        return str(self)
 
     # interval offsets with respect to major or perfect qualities:
     @property
@@ -144,11 +146,11 @@ perfect_offsets = reverse_dict(offsets_wrt_perfect)
 
 # pre-initialised interval qualities:
 
-Major = Maj = Quality('major')
-Minor = Min = Quality('minor')
-Perfect = Perf = Quality('perfect')
-Augmented = Aug = Quality('augmented')
-Diminished = Dim = Quality('diminished')
+Major = Maj = M = Quality('major')
+Minor = Min = m = Quality('minor')
+Perfect = Perf = P = Quality('perfect')
+Augmented = Aug = A = Quality('augmented')
+Diminished = Dim = d = Quality('diminished')
 
 #################################################################
 
