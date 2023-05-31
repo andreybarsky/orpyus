@@ -210,9 +210,25 @@ class Scale:
     def __contains__(self, item):
         """if item is an Interval, does it fit in our list of diatonic-degree-intervals plus chromatic-intervals?"""
         if isinstance(item, (Interval, int)):
-            return Interval(item) in self.intervals
+            return Interval(item) in self.intervals.pad()
+        elif isinstance(item, IntervalList):
+            # for an iterable of intervals from root, check if they all belong:
+            for iv in item.flatten():
+                if iv not in self.intervals.pad():
+                    return False
+            return True
         else:
             raise TypeError(f'Scale.__contains__ not defined for items of type: {type(item)}')
+
+    def contains_degree_chord(self, degree, abs_chord):
+        """checks whether a given AbstractChord on a given Degree of this Scale belongs in this Scale"""
+        if isinstance(abs_chord, str):
+            abs_chord = AbstractChord(abs_chord)
+        assert type(abs_chord) == AbstractChord, "Scales can only contain AbstractChords"
+        assert 1 <= degree <= 7, "Scales can only contain chords built on degrees between 1 and 7"
+        intervals_from_root = IntervalList([self.degree_intervals[degree] + iv for iv in abs_chord.intervals])
+        # call __contains__ on resulting iv list:
+        return intervals_from_root in self
 
     def __getitem__(self, idx):
         """returns the (flattened) Interval or Intervals from root to this scale degree"""
@@ -960,16 +976,21 @@ mode_name_intervals = unpack_and_reverse_dict(interval_mode_names)
 ######################
 
 # pre-initialised scales for efficient import by other modules:
-NaturalMajor = Scale('major')
-Dorian = Scale('dorian')
-Phrygian = Scale('phrygian')
-Lydian = Scale('lydian')
-Mixolydian = Scale('mixolydian')
-NaturalMinor = Scale('minor')
-Locrian = Scale('locrian')
+NaturalMajor = MajorScale = Scale('major')
+Dorian = DorianScale = Scale('dorian')
+Phrygian = PhrygianScale = Scale('phrygian')
+Lydian = LydianScale = Scale('lydian')
+Mixolydian = MixolydianScale = Scale('mixolydian')
+NaturalMinor = MinorScale = Scale('minor')
+Locrian = LocrianScale = Scale('locrian')
+
+HarmonicMinor = HarmonicMinorScale = Scale('harmonic minor')
+HarmonicMajor = HarmonicMajorScale = Scale('harmonic major')
+MelodicMinor = MelodicMinorScale = Scale('melodic minor')
+MelodicMajor = MelodicMajorScale = Scale('melodic major')
 
 # special 'full minor' scale that includes notes of natural, melodic and harmonic minors:
-FullMinor = Scale('minor', chromatic_intervals=[M6, M7], alias='full minor')
+FullMinor = FullMinorScale = Scale('minor', chromatic_intervals=[M6, M7], alias='full minor')
 
 # subscale definitions:
 subscales_to_aliases = {  # major pentatonic type omissions:
@@ -1001,6 +1022,9 @@ subscales_by_name = unpack_and_reverse_dict(subscales_to_aliases)
 interval_subscale_names = {sc.intervals: aliases for sc, aliases in subscales_to_aliases.items()}
 subscale_name_intervals = unpack_and_reverse_dict(interval_subscale_names)
 ######################
+
+MajorPentatonic = MajorPentatonicScale = Subscale('major pentatonic')
+MinorPentatonic = MinorPentatonicScale = Subscale('minor pentatonic')
 
 def unit_test():
     from .chords import AbstractChord
