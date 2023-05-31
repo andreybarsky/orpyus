@@ -478,12 +478,16 @@ class AbstractChord:
             new_root = self.root + other
             return Chord(factors=self.factors, root=new_root)
 
+    @property
+    def _marker(self):
+        """unicode character marker identifying this class"""
+        return '♫'
 
     def __str__(self):
         # note that intervals are presented with respect to inversion
         # interval_short_names = [i.short_name for i in self.intervals]
         # intervals_str = ', '.join(interval_short_names)
-        return f'♫ {self.name}'
+        return f'{self._marker} {self.name}'
 
     def __repr__(self):
         interval_short_names = [i.short_name for i in self.intervals]
@@ -812,6 +816,11 @@ class Chord(AbstractChord):
         # chords hash based on their notes and intervals
         return hash((self.notes, self.intervals))
 
+    @property
+    def _marker(self):
+        """unicode character marker identifying this class"""
+        return '♬'
+
     def __str__(self):
         notes_str = [] # notes are annotated with accent marks depending on which octave they're in (with respect to root)
         for i, n in zip(self.intervals, self.notes):
@@ -829,7 +838,7 @@ class Chord(AbstractChord):
                 notes_str.append(f'{nl}\u0308{na}') # upper diaresis
         notes_str = ', '.join(notes_str)
 
-        return f'♬ {self.name} [ {notes_str} ]'
+        return f'{self._marker} {self.name} [ {notes_str} ]'
 
     def __repr__(self):
         return str(self)
