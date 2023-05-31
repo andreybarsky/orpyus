@@ -339,7 +339,7 @@ class Interval:
         else:
             qualifier_string = ''
 
-        return f'{self.quality.name.capitalize()} {degree_name.capitalize()}{qualifier_string}'
+        return f'{self.quality.full_name.capitalize()} {degree_name.capitalize()}{qualifier_string}'
 
     @property
     def short_name(self):
