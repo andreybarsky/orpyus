@@ -430,7 +430,7 @@ class AbstractChord:
         return candidates
 
     @property
-    def name(self):
+    def short_name(self):
         if '/' in self.suffix:
             suffix, inv = self.suffix.split('/')
             inv = f'/{inv}'
@@ -438,11 +438,15 @@ class AbstractChord:
             suffix, inv = self.suffix, ''
         if suffix == '':
             # unique to AbstractChord: report major and dominant suffix
-            return f'maj{inv} chord'
+            return f'maj{inv}'
         elif suffix.isnumeric() and suffix not in {'5', '6'}: # dominant chords (which are not 5s or 6s)
-            return f'dom7{inv} chord'
+            return f'dom7{inv}'
         else:
-            return f'{suffix}{inv} chord'
+            return f'{suffix}{inv}'
+
+    @property
+    def name(self):
+        return f'{self.short_name} chord'
 
     def on_root(self, root_note):
         """constructs a Chord object from this AbstractChord with respect to a desired root"""
@@ -810,6 +814,11 @@ class Chord(AbstractChord):
 
     @property
     def name(self):
+        return f'{self.root.name}{self.suffix}'
+
+    @property
+    def short_name(self):
+        # identical to self.name in the case of Chord class
         return f'{self.root.name}{self.suffix}'
 
     def __hash__(self):
