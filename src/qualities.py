@@ -31,12 +31,12 @@ class Quality:
     def __init__(self, name=None, value=None):
         if name is not None:
             assert value is None, "Quality init must provide one of 'name' OR 'value', but got both"
-            self.name, self.value = self._parse_input(name)
+            self.full_name, self.value = self._parse_input(name)
         elif value is not None:
             assert name is None, "Quality init must provide one of 'name' OR 'value', but got both"
 
             self.value = value
-            self.name = value_qualities[value]
+            self.full_name = value_qualities[value]
         else:
             raise Exception("Quality init must provide one of 'name' or 'value', but got neither")
 
@@ -73,11 +73,20 @@ class Quality:
             raise Exception(f'Quality object initialised using name arg, expected string (or Quality object) but got type: {type(name)}')
 
     @property
+    def name(self):
+        if self.major_ish:
+            return self.name[:3].capitalize()
+        elif self.perfect:
+            return 'Ind'
+        elif self.minor_ish:
+            return self.name[:3].lower()
+
+    @property
     def short_name(self):
         if self.major_ish or self.perfect:
-            return self.name[0].upper()
+            return self.full_name[0].upper()
         elif self.minor_ish:
-            return self.name[0]
+            return self.full_name[0]
 
     def __invert__(self):
         """invert major to minor, aug to dim, or vice versa"""
@@ -91,7 +100,7 @@ class Quality:
         return hash(str(self))
 
     def __str__(self):
-        return f'~Quality:{self.name}~'
+        return f'~{self.name}~'
 
     def __repr__(self):
         return str(self)
