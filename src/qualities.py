@@ -5,6 +5,8 @@ from .parsing import degree_names, is_valid_note_name, parse_alteration, acciden
 
 # TBI: double dim/aug qualities?
 
+# TBI: rename ChordQualifiers to ChordModifiers for less confusion with Qualities?
+
 #### interval qualities:
 
 quality_aliases = {'major': ['maj', 'M'],
@@ -472,7 +474,6 @@ chord_modifiers = { 'sus4': ChordQualifier(remove=3, add=4, verify={2:False, 3:0
 chord_aliases = {**chord_types, **chord_modifiers}
 
 
-
 # string replacements for chord searching:
 qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      'm': ['minor', 'min', '-',],
@@ -488,14 +489,14 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
 
                      '2': ['two', '2nd', 'second'],
                      '4': ['four', '4th', 'fourth'],
-                     '5': ['five', '5th', 'fifth', '(no 3)', 'power', 'power chord'],
+                     '5': ['five', '5th', 'fifth', '(no 3)', 'power', 'power chord', '⁵'],
                      '6': ['six', '6th', 'sixth', 'add6'], # no such thing as an add6!
-                     '7': ['seven', '7th', 'seventh'],
-                     '9': ['nine', '9th', 'ninth'],
+                     '7': ['seven', '7th', 'seventh', '⁷'],
+                     '9': ['nine', '9th', 'ninth', '⁹'],
                      '10': ['ten', '10th', 'tenth'],
-                     '11': ['eleven', '11th', 'eleventh'],
+                     '11': ['eleven', '11th', 'eleventh', '¹¹'],
                      '12': ['twelve', '12th', 'twelfth'],
-                     '13': ['thirteen', '13th', 'thirteenth'],
+                     '13': ['thirteen', '13th', 'thirteenth', '¹³'],
 
                      # special case, otherwise 'dmin9' doesn't parse correctly:
                      'hdmin9': ['hdmin9', 'hdimm9', 'hdimmin9'],
