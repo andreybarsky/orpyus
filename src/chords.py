@@ -712,17 +712,17 @@ class Chord(AbstractChord):
                         # trigger chord reidentification from notes
                         naive_chord_name = factors_to_chord_names[self.factors]
 
-                        print(f"  Warning: Problem initialising chord: {self.root.name}{naive_chord_name} with notes: {self.root_notes}")
+                        log(f"  Warning: Problem initialising chord: {self.root.name}{naive_chord_name} with notes: {self.root_notes}")
                         # print(f"  Initialised as inversion {self.root.name}{naive_chord_name}/{bass.name} but {bass} is not in the chord")
                         # print(f"  And it does not fit on top of the chord, so this is not a normal inversion of an extension")
                         # print(f"  So this is probably an unusual voicing of a non-inverted chord, with supplied bass note as root.")
                         try:
                             new_notes = NoteList([bass] + [n for n in self.root_notes])
-                            print(f"  --Re-identifying chord from notes: {new_notes}")
-                            new_notes.matching_chords(invert=False, min_precision=0.7, min_recall=0.8)
+                            log(f"  --Re-identifying chord from notes: {new_notes}")
+                            new_notes.matching_chords(invert=False, min_precision=0.7, min_recall=0.8, display=False)
                             likely_chord, stats = new_notes.most_likely_chord(invert=False, require_root=True, min_likelihood=0.5, stats=True)
-                            print(f"\n  --Identified most likely chord: {likely_chord}\n       (with {stats})")
-                            print(f" --Recursively re-initialising {self.root.name}{naive_chord_name}/{bass.name} as {bass.name}{likely_chord.suffix}")
+                            log(f"\n  --Identified most likely chord: {likely_chord}\n       (with {stats})")
+                            log(f" --Recursively re-initialising {self.root.name}{naive_chord_name}/{bass.name} as {bass.name}{likely_chord.suffix}")
                             self.__init__(factors=likely_chord.factors, root=likely_chord.root, inversion=None)
                             return self._parse_inversion(0)
                         except Exception as e:
