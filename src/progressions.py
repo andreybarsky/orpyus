@@ -344,6 +344,35 @@ class ChordList(list):
         else:
             raise TypeError(f'Tried to append to ChordList, expected Chord or str but got: {type(other)}')
 
+    def __add__(self, other):
+        # if other is a str, try and parse it as a chord:
+        if isinstance(other, str):
+            if parsing.begins_with_valid_note_name(other):
+                other = Chord(other)
+            else:
+                other = AbstractChord(other)
+
+        # appending a new chord:
+        if isinstance(other, Chord):
+            new_chords = list(self) + [other]
+            return ChordList(new_chords)
+
+        # concatenation of chordlists:
+        elif isinstance(other, (tuple, list, ChordList)):
+            # if this is a list or tuple, needs to be a list or tuple of chords or strings that cast to chords:
+            if type(other) in {tuple, list}:
+                other = ChordList(other)
+            new_chords = list(self) + list(other)
+            return ChordList(new_chords)
+
+        # transpose every chord in this list by an interval:
+        elif isinstance(other, (int, Interval)):
+            new_chords = [c + int(other) for c in self]
+            return ChordList(new_chords)
+
+        else:
+            raise TypeError(f'ChordList.__add__ not defined for type: {type(other)}')
+
     def abstract(self):
         """returns a new ChordList that is purely the AbstractChords within this existing ChordList"""
         abs_chords = [c.abstract() if (type(c) == Chord)  else c  for c in self]
@@ -362,21 +391,28 @@ class ChordList(list):
         root_degrees = [key.interval_degrees[iv] for iv in root_intervals_from_tonic]
         return root_degrees
 
-    def as_numerals_in(self, key, sep=' '):
+    def as_numerals_in(self, key, sep=' ', qualifiers=True):
         root_degrees = self.root_degrees_in(key)
         degree_chords = zip(root_degrees, self)
         numerals = [numerals_roman[d]  if c.quality.major_ish else numerals_roman[d].lower()  for d,c in degree_chords]
         # add suffixes: (we ignore the 'm' suffix because it is denoted by lowercase instead)
-        suffix_list = [c.suffix if c.suffix != 'm' else '' for c in self]
-        roman_chords_list = [f'{numerals[i]}{suffix_list[i]}' for i in range(len(self))]
-        # turn suffix qualifiers into superscript marks etc. where possible:
-        roman_chords_list = [''.join(reduce_aliases(r, qualifier_marks)) for r in roman_chords_list]
+        if qualifiers:
+            suffix_list = [c.suffix if c.suffix != 'm' else '' for c in self]
+            roman_chords_list = [f'{numerals[i]}{suffix_list[i]}' for i in range(len(self))]
+            # turn suffix qualifiers into superscript marks etc. where possible:
+            roman_chords_list = [''.join(reduce_aliases(r, qualifier_marks)) for r in roman_chords_list]
+        else:
+            roman_chords_list = [f'{numerals[i]}' for i in range(len(self))]
         if sep is not None:
             roman_chords_str = sep.join(roman_chords_list)
             return roman_chords_str
         else:
             # just return the raw list, instead of a sep-connected string
             return roman_chords_list
+
+    @property
+    def progression(self):
+        return ChordProgression(self)
 
     def find_key(self):
         """lightweight matching_keys reimplementation"""
