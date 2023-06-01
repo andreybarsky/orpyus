@@ -5,7 +5,7 @@ from .scales import Scale, Subscale
 from .keys import Key, Subkey, matching_keys
 from .progressions import Progression, ChordProgression
 from . import parsing
-from .util import log, auto_split
+from .util import log, auto_split, reverse_dict
 from .display import Fretboard
 
 class String(OctaveNote):
@@ -13,15 +13,18 @@ class String(OctaveNote):
         return self + fret
 
 
-tunings = {'standard':[String('E2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')],
-           'dropD':   [String('D2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')],
-           'dropC':   [String('C2'), String('G2'), String('C3'), String('F3'), String('A3'), String('D4')],
-           'dropB':   [String('B1'), String('Gb2'), String('B2'), String('E3'), String('Ab3'), String('Db4')],
-           'openE':   [String('E2'), String('B2'), String('E3'), String('G#3'), String('B3'), String('E4')],
-           'openD':   [String('D2'), String('A2'), String('D3'), String('G3'), String('A3'), String('D4')], # aka DADGAD
-           'openC':   [String('C2'), String('G2'), String('C3'), String('G3'), String('C4'), String('E4')],
-           'openG':   [String('D2'), String('G2'), String('D3'), String('G3'), String('B3'), String('D4')],
+tunings = {'standard':(String('E2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')),
+           'dropD':   (String('D2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')),
+           'dropC':   (String('C2'), String('G2'), String('C3'), String('F3'), String('A3'), String('D4')),
+           'dropB':   (String('B1'), String('Gb2'), String('B2'), String('E3'), String('Ab3'), String('Db4')),
+           'openE':   (String('E2'), String('B2'), String('E3'), String('G#3'), String('B3'), String('E4')),
+           # 'DADGAD':   (String('D2'), String('A2'), String('D3'), String('G3'), String('A3'), String('D4')),
+           'openD':   (String('D2'), String('A2'), String('D3'), String('F#3'), String('A3'), String('D4')),
+           'openC':   (String('C2'), String('G2'), String('C3'), String('G3'), String('C4'), String('E4')),
+           'openG':   (String('D2'), String('G2'), String('D3'), String('G3'), String('B3'), String('D4')),
            }
+
+tuning_aliases = reverse_dict(tunings)
 
 class Guitar:
     def __init__(self, tuning='standard', strings=6, capo=0, verbose=False):
@@ -46,7 +49,6 @@ class Guitar:
             tuned_strings = tuning_chromas.force_octave(start_octave=2)
             self.tuned_strings = [String(s) for s in tuned_strings]
             self.tuning = ''.join([s.chroma for s in self.tuned_strings])
-
 
         # open strings are relative to capo instead of to the neck:
         self.open_strings = [s + self.capo for s in self.tuned_strings]
@@ -240,7 +242,7 @@ class Guitar:
             note = OctaveNote(note, prefer_sharps=('#' in note) if preserve_accidental else None)
         note_locs = self.locate_note(note, match_octave=True, max_fret=max_fret, min_fret=min_fret)
         cells = {loc: note.name for loc in note_locs}
-        Fretboard(cells, title=f'Note: {note.chroma} (octave {note.octave}) on {self}').disp(**kwargs)
+        Fretboard(cells, title=f'Note: {note.chroma} (octave {note.octave}) on tuning:{self.name}').disp(**kwargs)
 
     def show_note(self, note, show_octave=True, max_fret=15, min_fret=0, preserve_accidental=True, **kwargs):
         if isinstance(note, (str, OctaveNote)):
@@ -260,7 +262,7 @@ class Guitar:
             cells = {loc: oct.name for loc, oct in zip(note_locs, octavenotes)}
         else:
             cells = {loc: note.chroma for loc in note_locs}
-        Fretboard(cells, title=f'Note: {note.name} on {self}').disp(**kwargs)
+        Fretboard(cells, title=f'Note: {note.name} on tuning:{self.name}').disp(**kwargs)
 
     def show_chord(self, chord, intervals_only=False, notes_only=False, max_fret=13, min_fret=0, preserve_accidental=True, title=None, show_index=True, **kwargs): # preserve accidentals?
         """for a given Chord object (or name that casts to Chord),
@@ -297,7 +299,7 @@ class Guitar:
 
         #### finalise:
         if title is None:
-            title=f'Chord: {chord} on {self}'
+            title=f'Chord: {chord} on tuning:{self.name}'
         Fretboard(cells, index=index, highlight=root_locs, title=title).disp(**kwargs)
 
     def show_abstract_chord(self, chord, **kwargs):
@@ -307,7 +309,7 @@ class Guitar:
         if isinstance(chord, str):
             chord = AbstractChord(chord)
         a_chord = chord.on_root('A')
-        self.show_chord(a_chord, fret_labels=False, show_index=False, min_fret=4, max_fret=16, intervals_only=True, title=f'{chord} on {self}', **kwargs)
+        self.show_chord(a_chord, fret_labels=False, show_index=False, min_fret=4, max_fret=16, intervals_only=True, title=f'{chord} on tuning:{self.name}', **kwargs)
 
 
     def show_key(self, key, intervals_only=False, notes_only=False, min_fret=0, max_fret=13, title=None, show_index=True, highlight_fifths=False, highlight_pentatonic=False, **kwargs):
@@ -360,8 +362,8 @@ class Guitar:
 
         #### finalise:
         if title is None:
-            title = f'{key} on {self}'
-        Fretboard(cells, index=index, highlight=highlights, title=title).disp(*args, fret_size=7, **kwargs)
+            title = f'{key} on tuning:{self.name}'
+        Fretboard(cells, index=index, highlight=highlights, title=title).disp(fret_size=7, **kwargs)
 
     def show_scale(self, scale, **kwargs):
         """for a given abstract Scale object (or name that casts to Scale),
@@ -375,10 +377,10 @@ class Guitar:
                 except Exception as e:
                     print(f'Could not cast string {scale} to Scale or Subscale object: {e}')
         a_scale = scale.on_tonic('A')
-        self.show_key(a_scale, fret_labels=False, show_index=False, min_fret=3, max_fret=13, intervals_only=True, title=f'{scale} on {self})', **kwargs)
+        self.show_key(a_scale, fret_labels=False, show_index=False, min_fret=3, max_fret=13, intervals_only=True, title=f'{scale} on tuning:{self.name}', **kwargs)
 
 
-    def show_progression(self, progression, *args, **kwargs):
+    def show_progression(self, progression, **kwargs):
         # try casting to Progression type if it is not one:
         if type(progression) != Progression:
             progression = Progression(Progression)
@@ -389,7 +391,7 @@ class Guitar:
         chord_roots = [(tonic_root + iv) for iv in progression.chord_root_intervals_from_tonic]
         specific_chords = [c.on_root(r) for c,r in zip(progression.chords, chord_roots)]
         for numeral, c in zip(progression.numerals, specific_chords):
-            title = f'\n{c.abstract()} on degree {numeral} of {progression.scale.name} on {self}'
+            title = f'\n{c.abstract()} on degree {numeral} of {progression.scale.name} on tuning:{self.name}'
             self.show_chord(c, fret_labels=False, show_index=False, min_fret=4, max_fret=16, fret_size=6, intervals_only=True, title=title, **kwargs)
 
     def show_chord_progression(self, progression, end_fret=13, **kwargs):
@@ -399,7 +401,7 @@ class Guitar:
         # just display chords in sequence:
         if 'fret_size' not in kwargs:
             kwargs['fret_size'] = 6
-        print(f'{progression} on {self}')
+        print(f'{progression} on tuning:{self.name}')
         for numeral, chord in zip(progression.numerals, progression.chords):
             title=f'\n{numeral} Chord: {chord}'
             self.show_chord(chord, title=title, end_fret=end_fret, **kwargs)
@@ -439,6 +441,13 @@ class Guitar:
             if not succeeded:
                 raise TypeError(f"Could not understand string input to Guitar.show: {obj}")
 
+    @property
+    def name(self):
+        """uses alias like 'standard' or 'dropD' if defined, otherwise spells out the tuning"""
+        if tuple(self.tuned_strings) in tuning_aliases:
+            return tuning_aliases[tuple(self.tuned_strings)]
+        else:
+            return self.tuning
 
     def __str__(self):
         tuning_letters = [string.chroma for string in self.tuned_strings]
