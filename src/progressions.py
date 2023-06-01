@@ -520,7 +520,7 @@ class Progression:
         # scaledegree, chord pairs:
         self.degree_chords = [(self.root_degrees[i], self.chords[i]) for i in range(len(self))]
 
-        self.numerals = self.as_numerals(sep=None)
+        self.numerals = self._as_numerals(sep=None)
 
         # note movements between each chord root:
         self.chord_root_intervals_from_tonic = [self.scale.degree_intervals[d] for d in self.root_degrees]
