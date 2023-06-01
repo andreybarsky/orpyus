@@ -155,7 +155,7 @@ class Key(Scale):
                         n._set_sharp_preference(True)
                     else:
                         # this note needs to be a double sharp or double flat or something
-                        log(f'Found a possible case for a double-sharp or double-flat: degree {d} ({n}) in scale: {self}')
+                        # log(f'Found a possible case for a double-sharp or double-flat: degree {d} ({n}) in scale: {self}')
                         # fall back on same as tonic:
                         n._set_sharp_preference(prefer_sharps)
                 next_nat = parsing.next_natural_note[next_nat]

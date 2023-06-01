@@ -190,7 +190,7 @@ def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True,
                 output.append(rep)
                 cur_input_idx += cur_rep_len
                 found_match = True
-                log(f'Replacing {substring} with {rep} at original index={cur_input_idx-cur_rep_len}. New index is {cur_input_idx}, current replacement is: {output}')
+                # log(f'Replacing {substring} with {rep} at original index={cur_input_idx-cur_rep_len}. New index is {cur_input_idx}, current replacement is: {output}')
                 break
         if not found_match:
             # no replacement at this character, advance forward by one character
