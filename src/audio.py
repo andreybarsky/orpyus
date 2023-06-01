@@ -101,7 +101,7 @@ def sine_wave(freq, duration, correct=True, amplitude=1):
         wave = amp_correct(wave, freq)
     return wave
 
-# pure exponential falloff function: (timbre sounds harp-like, or like an electric piano)
+# pure exponential falloff function: (timbre over pure sine wave sounds harp-like, or like an electric piano)
 def exp_falloff(wave, sharpness=5, peak_at=0.05):
     """peak_at is float, in seconds"""
     start_samples = int(fs * peak_at)

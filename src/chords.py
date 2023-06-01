@@ -2,7 +2,7 @@
 
 # import notes
 from .notes import Note, NoteList, chromatic_scale, relative_minors, relative_majors, sharp_minor_tonics, sharp_major_tonics, flat_minor_tonics, flat_major_tonics
-from .intervals import Interval, IntervalList
+from .intervals import Interval, IntervalList, P5
 from .util import log, precision_recall, rotate_list, check_all, auto_split, reverse_dict, unpack_and_reverse_dict
 from . import parsing
 from . import qualities
@@ -349,11 +349,19 @@ class AbstractChord:
             log(f' ++ Could not find chord by factors ({self.factors}), but found it by root intervals ({self.root_intervals}): {suf}')
             return suf
         elif self.intervals in intervals_to_chord_names:
-            # set_trace(context=30) # what is going on here
+            # set_trace(context=30) # can't remember what is going on here
             print(f' ++++ Could not find chord by factors ({self.factors}), but found it by inverted intervals: {self.intervals}')
+            raise Exception() # in case this ever comes up
             return intervals_to_chord_names[self.intervals] + f' (inverted from {self.root})'
+        elif 5 not in self.factors:
+            # try adding a 5 to see if this is a (no5) chord
+            intervals_with_5 = IntervalList(sorted(list(self.root_intervals) + [P5]))
+            if intervals_with_5 in intervals_to_chord_names:
+                return intervals_to_chord_names[intervals_with_5] + '(no5)' + inv_string
+            # try the same for this chord's inversions? (this gets messy very fast)
+
         # try flattening intervals and seeing if that produces a chord: (i.e. parsing CGE as CEG)
-        elif self.intervals.flatten() in intervals_to_chord_names:
+        if self.intervals.flatten() in intervals_to_chord_names:
             return intervals_to_chord_names[self.intervals.flatten()]
         elif self.factors == _major_triad:
             return ''
@@ -475,15 +483,54 @@ class AbstractChord:
         return len(self)
 
     def __add__(self, other):
-        """Chord addition with int or Interval is upward transposition.
-        Chord addition with Note creates a new Chord.
-        (neither are defined for AbstractChords)"""
-        # transposition by int/interval:
-        if isinstance(other, int):
-            other = Interval(other)
-        if isinstance(other, Interval):
-            new_root = self.root + other
+        """Chord + Chord results in a ChordList (which can further be analysed as a progression)
+        Chord + Note adds the note to produce a new Chord
+        Chord + Interval produces a new chord that is transposed by that Interval"""
+        if isinstance(other, str):
+            # parse if this str is a note or a chord, preferring note first:
+            if parsing.is_valid_note_name(other):
+                other = Note(other)
+            else:
+                other = Chord(other)
+
+        if isinstance(other, Chord):
+            # concatenation of chords to produce ChordList (or ChordProgression?):
+            from .progressions import ChordList, ChordProgression # lazy import
+            return ChordList([self, other])
+
+        if isinstance(other, Note):
+            # addition of new note to produce new chord:
+            new_notes = list(self.notes) + [other]
+            return Chord(notes=new_notes)
+
+        elif isinstance(other, (int, Interval)):
+            # transposition by int/interval:
+            new_root = self.root + int(other)
             return Chord(factors=self.factors, root=new_root)
+
+    def __sub__(self, other):
+        pass # TBI, but should include subtraction by interval, subtraction by note (deletion), or by chord (difference/distance)
+        if isinstance(other, str):
+            if parsing.is_valid_note_name(other):
+                other = Note(other)
+            elif parsing.begins_with_valid_note_name(other):
+                other = Chord(other)
+
+        if isinstance(other, Note):
+            # note deletion
+            new_notes = [n for n in self.notes if n != other]
+            return Chord(notes=new_notes)
+
+        elif isinstance(other, Chord):
+            return self.chord_distance(other) # Not Yet Implemented
+
+        elif isinstance(other, (int, Interval)):
+            new_root = self.root - int(other)
+            return Chord(root=new_root, factors=self.factors, inversion=self.inversion)
+
+        else:
+            raise TypeError(f'Chord.__sub__ not defined for type: {type(other)}')
+
 
     @property
     def _marker(self):
@@ -1049,8 +1096,9 @@ class Chord(AbstractChord):
 chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
                           1: ['m7', 'maj7', 'dim', 'sus4', 'sus2', 'add9'], # maj/min7s, dim triads, and common alterations like sus2/4 and add9
                           2: ['mmaj7', 'dim7', 'hdim7', '6', 'm6', 'aug7', '9', 'maj9', 'm9', 'aug'], # sixths, mmaj/diminished 7ths, augs and common 9ths
-                          3: ['7b5', '7#9', 'add4', '7b9', 'dim9', 'dmin9', 'hdmin9', 'dimM7', 'augM7'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (11,13)], # the five major types of extended chords, and dominant minor 9ths
-                          4: ['add11', 'add13'], 5: [], 6: [], 7: []}
+                          3: ['7b5', '7#9', 'add4', '7b9', 'dim9', 'dmin9', 'mmaj9', 'hdmin9', 'dimM7', 'augM7'] + [f'{q}{d}' for q in ('', 'm', 'maj') for d in (11,13)],
+                          4: ['add11', 'add13'] + [f'{q}{d}' for q in ('dim', 'mmaj') for d in (11,13)],
+                          5: [], 6: [], 7: []}
 
 # removed no5 - handled better by incomplete chord matching
 
@@ -1058,7 +1106,7 @@ ordered_modifier_names = ['sus4', 'sus2', 'add9', 'add11', 'add13']
 modifier_names_by_rarity = {1: ['sus4', 'sus2'], 2: ['add9'], 3: ['add11'], 4: ['add13']}
 
 # these chord names cannot be modified:
-unmodifiable_chords = ['', '5', '(no5)', 'add4', 'add9', 'add11', 'add13']
+unmodifiable_chords = {'', '5', '(no5)', 'add4', 'add9', 'add11', 'add13'}
 # '' because most ordinary chord types imply modification from major, i.e. 'sus4' implies ['' + 'sus4']
 # '5' and '(no5)' because they both imply simple removals of triad degrees, and are best handled by fuzzy matching
 # and add4/add9/add11 chords because they are themselves modifiers; they combine oddly with sus2/sus4, and must be done strictly in sus/add order
@@ -1175,7 +1223,8 @@ def matching_chords(note_list, display=True,
         for rarity, chord_names in chord_names_by_rarity.items():
 
             # (no5) is already a missing degree, so we don't search chords that include it:
-            names_to_try = [n for n in chord_names if '(no5)' not in n]
+            # names_to_try = [n for n in chord_names if '(no5)' not in n]
+            names_to_try = chord_names
 
             for chord_name in names_to_try:
                 # init chord more efficiently than by name:

@@ -386,7 +386,7 @@ class ChordList(list):
     def root_degrees_in(self, key):
         if isinstance(key, str):
             key = Key(key)
-        assert isinstance(key, Key), f"key input to ChordList.as_numerals must be a Key or string that casts to Key, but got: {type(key)})"
+        assert isinstance(key, Key), f"key input to ChordList.root_degrees_in must be a Key or string that casts to Key, but got: {type(key)})"
         root_intervals_from_tonic = [c.root - key.tonic for c in self]
         root_degrees = [key.interval_degrees[iv] for iv in root_intervals_from_tonic]
         return root_degrees
@@ -597,8 +597,8 @@ class Progression:
             out.append(line)
         print ('\n'.join(out))
 
-    def as_numerals(self, sep=' ', check_scale=False):
-        numerals = [numerals_roman[d]  if c.quality.major_ish else numerals_roman[d].lower()  for d,c in self.degree_chords]
+    def _as_numerals(self, sep=' ', check_scale=False):
+        numerals = [numerals_roman[d].lower()  if c.quality.minor_ish else numerals_roman[d].upper()  for d,c in self.degree_chords]
         # add suffixes: (we ignore the 'm' suffix because it is denoted by lowercase instead)
         suffix_list = [c.suffix if c.suffix != 'm' else '' for c in self.chords]
         roman_chords_list = [f'{numerals[i]}{suffix_list[i]}' for i in range(len(self))]
@@ -683,7 +683,7 @@ class Progression:
         if 'natural' in scale_name:
             scale_name = scale_name.replace('natural ', '')
         lb, rb = self._brackets
-        return f'Progression:  {lb} {self.as_numerals(check_scale=True)} {rb}  (in {scale_name})'
+        return f'Progression:  {lb} {self._as_numerals(check_scale=True)} {rb}  (in {scale_name})'
 
 
     def __repr__(self):
@@ -776,7 +776,10 @@ class ChordProgression(Progression, ChordList):
 
             if len(ideal_matches) == 0:
                 # open up and just take the best non-ideal match:
-                self.key = list(matches.keys())[0] # TBI, look for cadence resolutions here too
+                if len(matches) > 0:
+                    self.key = list(matches.keys())[0] # TBI, look for cadence resolutions here too
+                else:
+                    raise Exception(f'No valid key found for progression: {self.chords}')
         else:
             self.key = key if isinstance(key, Key) else Key(key)
         # and rip out its scale:
@@ -786,7 +789,7 @@ class ChordProgression(Progression, ChordList):
         self.root_degrees = [self.key.note_degrees[n] for n in self.roots]
         self.degree_chords = [(self.root_degrees[i], self.chords[i]) for i in range(len(self))]
 
-        self.numerals = self.as_numerals(sep=None)
+        self.numerals = self._as_numerals(sep=None)
 
         # note movements between each chord root:
         self.chord_root_intervals_from_tonic = [self.scale.degree_intervals[d] for d in self.root_degrees]
@@ -812,7 +815,7 @@ class ChordProgression(Progression, ChordList):
         # numerals = self.as_numerals()
         # chord_names = ' '.join([c.short_name for c in self.chords])
         lb, rb = self._brackets
-        return f'{self.chords}  or  {lb} {self.as_numerals(check_scale=True)} {rb}  (in {self.key.name})'
+        return f'{self.chords}  or  {lb} {self._as_numerals(check_scale=True)} {rb}  (in {self.key.name})'
 
     # def __str__(self):
     #     # chord_set_str = '-'.join(['♬ ' + c.name for c in self.chords])
