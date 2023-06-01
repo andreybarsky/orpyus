@@ -3,7 +3,7 @@
 # import notes
 from .notes import Note, NoteList, chromatic_scale, relative_minors, relative_majors, sharp_minor_tonics, sharp_major_tonics, flat_minor_tonics, flat_major_tonics
 from .intervals import Interval, IntervalList
-from .util import log, test, precision_recall, rotate_list, check_all, auto_split, reverse_dict, unpack_and_reverse_dict
+from .util import log, precision_recall, rotate_list, check_all, auto_split, reverse_dict, unpack_and_reverse_dict
 from . import parsing
 from . import qualities
 from .qualities import Quality, ChordQualifier, parse_chord_qualifiers
@@ -350,8 +350,11 @@ class AbstractChord:
             return suf
         elif self.intervals in intervals_to_chord_names:
             # set_trace(context=30) # what is going on here
-            log(f' ++++ Could not find chord by factors ({self.factors}), but found it by inverted intervals: {self.intervals}')
+            print(f' ++++ Could not find chord by factors ({self.factors}), but found it by inverted intervals: {self.intervals}')
             return intervals_to_chord_names[self.intervals] + f' (inverted from {self.root})'
+        # try flattening intervals and seeing if that produces a chord: (i.e. parsing CGE as CEG)
+        elif self.intervals.flatten() in intervals_to_chord_names:
+            return intervals_to_chord_names[self.intervals.flatten()]
         elif self.factors == _major_triad:
             return ''
         else:
@@ -595,7 +598,7 @@ class Chord(AbstractChord):
 
         # recover factor offsets, intervals from root, and inversion position from input args:
         self.factors, self.root_intervals, inversion = self._parse_input(suffix, factors, intervals, inversion, inversion_degree, qualifiers, _allow_note_name=True)
-        # note that while self.inversion in AbstratChord comes out as strictly int or None
+        # note that while self.inversion in AbstractChord comes out as strictly int or None
         # here we allow it to be a string denoting the bass note, which we'll correct in a minute
 
         # mapping of chord factors to intervals from tonic:
@@ -641,7 +644,7 @@ class Chord(AbstractChord):
         elif isinstance(name, str):
             ### here we must distinguish if name is a potential note_string, of the kind we can parse out
             parse_result = parsing.parse_out_note_names(name, graceful_fail=True)
-            if parse_result is not False and len(parse_result) >= 3: # we don't allow note_strings for chord init unless they contain 3 or more notes
+            if parse_result is not False and len(parse_result) >= 2: # we don't allow note_strings for chord init unless they contain 2 or more notes
                 notes = parse_result
                 name = None
             else:
@@ -1044,15 +1047,15 @@ class Chord(AbstractChord):
 ##### attempt no2 at chord types/rarities:
 
 chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
-                          1: ['m7', 'maj7', 'dim', 'aug', 'sus4', 'add9'], # maj/mmaj 7s, augs, and common alterations like sus2/4 and add9
-                          2: ['mmaj7', 'dim7', 'hdim7', '6', 'm6', 'aug7', 'sus2'], # diminished chords and 6ths
-                          3: ['7b5', '7#9', 'add4', '7b9', 'dmin9', 'hdmin9', 'dimM7', 'augM7'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (9,11,13)], # the five major types of extended chords, and dominant minor 9ths
+                          1: ['m7', 'maj7', 'dim', 'sus4', 'sus2', 'add9'], # maj/min7s, dim triads, and common alterations like sus2/4 and add9
+                          2: ['mmaj7', 'dim7', 'hdim7', '6', 'm6', 'aug7', '9', 'maj9', 'm9', 'aug'], # sixths, mmaj/diminished 7ths, augs and common 9ths
+                          3: ['7b5', '7#9', 'add4', '7b9', 'dim9', 'dmin9', 'hdmin9', 'dimM7', 'augM7'] + [f'{q}{d}' for q in ('', 'm', 'maj', 'mmaj', 'dim') for d in (11,13)], # the five major types of extended chords, and dominant minor 9ths
                           4: ['add11', 'add13'], 5: [], 6: [], 7: []}
 
 # removed no5 - handled better by incomplete chord matching
 
 ordered_modifier_names = ['sus4', 'sus2', 'add9', 'add11', 'add13']
-modifier_names_by_rarity = {1: ['sus4', 'add9'], 2: ['sus2'], 3: ['add11'], 4: ['add13']}
+modifier_names_by_rarity = {1: ['sus4', 'sus2'], 2: ['add9'], 3: ['add11'], 4: ['add13']}
 
 # these chord names cannot be modified:
 unmodifiable_chords = ['', '5', '(no5)', 'add4', 'add9', 'add11', 'add13']

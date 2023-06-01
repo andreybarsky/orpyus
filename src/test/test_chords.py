@@ -1,8 +1,7 @@
-from .util import compare, log
-from orpyus.chords import Chord, AbstractChord, ChordFactors, Interval, matching_chords, most_likely_chord
+from ..chords import Chord, AbstractChord, ChordFactors, Interval, matching_chords, most_likely_chord
+from .testing_tools import compare
 
-def test_chords(verbose=False):
-    log.verbose=verbose
+def unit_test():
 
     # test inversion by factor/bass, AbstractChord->Chord initialisation, and unusual note names:
     compare(Chord('E#m7/C'), AbstractChord('m7/2').on_root('F'))
@@ -54,7 +53,5 @@ def test_chords(verbose=False):
 
     # chord init by re-casting:
     compare(Chord(Chord('Cdim9/Eb')), Chord('Cdim9/Eb'))
-
-    log.verbose = False
 
     compare(most_likely_chord('CEAB'), Chord('Amadd9/C'))

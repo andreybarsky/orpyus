@@ -146,16 +146,16 @@ class Scale:
 
             if isinstance(intervals, (list, tuple)):
                 # intervals = IntervalList(intervals)
-                intervals = Scale.sanitise_intervals(intervals)
-                if intervals in interval_mode_names:
-                    name = interval_mode_names[intervals][-1]
+                sane_intervals = Scale.sanitise_intervals(intervals, stacked=stacked)
+                if sane_intervals in interval_mode_names:
+                    name = interval_mode_names[sane_intervals][-1]
                     base_scale, rotation = mode_lookup[name]
 
                     if mode != 1:
-                        intervals = rotate_mode_intervals(intervals, mode)
+                        sane_intervals = rotate_mode_intervals(sane_intervals, mode)
                         rotation += (mode-1)
 
-                    return intervals, base_scale, rotation
+                    return sane_intervals, base_scale, rotation
                 else:
                     raise KeyError(f'No scale found that matches intervals: {intervals}')
             else:
@@ -1030,122 +1030,3 @@ subscale_name_intervals = unpack_and_reverse_dict(interval_subscale_names)
 
 MajorPentatonic = MajorPentatonicScale = MajorPent = MajPent = Subscale('major pentatonic')
 MinorPentatonic = MinorPentatonicScale = MinorPent = MinPent = Subscale('minor pentatonic')
-
-def unit_test():
-    from .chords import AbstractChord
-    # test mode retrieval by name:
-    test(mode_name_intervals['natural major'], get_modes('natural major')[1])
-
-    print('Test scale init by intervals:')
-    test(Scale('major'), Scale(intervals=scale_name_intervals['natural major']))
-
-    print('Test chords built on Scale degrees:')
-    test(Scale('minor').chord(2), AbstractChord('dim'))
-    test(Scale('major').chord(5, order=5), AbstractChord('dom9'))
-
-    print('Scales underlying the common 13th chords:')
-    test(Scale('lydian').chord(1, order=7), AbstractChord('maj13'))
-    test(Scale('mixolydian').chord(1, order=7), AbstractChord('13'))
-    test(Scale('dorian').chord(1, order=7), AbstractChord('m13'))
-    test(Scale('lydian b3').chord(1, order=7), AbstractChord('mmaj13'))
-
-    print('Subscales:')
-    test(Scale('major').pentatonic.intervals, [0, 2, 4, 7, 9])
-    test(Scale('minor').blues.intervals, [0, 3, 5, 6, 7, 10])
-
-    test(Subscale('pentatonic minor')[2], m3)
-    test(Subscale('blues minor').intervals[3], Dim5)
-
-    # test neighbours:
-    major_neighbours = Scale('natural major').find_neighbouring_scales()
-    print(f'Neighbours of natural major scale:')
-    for a, sc in major_neighbours.items():
-        print(f'with {a.name}: {sc}')
-
-    # extreme test case: do we crash if computing neighbours for every possible scale?
-    for intvs, names in interval_mode_names.items():
-        name = names[0]
-        sc = Scale(name)
-        neighbours = sc.find_neighbouring_scales()
-        log(f'{name} scale has {len(neighbours)} neighbours')
-
-    print('Valid chords from scale degrees:')
-    Scale('major').valid_chords(4, inversions=True)
-
-    Scale('harmonic minor').valid_chords(4, 6)
-
-    #### TBI: (bug?)
-    # Scale(intervals=[2,1,2,2,1,2], stacked=False) # returns error
-
-if __name__ == '__main__':
-    unit_test()
-
-    # which modes correspond to which 13 chords?
-
-    # _13chords = '13', 'maj13', 'min13', 'mmaj13', 'dim13'
-    # for chord_name in _13chords:
-    #     c = AbstractChord(chord_name)
-    #     chord_intervals = c.intervals
-    #     s = Scale(intervals=chord_intervals)
-    #     alias_str = f" (aka: {', '.join(s.aliases)})" if len(s.aliases) > 0 else ''
-
-        # print(f'\n{c}')
-        # print(f'  flattened intervals: {c.intervals.flatten()}')
-        # print(f'    unstacked intervals: {s.intervals.unstack()}')
-        # print(f'------associated scale: {s}{alias_str}')
-
-
-
-    # display all scale consonances:
-    include_subscales = False
-    all_consonances = {}
-    for ivs, scs in interval_mode_names.items():
-        sc = Scale(scs[0])
-        all_consonances[sc] = sc.consonance
-    if include_subscales:
-        for subsc, als in subscales_to_aliases.items():
-            all_consonances[subsc] = subsc.consonance
-
-    sorted_scales = sorted(all_consonances, key=lambda x: all_consonances[x], reverse=True)
-    cons_names = [sc.name for sc in sorted_scales]
-    cons_values = [all_consonances[sc] for sc in sorted_scales]
-
-    # cons_names, cons_values = [sc.name for sc in all_consonances.keys()], [c for c in all_consonances.values()]
-
-    descriptors = []
-    aliases = []
-    for cons_name in cons_names:
-        if cons_name in base_scale_names:
-            # full_names.append(f'{cons_name}')
-            descriptors.append('')
-            this_aliases = list(set(mode_name_aliases[cons_name]))
-        elif cons_name in subscales_by_name:
-            subsc = subscales_by_name[cons_name]
-            descriptors.append(f'subscale of {subsc.parent_scale.name} scale')
-            this_aliases = []
-        else:
-            base, mode = mode_lookup[cons_name]
-            descriptors.append(f'mode {mode} of {base} scale')
-            this_aliases = list(set(mode_name_aliases[cons_name]))
-        aliases.append(this_aliases)
-
-    longest_name = max([len(c) for c in cons_names])
-    longest_desc = max([len(d) for d in descriptors])
-
-    # rows = zip(cons_names, cons_values)
-    # rows = rows.sorted(lambda x: (x[1]), reverse=True)
-
-    print('====================================\n')
-    print('Modes/scales by pairwise consonance:\n')
-
-    print(f'consonance {"    scale name":{longest_name}}   {"    mode rotation":{longest_desc}}           aliases')
-    print('---------------------------------------------------------------------------------------------------')
-    for i, (name, desc, value, this_aliases) in enumerate(zip(cons_names, descriptors, cons_values, aliases)):
-        # if i % 4 == 0:
-        #     print('')
-        print(f'  {value:.3f}       {name:{longest_name}}   {desc:{longest_desc}}      {", ".join(this_aliases)}')
-
-    import numpy as np
-    print(f'Highest consonance: {np.max(cons_values):.05f} ({cons_names[np.argmax(cons_values)]})')
-    print(f'Lowest consonance: {np.min(cons_values):.05f} ({cons_names[np.argmin(cons_values)]})')
-    # import matplotlib.pyplot as plt

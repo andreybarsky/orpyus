@@ -1,5 +1,5 @@
 # OOP representation of major/minor quality that is invertible and has a null (indeterminate) value
-from .util import reverse_dict, unpack_and_reverse_dict, reduce_aliases, test, log
+from .util import reverse_dict, unpack_and_reverse_dict, reduce_aliases, log
 from .parsing import degree_names, is_valid_note_name, parse_alteration, accidental_offsets, offset_accidentals
 
 
@@ -58,7 +58,7 @@ class Quality:
 
         if isinstance(inp, Quality):
             # accept re-casting:
-            return inp.name, inp.value
+            return inp.full_name, inp.value
         elif isinstance(inp, str):
             # case-insensitive except for the crucial distinction between m and M:
             name = inp.lower() if len(inp) > 1 else inp
@@ -113,14 +113,14 @@ class Quality:
     @property
     def offset_wrt_major(self):
         """offsets relative to a major interval are 0 for major, -1 for minor, +1 for augmented etc."""
-        assert self.value != 0, f"{self.name} quality should not have its offset compared to a major interval"
-        return offsets_wrt_major[self.name]
+        assert self.value != 0, f"{self.full_name} quality should not have its offset compared to a major interval"
+        return offsets_wrt_major[self.full_name]
 
     @property
     def offset_wrt_perfect(self):
         """offsets relative to a perfect interval are -1 if diminished and +1 if augmented"""
-        assert self.value not in [-1, 1], f"{self.name} quality should not have its offset compared to a perfect interval"
-        return offsets_wrt_perfect[self.name]
+        assert self.value not in [-1, 1], f"{self.full_name} quality should not have its offset compared to a perfect interval"
+        return offsets_wrt_perfect[self.full_name]
 
     @staticmethod
     def from_offset_wrt_major(offset):
@@ -438,7 +438,7 @@ chord_types =  {'m': ChordQualifier(make={3:-1}),
                 'hdim7': ['dim', '7'],    # half diminished 7th (diminished triad with minor 7th), also called m7b5
                 '9': ['7', '♮9'],          # i.e. dominant 9th
                 'maj9': ['maj7', '♮9'],    # major 9th
-                '7b9': ['7', '♭9'],        # dominant minor 9th, i.e. dm9
+                '7b9': ['7', '♭9'],        # dominant minor 9th, (i.e. dm9?)
                 'dim9': ['dim7', '♮9'],    # diminished 9th
                 'dmin9': ['dim7', '♭9'],   # diminished minor 9th
                 'hdmin9': ['hdim7', '♭9'],   # half diminished minor 9th
@@ -484,7 +484,9 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      'hdim7': ['ø', 'hdim', 'half diminished', 'half dim', 'half-diminished', 'half-dim', 'm7b5', 'm7♭5'],
                      'add': ['added'],
                      '(no5)': ['no5', '(omit5)'],
-                     # bit of a kludge; but 'domX' always refers to an X chord, so we map 'dom' to nothing and it works fine
+
+                     # bit of a kludge; but 'domX' always refers to an 'X' chord,
+                     # so we map 'dom' to nothing and it works fine
                      '': ['dominant', 'dom'],
 
                      '2': ['two', '2nd', 'second'],
@@ -591,24 +593,3 @@ def cast_qualifiers(qual, verbose=False):
     else:
         raise TypeError(f'cast_qualifiers expected a ChordQualifier, or a string that casts to one, or a list/tuple of either, but got: {type(qual)}')
     return qual_list
-
-
-###############################
-
-def unit_test():
-    # test quality initialisation:
-    test(Quality('major'), Quality('M'))
-    test(Quality('Indeterminate'), Quality(value=0))
-    # test quality inversion:
-    test(~Quality('major'), Quality('minor'))
-    test(~Quality('dim'), Quality('aug'))
-    # test quality from offset:
-    test(Quality.from_offset_wrt_major(-1), Quality('minor'))
-    test(Quality.from_offset_wrt_perfect(1), Quality('augmented'))
-
-    # test chordqualifier parsing:
-    test(parse_chord_qualifiers('minormajor7 add11b5'),
-    [ChordQualifier('min'), ChordQualifier('major 7'), ChordQualifier('added eleven'), ChordQualifier('flattened fifth')])
-
-if __name__ == '__main__':
-    unit_test()

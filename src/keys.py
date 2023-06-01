@@ -3,7 +3,7 @@ from .notes import Note, NoteList, sharp_major_tonics, sharp_minor_tonics, flat_
 from .scales import Scale, Subscale, interval_mode_names, parallels
 from .chords import Chord, AbstractChord
 from . import parsing
-from .util import check_all, precision_recall, reverse_dict, test, log
+from .util import check_all, precision_recall, reverse_dict, log
 
 from collections import Counter
 from pdb import set_trace
@@ -166,6 +166,11 @@ class Key(Scale):
         """a Key's scale_name is whatever name it would get as a Scale:
         the last entry in interval_mode_names for its intervals"""
         return Scale.get_name(self) # inherits from Scale
+
+    @property
+    def scale(self):
+        """returns the abstract Scale associated with this key"""
+        return Scale(self.scale_name)
 
     @property
     def name(self):
@@ -348,8 +353,9 @@ class Key(Scale):
 
     def play(self, *args, **kwargs):
         # plays the notes in this key (we also add an octave over root on top for resolution)
-        played_notes = NoteList([n for n in self.notes] + [self.tonic])
-        played_notes.play(*args, **kwargs)
+        # played_notes = NoteList([n for n in self.notes] + [self.tonic])
+        # played_notes.play(*args, **kwargs)
+        self.scale.play(*args, on=f'{self.tonic.name}3', **kwargs)
 
 
 class Subkey(Key, Subscale):
@@ -413,10 +419,9 @@ class Subkey(Key, Subscale):
     # def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, chromatic_intervals=None, assigned_name=None):
 
 
-def matching_keys(chords=None, notes=None, exclude=None,
+def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, require_roots=True,
                     display=True, return_matches=False,
-                    assume_tonic=False, require_tonic=True,
-                    upweight_chord_roots=True, upweight_key_tonics=True, upweight_pentatonics=False, # upweight_pentatonics might be broken
+                    upweight_first=True, upweight_last=True, upweight_chord_roots=True, upweight_key_tonics=True, upweight_pentatonics=False, # upweight_pentatonics might be broken
                     min_recall=0.8, min_precision=0.7, min_likelihood=0.5, max_results=5):
     """from an unordered set of chords, return a dict of candidate keys that could match those chord.
     we make no assumptions about the chord list, except in the case of assume_tonic, where we slightly
@@ -440,20 +445,28 @@ def matching_keys(chords=None, notes=None, exclude=None,
                 # increase the weight of the root note too:
                 note_counts.update([chord.root])
 
-        if assume_tonic:
-            # upweight all the notes of the first and last chord
-            first_assumed_tonic = chords[0].root
-            last_assumed_tonic = chords[-1].root
+        # if assume_tonic:
+        # upweight all the notes of the first and last chord
+        first_assumed_tonic = chords[0].root
+        last_assumed_tonic = chords[-1].root
+        if upweight_first:
             note_counts.update(chords[0].notes)
+            # and the tonic especially:
+            note_counts.update([chords[0].notes[0]] * 2)
+        if upweight_last:
             note_counts.update(chords[-1].notes)
+            note_counts.update([chords[-1].notes[0]] * 2)
     elif notes is not None:
         # just use notes directly
         notes = NoteList(notes)
         note_counts = Counter(notes)
-        if assume_tonic:
+        # if assume_tonic:
+        first_assumed_tonic = notes[0]
+        last_assumed_tonic = notes[-1]
+        if upweight_first:
             note_counts.update([notes[0]])
-            first_assumed_tonic = notes[0]
-            last_assumed_tonic = notes[-1]
+        if upweight_last:
+            note_counts.update([notes[-1]])
     else:
         raise Exception(f'matching_keys requires one list of either: chords or notes')
 
@@ -490,30 +503,39 @@ def matching_keys(chords=None, notes=None, exclude=None,
                 if exc in candidate_notes:
                     does_not_contain_exclusions = False
                     break
+            if require_roots and (chords is not None):
+                for c in chords:
+                    if c.root not in candidate_notes:
+                        does_not_contain_exclusions = False
+                        break
             if does_not_contain_exclusions:
                 # initialise candidate object:
                 # (this can be removed for a fast method; it's mostly for upweighting key fifths)
-                candidate = Key(notes=candidate_notes)
+
                 this_cand_weights = dict(note_counts)
                 if upweight_key_tonics:
-                    # count the key's tonic once more, because it's super important
-                    this_cand_weights.update({candidate.tonic: 1})
+                    # count the key's tonic several times more, because it's super important
+                    this_cand_weights.update({t: 3})
                 if upweight_pentatonics:
+                    candidate = Key(notes=candidate_notes)
                     # count the notes in this key's *pentatonic* scale as extra:
                     this_cand_weights.update({n:1 for n in candidate.pentatonic.notes})
 
                 precision, recall = precision_recall(unique_notes, candidate_notes, weights=this_cand_weights)
 
                 if recall >= min_recall and precision >= min_precision:
+                    # initialise candidate if it has not been already:
+                    if not upweight_pentatonics:
+                        candidate = Key(notes=candidate_notes)
 
                     likelihood = candidate.likelihood
-
-                    if assume_tonic:
-                        # slightly upweight the likelihood of keys with tonics that are the roots of the first or last chord:
-                        if candidate.tonic == first_assumed_tonic:
-                            likelihood += 0.051
-                        if candidate.tonic == last_assumed_tonic:
-                            likelihood += 0.049
+                    # if assume_tonic:
+                    #     # slightly upweight the likelihood of keys with tonics that are the roots of the first or last chord:
+                    #     if candidate.tonic == first_assumed_tonic:
+                    #         likelihood += 0.051
+                    #     if candidate.tonic == last_assumed_tonic:
+                    #         likelihood += 0.049
+                    # now handled by rec/prec
 
                     consonance = candidate.consonance
                     if likelihood >= min_likelihood:
@@ -536,10 +558,13 @@ def matching_keys(chords=None, notes=None, exclude=None,
         # print result as nice dataframe instead of returning a dict
         if chords is not None:
             title = [f"Key matches for chords: {', '.join([c.name for c in chords])}"]
-            if assume_tonic:
-                title.append(f'(upweighted first and last chords: {chords[0].name}, {chords[-1].name})')
+            if upweight_first:
+                title.append(f'(upweighted first chord: {chords[0].name})')
+            if upweight_last:
+                title.append(f'(upweighted last chord: {chords[-1].name})')
             if upweight_pentatonics:
                 title.append('(and upweighted pentatonics)')
+            title.append(f'\n With note weights: {note_counts}')
         elif notes is not None:
             title = [f"Key matches for notes: {', '.join([n.name for n in notes])}"]
 
@@ -584,36 +609,3 @@ def most_likely_key(*args, **kwargs):
         matches = matching_keys(*args, display=False, min_recall=0, min_precision=0, min_likelihood=0, return_matches=True, **kwargs)
     # return top match:
     return list(matches.keys())[0]
-
-def unit_test():
-    # 3 types of initialisation:
-    test(Key(scale_name='natural minor', tonic='B'), Key('Bm'))
-    test(Key(intervals=[2,4,5,7,9,11], tonic='C'), Key(notes='CDEFGAB'))
-
-
-    test(Key('Cm').intervals, Scale('natural minor').intervals)
-
-    print('Test Key __contains__:')
-    # normal scale-degree triads/tetrads:
-    test(Chord('Dm') in Key('C'), True)
-    test(Chord('D') in Key('C'), False)
-    test(Chord('G7') in Key('C'), True)
-    test(Chord('Bdim') in Key('C'), True)
-    test(Chord('Fdim7') in Key('C'), False)
-
-    # disqualification by non-matching root:
-    test(Chord('D#') in Key('C'), False)
-
-
-    # non-triadic chords that are still valid:
-    test(Chord('D13sus4') in Key('C'), True)
-    # or not:
-    test(Chord('Fmmaj11') in Key('C'), False)
-
-    matching_keys(['C', Chord('F'), 'G7', 'Bdim'], upweight_pentatonics=False)
-
-    matching_keys(['Dm', 'Dsus4', 'Am', 'Asus4', 'E', 'E7', 'Asus4', 'Am7'], assume_tonic=True, upweight_pentatonics=True)
-
-
-if __name__ == '__main__':
-    unit_test()

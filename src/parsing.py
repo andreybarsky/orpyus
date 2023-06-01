@@ -1,6 +1,6 @@
 #### string parsing functions
 from collections import defaultdict
-from .util import reverse_dict, unpack_and_reverse_dict, log, test
+from .util import reverse_dict, unpack_and_reverse_dict, log
 
 ######################################## accidentals
 
@@ -324,14 +324,3 @@ def parse_alteration(alteration):
     offset_str = alteration[:-len(degree_chars)]
     offset = accidental_offsets[offset_str]
     return {degree: offset}
-
-
-def unit_test():
-    test(parse_out_note_names('CbbBbAGbE##C'), ['Cbb', 'Bb', 'A', 'Gb', 'E##', 'C'])
-    test(parse_out_note_names('Cbb-Bb-A-Gb-E##-C'), ['Cbb', 'Bb', 'A', 'Gb', 'E##', 'C'])
-    test(parse_alteration('b5'), {5:-1})
-    test(parse_alteration('#11'), {11:+1})
-    test(parse_alteration('7'), {7:0})
-
-if __name__ == '__main__':
-    unit_test()

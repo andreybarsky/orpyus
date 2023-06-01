@@ -1,6 +1,6 @@
 from .qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
 from .parsing import degree_names, num_suffixes, offset_accidentals
-from .util import rotate_list, least_common_multiple, euclidean_gcd, test
+from .util import rotate_list, least_common_multiple, euclidean_gcd
 from .conversion import value_to_pitch
 import math
 
@@ -735,48 +735,3 @@ interval_ratios = {0: (1,1),  1: (16,15),  2: (9,8),    3: (6,5),
 #     # calculate least common multiple of simple form:
 #     lcm = least_common_multiple(l,r)
 #     return math.log(lcm, 2)
-
-
-
-def unit_test():
-    print('Testing basic arithmetic:')
-    test(Interval(4) - Interval(2), Interval(2))
-    test(Interval(3) - 5, Interval(-2))
-    test(Interval(4) + 10, Interval(14))
-
-    print('Recasting and init by degrees')
-    test(Interval(Interval(14)), Interval(14))
-    test(Maj3, Interval(4))
-    test(Maj3 + Min3, Per5)
-    test(Per5-Min3, Maj3)
-
-    # init by degree:
-    test(Interval(4), Interval.from_degree(3))
-
-    print('Inversion and negation:')
-    test(~Interval(-7), Per4)
-    test(-Aug9, Interval(-15, degree=9))
-    test(~Dim12, -Aug11)
-
-    print('Extended intervals:')
-    test(Interval(14), Interval.from_degree(9))
-
-    print('Degree preservation under addition/subtraction by octaves:')
-    test((Aug4 + Interval(12)).degree, Aug11.degree)
-    test((-Aug4 - Interval(12)).degree, (-Aug11).degree)
-
-    print('And degree inversion under sign switch:')
-    test((Aug4 - Interval(12)).degree, (~Aug4).degree)
-    test(Interval(4) - Interval(24), Interval(-20))
-
-
-    print('IntervalLists:')
-    test(IntervalList([M3, P5]).pad(left=True, right=True), IntervalList([P1, M3, P5, P8]))
-    test(IntervalList([M3, P5]), IntervalList([P1, M3, P5, P8]).strip())
-    test(IntervalList([M2, M3, P5]), IntervalList([M3, P5, M9]).flatten())
-
-
-
-
-if __name__ == '__main__':
-    unit_test()

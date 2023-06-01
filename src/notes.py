@@ -5,7 +5,7 @@ from . import parsing
 # from parsing import parsing.note_positions, preferred_note_names, parse_octavenote_name, is_flat, is_sharp, is_valid_note_name, parse_out_note_names
 from . import conversion as conv
 
-from .util import log, test, rotate_list
+from .util import log, rotate_list
 
 import math
 
@@ -123,16 +123,26 @@ class Note:
         self.name = preferred_name(self.position, prefer_sharps=self.prefer_sharps)
 
     #### magic methods and note constructors:
-    def __add__(self, interval):
+    def __add__(self, other):
         """returns a new Note based on shifting up or down by some number of semitones"""
         # assert isinstance(interval, (int, Interval)), "Only an integer or Interval can be added to a Note"
-        if isinstance(interval, Interval):
-            interval = interval.value  # cast to int
-
-        new_pos = (self.position + interval) % 12
-        new_note = Note(position = new_pos, prefer_sharps = self.prefer_sharps) # inherit sharpness from self
-        # log(f'Adding interval ({interval}) to self ({self}) to produce Note: {chrm}')
-        return new_note
+        if isinstance(other, (int, Interval)):
+            # note transposition by interval
+            # interval = other.value  # cast to int
+            new_pos = (self.position + int(other)) % 12
+            new_note = Note(position = new_pos, prefer_sharps = self.prefer_sharps) # inherit sharpness from self
+            # log(f'Adding interval ({interval}) to self ({self}) to produce Note: {chrm}')
+            return new_note
+        elif isinstance(other, (str, Note)):
+            # addition with other note to produce chord
+            if isinstance(other, str):
+                other = Note(other)
+            assert isinstance(other, Note)
+            from .chords import Chord # lazy import
+            chord_notes = [self, other]
+            return Chord(notes=chord_notes)
+        else:
+            raise TypeError(f'Notes can only be added with Intervals or with other Notes')
 
     def __sub__(self, other):
         """if 'other' is an integer, returns a new Note that is shifted down by that many semitones.
@@ -167,7 +177,7 @@ class Note:
         they have the same chroma (by comparing Note.position)."""
 
         if isinstance(other, str) and parsing.is_valid_note_name(other):
-            # cast to Note if possible
+            # cast string to Note if possible
             other = Note(other)
         if isinstance(other, Note):
             return self.position == other.position
@@ -180,9 +190,14 @@ class Note:
         """note and octavenote hash-equivalence is based on position alone, not value"""
         return hash(f'Note:{self.position}')
 
+    @property
+    def _marker(self):
+        """unicode marker for this class"""
+        return '♩'
+
     def __str__(self):
         # e.g. is of form: '♩C#'
-        return f'♩{self.name}'
+        return f'{self._marker}{self.name}'
 
     def __repr__(self):
         return str(self)
@@ -288,7 +303,7 @@ class OctaveNote(Note):
 
         ### the following block defines: chroma, value, and pitch
         if name is not None:
-            log(f'Initialising OctaveNote with name: {name}')
+            # log(f'Initialising OctaveNote with name: {name}')
 
             # detect if sharp or flat:
             if prefer_sharps is None:
@@ -307,13 +322,13 @@ class OctaveNote(Note):
             value = conv.oct_pos_to_value(octave, position)
             pitch = conv.value_to_pitch(value)
         if value is not None:
-            log(f'Initialising OctaveNote with value: {value}')
+            # log(f'Initialising OctaveNote with value: {value}')
             value = value
             octave, position = conv.oct_pos(value)
             chroma = preferred_name(position, prefer_sharps=prefer_sharps)
             pitch = conv.value_to_pitch(value)
         if pitch is not None:
-            log(f'Initialising OctaveNote with pitch: {pitch}')
+            # log(f'Initialising OctaveNote with pitch: {pitch}')
             pitch = float(pitch)
             assert pitch > 0, "Pitch must be greater than 0"
             value = conv.pitch_to_value(pitch, nearest=True)
@@ -370,10 +385,15 @@ class OctaveNote(Note):
         """note and octavenote hash-equivalence is based on position alone, not value"""
         return hash(f'Note:{self.position}')
 
+    @property
+    def _marker(self):
+        """unicode marker associated with this class"""
+        return '♪'
+
     def __str__(self):
         """Returns a pretty version of this OctaveNote's name,
         which includes its chroma as well as its octave."""
-        return f'♪{self.name}'
+        return f'{self._marker}{self.name}'
 
     def __repr__(self):
         return str(self)
@@ -555,9 +575,17 @@ class NoteList(list):
                 note_items.append(self._recast(item))
         return note_items
 
+    @property
+    def _brackets(self):
+        return '𝄃', ' 𝄂'
+
+    def __str__(self):
+        lb, rb = self._brackets
+        return f'{lb}{", ".join([str(n) for n in self])}{rb}'
+
     def __repr__(self):
         # return f'𝄃{super().__repr__()}𝄂'
-        return f'𝄃{", ".join([str(n) for n in self])} 𝄂'
+        return str(self)
 
     def append(self, other):
         """Cast any appendands to Notes"""
@@ -601,12 +629,9 @@ class NoteList(list):
         else:
             raise Exception(f"Can't subtract {type(other)} from NoteList")
 
-    # def __contains__(self, item):
-    #     if isinstance(item, str):
-    #         #cast to Note
-    #         item = Note(item)
-    #     assert isinstance(item, Note), 'NoteLists.__contain__ method only allows Notes (or strings that cast to Notes)'
-    #     return item in self
+    ### there was previously a __contains__ method here,
+    ### but it is not needed since list.__contains__ suffices combined with
+    ### note equivalence behaviour with strings, i.e. Note('C') == 'C'
 
     def unique(self):
         """returns a new NoteList, where repeated notes are dropped after the first"""
@@ -628,15 +653,10 @@ class NoteList(list):
         i.e. the 2nd inversion of [0,1,2] is [1,2,0], (a rotation of 1 place in this case)
         and for modes, which are rotations of scales. """
 
-        # rotated_start_place = num_places
-        # rotated_idxs = [(rotated_start_place + i) % len(self) for i in range(len(self))]
-        # rotated_lst= [self[i] for i in rotated_idxs]
-        # return NoteList(rotated_lst)
-
         return NoteList(rotate_list(self, num_places))
 
     def ascending_intervals(self):
-        """sorts notes into ascending order from root (which is first note)"""
+        """sorts notes into ascending order from first note (as root)"""
         # wrap around first octave and calculate intervals from root:
         octaved_notes = self.force_octave(1)
         root = octaved_notes[0]
@@ -779,31 +799,3 @@ neutral_major_tonics = [Note(t) for t in neutral_tonic_names]
 sharp_minor_tonics = [Note(relative_minors[t]) for t in sharp_tonic_names]
 flat_minor_tonics = [Note(relative_minors[t]) for t in flat_tonic_names]
 neutral_minor_tonics = [Note(relative_minors[t]) for t in neutral_tonic_names]
-
-def unit_test():
-    ### magic method tests:
-    # Notes:
-    test(C+2, D)
-    test(D-2, C)
-    test(D-C, 2)
-    test(C+Interval(4), E)
-
-    # OctaveNotes:
-    test(OctaveNote('C4')+15, OctaveNote('Eb5'))
-
-    # NoteList:
-    test(NoteList('CEG'), NoteList(['C', 'E', 'G']))
-    test(NoteList('CEG'), NoteList('C', 'E', 'G'))
-
-    nl = NoteList('CEG')
-
-    # test double sharps and double flats:
-
-    test(Note('Ebb'), Note('C𝄪'))
-    test(Note('E𝄫'), Note('C##'))
-
-    # test matching chords:
-    test(NoteList('CEG').most_likely_chord().intervals, IntervalList(0,4,7))
-
-if __name__ == '__main__':
-    unit_test()

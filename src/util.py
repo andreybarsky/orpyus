@@ -22,39 +22,6 @@ class Log:
 
 log = Log()
 
-
-class TestSuite:
-    def __init__(self, silent=False, graceful=False):
-        self.silent = silent
-        self.graceful = graceful
-
-    def __call__(self, op, exp, compare='equal'):
-        ### test output of an operation against its expected value
-        start_time = time.time()
-
-        if type(exp) == float:
-            assert type(op) == float
-            diff = op - exp
-            result = (diff < 1e-10)
-        else:
-            if compare == 'equal':
-                result = (op == exp)
-            elif compare == 'enharmonic':
-                result = (op & exp)
-
-        finished_time = time.time()
-        wall_time = start_time - global_init_time
-        exec_time_ms = (finished_time - start_time) * 1000.
-
-        resultstr = 'TEST +++ PASS' if result else 'TEST --- FAIL'
-        if not self.silent:
-            print(f'[{wall_time:.06f}] {resultstr}:\n obs: {op}\n exp: {exp}\n   (execution time: {exec_time_ms:.04f}ms)\n')
-
-        if not result and not self.graceful:
-            raise Exception('Test failed')
-
-test = TestSuite(silent=False)
-
 # generically useful functions used across modules:
 def rotate_list(lst, num_steps, N=None):
     """Accepts a list, and returns the wrapped-around list
@@ -287,36 +254,3 @@ def euclidean_gcd(a,b):
 
 def least_common_multiple(a,b):
     return (a*b) // euclidean_gcd(a,b)
-
-
-
-def unit_test():
-    # some tests on membership evaluation
-    target = ['C', 'E', 'G', 'A']
-    # weights will prioritise the root:
-    weights = {'C': 2, 'E': 1, 'G': 1, 'A': 1}
-
-    # candidate is a subset of target:
-    print(precision_recall(target, ['C', 'E', 'G'], weights=weights))
-
-    # candidate is a subset of target (but missing the root):
-    print(precision_recall(target, ['A', 'E', 'G'], weights=weights))
-
-    # target is a subset of candidate:
-    print(precision_recall(target, ['C', 'E', 'G', 'A', 'Bb']))
-
-    # same length but a mismatch:
-    print(precision_recall(target, ['C', 'E', 'G', 'B']))
-
-    # perfect fit: (but inverted)
-    print(precision_recall(target, ['A', 'C', 'E', 'G']))
-
-    # complete mess:
-    print(precision_recall(target, ['A', 'D#', 'Eb', 'Gb', 'B']))
-
-    # test alias reduction:
-    aliases = {'hdim': ['half diminished', 'halfdim'], 'fdim': ['diminished', 'fully diminished']}
-    print(''.join(reduce_aliases('half diminished diminished chord', aliases)))
-
-if __name__ == '__main__':
-    unit_test()

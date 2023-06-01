@@ -1,5 +1,5 @@
 from .notes import OctaveNote
-from .util import log, test
+from .util import log
 
 import threading
 
@@ -378,14 +378,3 @@ def detect_freq(arr, note=False):
         return round(freq,2)
     else:
         return OctaveNote(pitch=freq).name
-
-
-
-
-
-if __name__ == '__main__':
-    from chords import Chord
-    cmaj = Chord('C')
-    am_c = Chord('Am/C')
-
-    am_c.play()

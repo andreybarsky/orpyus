@@ -4,7 +4,7 @@ from .chords import AbstractChord, Chord, most_likely_chord, matching_chords
 from .scales import Scale, Subscale
 from .keys import Key, Subkey, matching_keys
 from . import parsing
-from .util import log, test, auto_split
+from .util import log, auto_split
 from .display import Fretboard
 
 class String(OctaveNote):
@@ -429,19 +429,3 @@ class Guitar:
 standard = eadgbe = Guitar()
 dadgad = Guitar('DADGAD')
 dadgbe = dropD = dropd = Guitar('DADGBE')
-
-if __name__ == '__main__':
-    #
-    # test(standard['022100'], NoteList('EBEAbBE').force_octave(2))
-    # test(standard('022100'), Chord('E'))
-    # test(dadgad('000000'), Chord('Dsus4'))
-
-    # # open chord:
-    # chord_diagram('x32010', tuning='DADGBE') # Cmaj
-    # # high chord:
-    # chord_diagram('07675x') # E7?
-    # # extended chord:
-    # chord_diagram('x1881x')
-
-    standard.query('x1881x')
-    standard.query('x32010')
