@@ -117,7 +117,7 @@ class Scale:
                 else:
                     new_intervals = IntervalList(name.intervals)
 
-                return new_intervals, name.base_scale, name.rotation
+                return new_intervals, name.base_scale_name, name.rotation
             elif isinstance(name, str):
                 if name in mode_lookup:
                     base_scale, rotation = mode_lookup[name]
@@ -220,12 +220,15 @@ class Scale:
         else:
             raise TypeError(f'Scale.__contains__ not defined for items of type: {type(item)}')
 
-    def contains_degree_chord(self, degree, abs_chord):
+    def contains_degree_chord(self, degree, abs_chord, degree_interval=None):
         """checks whether a given AbstractChord on a given Degree of this Scale belongs in this Scale"""
         if isinstance(abs_chord, str):
             abs_chord = AbstractChord(abs_chord)
-        assert type(abs_chord) == AbstractChord, "Scales can only contain AbstractChords"
+        # assert type(abs_chord) == AbstractChord, "Scales can only contain AbstractChords"
         assert 1 <= degree <= 7, "Scales can only contain chords built on degrees between 1 and 7"
+        if degree_interval is None:
+            # we can optionally require the chord root to be on a specific interval as well as a specific degree
+            degree_interval = self.degree_intervals[degree]
         intervals_from_root = IntervalList([self.degree_intervals[degree] + iv for iv in abs_chord.intervals])
         # call __contains__ on resulting iv list:
         return intervals_from_root in self
@@ -449,7 +452,7 @@ class Scale:
             tonic = notes.Note(tonic)
         # lazy import to avoid circular dependencies:
         from .keys import Key
-        return Key(intervals=self.intervals, tonic=tonic)
+        return Key(intervals=self.diatonic_intervals, tonic=tonic, chromatic_intervals=self.chromatic_intervals, alias=self.alias)
 
     def chords(self, order=3):
         """returns the list of chords built on every degree of this Scale"""
@@ -709,7 +712,7 @@ class Scale:
     def play(self, on='G3', up=True, down=False, **kwargs):
         ## if duration is not set, use a smaller default duration than that for chords:
         if 'duration' not in kwargs:
-            kwargs['duration'] = 1.0
+            kwargs['duration'] = 0.5
         # Scales don't have tonics, but we can just pick one arbitrarily:
         starting_note = notes.OctaveNote(on)
         assert up or down, "Scale must be played up or down or both, but not neither"
@@ -975,7 +978,7 @@ for base in mode_bases:
 mode_name_intervals = unpack_and_reverse_dict(interval_mode_names)
 ######################
 
-# pre-initialised scales for efficient import by other modules:
+# pre-initialised scales for efficient import by other modules instead of re-init:
 NaturalMajor = MajorScale = Scale('major')
 Dorian = DorianScale = Scale('dorian')
 Phrygian = PhrygianScale = Scale('phrygian')
@@ -991,6 +994,8 @@ MelodicMajor = MelodicMajorScale = Scale('melodic major')
 
 # special 'full minor' scale that includes notes of natural, melodic and harmonic minors:
 FullMinor = FullMinorScale = Scale('minor', chromatic_intervals=[M6, M7], alias='full minor')
+# and full major equivalent for symmetry:
+FullMajor = FullMajorScale = Scale('major', chromatic_intervals=[m6, m7], alias='full major')
 
 # subscale definitions:
 subscales_to_aliases = {  # major pentatonic type omissions:
@@ -1023,8 +1028,8 @@ interval_subscale_names = {sc.intervals: aliases for sc, aliases in subscales_to
 subscale_name_intervals = unpack_and_reverse_dict(interval_subscale_names)
 ######################
 
-MajorPentatonic = MajorPentatonicScale = Subscale('major pentatonic')
-MinorPentatonic = MinorPentatonicScale = Subscale('minor pentatonic')
+MajorPentatonic = MajorPentatonicScale = MajorPent = MajPent = Subscale('major pentatonic')
+MinorPentatonic = MinorPentatonicScale = MinorPent = MinPent = Subscale('minor pentatonic')
 
 def unit_test():
     from .chords import AbstractChord
