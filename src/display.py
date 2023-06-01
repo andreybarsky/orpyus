@@ -246,7 +246,7 @@ class Fretboard:
         final_rows = [string_margins[r][0] + ''.join(string_rows[r]) + string_margins[r][1] for r in range(self.num_strings)]
 
         if title and (self.title is not None):
-            final_rows = [self.title] + [''] + final_rows
+            final_rows = [self.title] + final_rows
 
         # and finally put fret labels on the bottom if needed:
         if fret_labels:

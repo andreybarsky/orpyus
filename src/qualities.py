@@ -454,8 +454,8 @@ chord_types =  {'m': ChordQualifier(make={3:-1}),
 
 # chord 'modifiers' are those that could conceivably modify an existing chord type:
 # note that this dict order matters, since it affects the order in which chords get named: (e.g. add9sus4 instead of sus4add9)
-chord_modifiers = { 'sus4': ChordQualifier(remove=3, add=4, verify={2:False, 3:0}),
-                    'sus2': ChordQualifier(remove=3, add=2, verify={4:False, 3:0}),
+chord_modifiers = { 'sus4': ChordQualifier(remove=3, add=4, verify={2:False}),
+                    'sus2': ChordQualifier(remove=3, add=2, verify={4:False}),
 
                     # why does including these slow down chord.unit_test() so much?
                     'b5': ChordQualifier(verify={5:0}, make={5:-1}),

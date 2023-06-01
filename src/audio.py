@@ -321,11 +321,18 @@ def play_karplus(note, duration=2, falloff=True, fast=False, **kwargs):
             samples = lin_falloff(samples)
     play_wave(samples)
 
-def synth_wave(freq, duration, type='KS', falloff=True):
+wave_cache = {}
+
+def synth_wave(freq, duration, type='KS', falloff=True, cache=True):
     """type must be one of:
     'sine': sine wave synthesis
     'KS': (slow) karplus-strong algorithm
     'fast': fast karplus-strong approximation"""
+    params = (freq, duration, type, falloff)
+    if cache:
+        if params in wave_cache:
+            return wave_cache[params]
+
     if type == 'pure':
         wave = sine_wave(freq, duration, correct=True)
         if falloff:
@@ -340,6 +347,9 @@ def synth_wave(freq, duration, type='KS', falloff=True):
             wave = exp_falloff(wave, peak_at=0.01)
     else:
         raise Exception('type arg supplied to synth_wave must be one of: sine, KS, fast')
+    if cache:
+        if params not in wave_cache:
+            wave_cache[params] = wave
     return wave
 
 def find_peaks(arr, ret=False):

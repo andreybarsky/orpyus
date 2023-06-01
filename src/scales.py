@@ -253,35 +253,6 @@ class Scale:
     def __hash__(self):
         return hash((self.diatonic_intervals, self.intervals, self.chromatic_intervals))
 
-    def __str__(self):
-        if self.diatonic:
-            iv_names = [iv.short_name for iv in self.intervals]
-        else:
-            # show diatonic intervals as in normal interval list, and chromatic intervals in square brackets
-            iv_names = [f'[{iv.short_name}]' if iv in self.chromatic_intervals  else iv.short_name  for iv in self.intervals]
-        iv_str = f'𝄁{", ".join(iv_names)} 𝄁'
-        return f'𝄢 {self.name} scale  {iv_str}'
-
-    def __repr__(self):
-        return str(self)
-
-    @property
-    def name(self):
-        return self.get_name()
-
-    def get_name(self):
-        """name of a Scale is the last entry in interval_mode_names for its intervals"""
-        if self.intervals in interval_mode_names:
-            return interval_mode_names[self.intervals][-1]
-        elif self.assigned_name is not None:
-            # fall back on alias if one was provided
-            return self.assigned_name
-        elif self.diatonic_intervals in interval_mode_names:
-            # otherwise call this a chromatic version of its diatonic parent:
-            return interval_mode_names[self.diatonic_intervals][-1] + ' [chromatic]'
-        else:
-            return 'unknown'
-
     @property
     def suffix(self):
         return self.get_suffix()
@@ -301,6 +272,41 @@ class Scale:
             return interval_mode_names[self.diatonic_intervals][-1] + ' [chromatic]'
         else:
             return '(?)'
+
+    @property
+    def name(self):
+        return self.get_name()
+
+    def get_name(self):
+        """name of a Scale is the last entry in interval_mode_names for its intervals"""
+        if self.intervals in interval_mode_names:
+            return interval_mode_names[self.intervals][-1]
+        elif self.assigned_name is not None:
+            # fall back on alias if one was provided
+            return self.assigned_name
+        elif self.diatonic_intervals in interval_mode_names:
+            # otherwise call this a chromatic version of its diatonic parent:
+            return interval_mode_names[self.diatonic_intervals][-1] + ' [chromatic]'
+        else:
+            return 'unknown'
+
+    @property
+    def _marker(self):
+        """unicode marker for Scale class"""
+        return '𝄢'
+
+    def __str__(self):
+        return f'{self._marker} {self.name} scale'
+
+    def __repr__(self):
+        lb, rb = self.intervals._brackets
+        if self.chromatic_intervals is None:
+            iv_names = [iv.short_name for iv in self.intervals]
+        else:
+            # show diatonic intervals as in normal interval list, and chromatic intervals in square brackets
+            iv_names = [f'[{iv.short_name}]' if iv in self.chromatic_intervals  else iv.short_name  for iv in self.intervals]
+        iv_str = f'{lb}{", ".join(iv_names)}{rb}'
+        return f'{str(self)}  {iv_str}'
 
     @property
     def aliases(self):
@@ -793,8 +799,14 @@ class Subscale(Scale):
 
         self.is_subscale = True
 
-    def __str__(self):
-        return f'𝄳 {self.name}  {self.intervals.pad()}'
+    @property
+    def _marker(self):
+        "unicode marker for Subscale class"
+        return '𝄳'
+
+    # def __str__(self):
+    #     # return f'{self._marker} {self.name}  {self.intervals.pad()}'
+    #     return f'{self._marker} {self.name}'
 
     def __len__(self):
         return len(self.intervals)

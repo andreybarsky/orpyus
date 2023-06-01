@@ -3,6 +3,7 @@ from .notes import Note, OctaveNote, NoteList
 from .chords import AbstractChord, Chord, most_likely_chord, matching_chords
 from .scales import Scale, Subscale
 from .keys import Key, Subkey, matching_keys
+from .progressions import Progression, ChordProgression
 from . import parsing
 from .util import log, auto_split
 from .display import Fretboard
@@ -234,14 +235,14 @@ class Guitar:
                             note_locs.append((s+1, next_loc+12))
         return note_locs
 
-    def show_octavenote(self, note, max_fret=13, min_fret=0, preserve_accidental=True, *args, **kwargs):
+    def show_octavenote(self, note, max_fret=13, min_fret=0, preserve_accidental=True, **kwargs):
         if isinstance(note, str):
             note = OctaveNote(note, prefer_sharps=('#' in note) if preserve_accidental else None)
         note_locs = self.locate_note(note, match_octave=True, max_fret=max_fret, min_fret=min_fret)
         cells = {loc: note.name for loc in note_locs}
-        Fretboard(cells, title=f'Note: {note.chroma} (octave {note.octave}) on {self}').disp(*args, **kwargs)
+        Fretboard(cells, title=f'Note: {note.chroma} (octave {note.octave}) on {self}').disp(**kwargs)
 
-    def show_note(self, note, show_octave=True, max_fret=15, min_fret=0, preserve_accidental=True, *args, **kwargs):
+    def show_note(self, note, show_octave=True, max_fret=15, min_fret=0, preserve_accidental=True, **kwargs):
         if isinstance(note, (str, OctaveNote)):
             # cast string to note, or discard octave information from octavenote:
             note = Note(note, prefer_sharps=('#' in note) if preserve_accidental else None)
@@ -259,9 +260,9 @@ class Guitar:
             cells = {loc: oct.name for loc, oct in zip(note_locs, octavenotes)}
         else:
             cells = {loc: note.chroma for loc in note_locs}
-        Fretboard(cells, title=f'Note: {note.name} on {self}').disp(*args, **kwargs)
+        Fretboard(cells, title=f'Note: {note.name} on {self}').disp(**kwargs)
 
-    def show_chord(self, chord, intervals_only=False, notes_only=False, max_fret=13, min_fret=0, preserve_accidental=True, title=None, show_index=True, *args, **kwargs): # preserve accidentals?
+    def show_chord(self, chord, intervals_only=False, notes_only=False, max_fret=13, min_fret=0, preserve_accidental=True, title=None, show_index=True, **kwargs): # preserve accidentals?
         """for a given Chord object (or name that casts to Chord),
         show where the notes of that chord fall on the fretboard, starting from open."""
         if isinstance(chord, str):
@@ -297,9 +298,19 @@ class Guitar:
         #### finalise:
         if title is None:
             title=f'Chord: {chord} on {self}'
-        Fretboard(cells, index=index, highlight=root_locs, title=title).disp(*args, **kwargs)
+        Fretboard(cells, index=index, highlight=root_locs, title=title).disp(**kwargs)
 
-    def show_key(self, key, intervals_only=False, notes_only=False, min_fret=0, max_fret=13, title=None, show_index=True, highlight_fifths=False, highlight_pentatonic=False, *args, **kwargs):
+    def show_abstract_chord(self, chord, **kwargs):
+        """for a given AbstractChord object (or name that casts to AbstractChord),
+        show where the notes of that chord fall on the fretboard starting from an arbitrary fret"""
+        # internally: we just re-use the show_chord method, but on a higher fret and we hide the labels/indices
+        if isinstance(chord, str):
+            chord = AbstractChord(chord)
+        a_chord = chord.on_root('A')
+        self.show_chord(a_chord, fret_labels=False, show_index=False, min_fret=4, max_fret=16, intervals_only=True, title=f'{chord} on {self}', **kwargs)
+
+
+    def show_key(self, key, intervals_only=False, notes_only=False, min_fret=0, max_fret=13, title=None, show_index=True, highlight_fifths=False, highlight_pentatonic=False, **kwargs):
         """for a given Key object (or name that casts to key),
         show where the notes of that key fall on the fretboard, starting from open."""
         if isinstance(key, str):
@@ -352,16 +363,7 @@ class Guitar:
             title = f'{key} on {self}'
         Fretboard(cells, index=index, highlight=highlights, title=title).disp(*args, fret_size=7, **kwargs)
 
-    def show_abstract_chord(self, chord, *args, **kwargs):
-        """for a given AbstractChord object (or name that casts to AbstractChord),
-        show where the notes of that chord fall on the fretboard starting from an arbitrary fret"""
-        # internally: we just re-use the show_chord method, but on a higher fret and we hide the labels/indices
-        if isinstance(chord, str):
-            chord = AbstractChord(chord)
-        a_chord = chord.on_root('A')
-        self.show_chord(a_chord, fret_labels=False, show_index=False, min_fret=4, max_fret=16, intervals_only=True, title=f'{chord} on {self}')
-
-    def show_scale(self, scale, *args, **kwargs):
+    def show_scale(self, scale, **kwargs):
         """for a given abstract Scale object (or name that casts to Scale),
         show where the notes of that scale fall on the fretboard starting from an arbitrary fret"""
         if isinstance(scale, str):
@@ -372,19 +374,49 @@ class Guitar:
                     scale = Scale(scale)
                 except Exception as e:
                     print(f'Could not cast string {scale} to Scale or Subscale object: {e}')
-        a_scale = scale.on_tonic('C')
-        self.show_key(a_scale, fret_labels=False, show_index=False, min_fret=3, max_fret=13, intervals_only=True, title=f'{scale} on {self})')
+        a_scale = scale.on_tonic('A')
+        self.show_key(a_scale, fret_labels=False, show_index=False, min_fret=3, max_fret=13, intervals_only=True, title=f'{scale} on {self})', **kwargs)
+
+
+    def show_progression(self, progression, *args, **kwargs):
+        # try casting to Progression type if it is not one:
+        if type(progression) != Progression:
+            progression = Progression(Progression)
+        # we pick an arbitrary key as the tonic's root,
+        # freeze the fretboard min/max display parameters,
+        # and display with respect to that:
+        tonic_root = Note('A')
+        chord_roots = [(tonic_root + iv) for iv in progression.chord_root_intervals_from_tonic]
+        specific_chords = [c.on_root(r) for c,r in zip(progression.chords, chord_roots)]
+        for numeral, c in zip(progression.numerals, specific_chords):
+            title = f'\n{c.abstract()} on degree {numeral} of {progression.scale.name} on {self}'
+            self.show_chord(c, fret_labels=False, show_index=False, min_fret=4, max_fret=16, fret_size=6, intervals_only=True, title=title, **kwargs)
+
+    def show_chord_progression(self, progression, end_fret=13, **kwargs):
+        # try casting to ChordProgression type if it is not one:
+        if type(progression) != ChordProgression:
+            progression = ChordProgression(Progression)
+        # just display chords in sequence:
+        if 'fret_size' not in kwargs:
+            kwargs['fret_size'] = 6
+        print(f'{progression} on {self}')
+        for numeral, chord in zip(progression.numerals, progression.chords):
+            title=f'\n{numeral} Chord: {chord}'
+            self.show_chord(chord, title=title, end_fret=end_fret, **kwargs)
 
     def show(self, obj, *args, **kwargs):
         """wrapper around the show_note, show_chord, show_key etc. methods.
         accepts an arbitrary object and calls the relevant method to show it"""
 
-        classes = [Subkey, Key, Subscale, Scale,
-                   Chord, AbstractChord, OctaveNote, Note]
-        funcs = [self.show_key, self.show_key, self.show_scale, self.show_scale,
-                self.show_chord, self.show_abstract_chord, self.show_octavenote, self.show_note]
-        names = ['Key', 'Key', 'Scale', 'Scale',
-                 'Chord', 'Chord', 'Note', 'Note']
+        classes = [ChordProgression, Progression, Subkey, Key,
+                   Subscale, Scale, Chord, AbstractChord,
+                   OctaveNote, Note]
+        funcs = [self.show_chord_progression, self.show_progression, self.show_key, self.show_key,
+                self.show_scale, self.show_scale, self.show_chord, self.show_abstract_chord,
+                self.show_octavenote, self.show_note]
+        names = ['Progression', 'Progression', 'Key', 'Key',
+                 'Scale', 'Scale', 'Chord', 'Chord',
+                 'Note', 'Note']
 
         found_type = False
         if not (isinstance(obj, str)): # for non strings, find the right class and function to use:

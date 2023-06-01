@@ -343,12 +343,13 @@ class Interval:
 
     @property
     def short_name(self):
+        lb, rb = self._brackets
         if self.value == 0:
             return '‹Rt›'
         else:
             sign_str = '-' if self.sign == -1 else ''
             short_deg = f'{self.extended_degree}'
-            return f'‹{sign_str}{self.quality.short_name}{short_deg}›'
+            return f'{lb}{sign_str}{self.quality.short_name}{short_deg}{rb}'
 
 
     # alternate str method:
@@ -359,9 +360,13 @@ class Interval:
         sign_str = '' if self.sign == 1 else '-'
         return f'{sign_str}{acc}{self.extended_degree}'
 
+    @property
+    def _brackets(self):
+        return '‹', '›'
 
     def __str__(self):
-        return f'‹{self.value}:{self.name}›'
+        lb, rb = self._brackets
+        return f'{lb}{self.value}:{self.name}{rb}'
 
     def __repr__(self):
         return str(self)
@@ -401,13 +406,19 @@ class IntervalList(list):
                 raise Exception('IntervalList can only be initialised with Intervals, or ints that cast to Intervals')
         return interval_items
 
-    def __str__(self):
-        return f'𝄁{", ".join([i.short_name for i in self])} 𝄁'
+    @property
+    def _brackets(self):
+        return '𝄁', ' 𝄁'
 
-    # alternative str method:
-    def as_factors(self):
-        """returns this list's intervals represented as numeric degree factors instead of quality-intervals"""
-        return f'𝄁{", ".join([i.factor_name for i in self])} 𝄁'
+    def __str__(self):
+        lb, rb = self._brackets
+        return f'{rb}{", ".join([i.short_name for i in self])}{rb}'
+
+    # # alternative str method:
+    # def as_factors(self):
+    #     """returns this list's intervals represented as numeric degree factors instead of quality-intervals"""
+    #     lb, rb = self._brackets
+    #     return f'{lb}{", ".join([i.factor_name for i in self])}{rb}'
 
     def __repr__(self):
         return str(self)

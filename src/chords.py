@@ -38,7 +38,7 @@ class ChordFactors(dict):
         ### allow initialisation by string or list of chord degrees:
         if isinstance(arg, str):
             ### parse string into list of accidentals by auto splitting non-accidentals
-            arg = auto_split(arg, allow='#♯𝄪b♭𝄫')
+            arg = auto_split(arg, allow='#♯𝄪b♭𝄫/')
 
         if isinstance(arg, list) and type(arg[0]) != tuple:
             # parse a list of non-tuples (i.e. invalid list for dict input) as list of chord degrees
@@ -538,12 +538,10 @@ class AbstractChord:
         return '♫'
 
     def __str__(self):
-        # note that intervals are presented with respect to inversion
-        # interval_short_names = [i.short_name for i in self.intervals]
-        # intervals_str = ', '.join(interval_short_names)
         return f'{self._marker} {self.name}'
 
     def __repr__(self):
+        # note that intervals are presented with respect to inversion
         interval_short_names = [i.short_name for i in self.intervals]
         intervals_str = ', '.join(interval_short_names)
         return f'{str(self)} | {intervals_str} |'
@@ -880,7 +878,16 @@ class Chord(AbstractChord):
         """unicode character marker identifying this class"""
         return '♬'
 
+    @property
+    def _brackets(self):
+        # just use brackets of NoteList class:
+        return self.notes._brackets
+
     def __str__(self):
+        return f'{self._marker} {self.name}'
+
+    def __repr__(self):
+        lb, rb = self._brackets
         notes_str = [] # notes are annotated with accent marks depending on which octave they're in (with respect to root)
         for i, n in zip(self.intervals, self.notes):
             assert (self.bass + i) == n, f'bass ({self.bass}) + interval ({i}) should be {n}, but is {self.bass + i}'
@@ -897,10 +904,10 @@ class Chord(AbstractChord):
                 notes_str.append(f'{nl}\u0308{na}') # upper diaresis
         notes_str = ', '.join(notes_str)
 
-        return f'{self._marker} {self.name} [ {notes_str} ]'
+        return f'{str(self)}  {lb}{notes_str}{rb}'
 
-    def __repr__(self):
-        return str(self)
+    # def __repr__(self):
+    #     return str(self)
 
     def __contains__(self, item):
         """Chords can contain degrees (as integers), intervals (as Intervals),
@@ -1105,6 +1112,8 @@ chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor 
 ordered_modifier_names = ['sus4', 'sus2', 'add9', 'add11', 'add13']
 modifier_names_by_rarity = {1: ['sus4', 'sus2'], 2: ['add9'], 3: ['add11'], 4: ['add13']}
 
+# these modifiers make a chord's quality indeterminate, so we don't apply them to chords that have had the minor qualifier already applied
+ind_modifiers = {'sus4', 'sus2', '5'}
 # these chord names cannot be modified:
 unmodifiable_chords = {'', '5', '(no5)', 'add4', 'add9', 'add11', 'add13'}
 # '' because most ordinary chord types imply modification from major, i.e. 'sus4' implies ['' + 'sus4']
@@ -1143,41 +1152,43 @@ for rarity, chord_names in chord_names_by_rarity.items():
             for mod_name in ordered_modifier_names:
                 modifier = qualities.chord_modifiers[mod_name] # fetch ChordQualifier object by name
                 # add a modification if it does not already exist by name and is valid on this base chord:
-                # (we check if chord_name is major because the modifiers on their own apply to major chords,
-                #  i.e. the chord 'sus2' implies ['' + 'sus2'])
                 if modifier.valid_on(base_chord.factors):
-                    altered_name = chord_name + mod_name
+                    # (we check if base chord is major because the modifiers on their own apply to major chords,
+                    #  i.e. the chord 'sus2' implies ['' + 'sus2'])
+                    if not (modifier in ind_modifiers) and (base_chord.quality.minor):
+                        altered_name = chord_name + mod_name
 
-                    altered_factors = base_chord.factors + modifier
-                    altered_intervals = altered_factors.to_intervals()
-                    # avoid double counting: e.g. this ensures that '9sus4' and 'm9sus4' are treated as one chord, '9sus4', despite both being a valid chord init
-                    if altered_factors not in factors_to_chord_names and altered_intervals not in intervals_to_chord_names:
-                        factors_to_chord_names[altered_factors] = altered_name
-                        intervals_to_chord_names[altered_intervals] = altered_name
+                        altered_factors = base_chord.factors + modifier
+                        altered_intervals = altered_factors.to_intervals()
+                        # avoid double counting: e.g. this ensures that '9sus4' and 'm9sus4' are treated as one chord, '9sus4', despite both being a valid chord init
+                        if altered_factors not in factors_to_chord_names and altered_intervals not in intervals_to_chord_names:
+                            factors_to_chord_names[altered_factors] = altered_name
+                            intervals_to_chord_names[altered_intervals] = altered_name
 
-                        # figure out the rarity of this modification and add it to the rarity dict:
-                        mod_rarity = modifier_name_rarities[mod_name]
-                        altered_rarity = chord_name_rarities[chord_name] + mod_rarity
-                        new_rarities[altered_rarity].append(altered_name)
+                            # figure out the rarity of this modification and add it to the rarity dict:
+                            mod_rarity = modifier_name_rarities[mod_name]
+                            altered_rarity = chord_name_rarities[chord_name] + mod_rarity
+                            new_rarities[altered_rarity].append(altered_name)
 
-                        # finally: do the same again, but one level deeper!
-                        for mod_name2 in ordered_modifier_names:
-                            modifier2 = qualities.chord_modifiers[mod_name] # fetch ChordQualifier object by name
-                            # do not apply the same modifier twice, and do so only if valid:
-                            if (modifier2 is not modifier) and modifier2.valid_on(altered_factors):
-                                # and, special case, not if (no5) is the first mod, since it always comes last:
-                                if mod_name != '(no5)':
-                                    altered2_name = altered_name + mod2_name
+                            # finally: do the same again, but one level deeper!
+                            for mod_name2 in ordered_modifier_names:
+                                modifier2 = qualities.chord_modifiers[mod_name] # fetch ChordQualifier object by name
+                                # do not apply the same modifier twice, and do so only if valid:
+                                if (modifier2 is not modifier) and modifier2.valid_on(altered_factors):
+                                    if not (modifier2 in ind_modifiers) and (base_chord.quality.minor):
+                                        # and, special case, not if (no5) is the first mod, since it always comes last:
+                                        if mod_name != '(no5)':
+                                            altered2_name = altered_name + mod2_name
 
-                                    altered2_factors = altered_factors + modifier2
-                                    altered2_intervals = altered2_factors.to_intervals()
-                                    # avoid the lower triangular: (e.g. m(no5)add9 vs madd9(no5))
-                                    if altered2_factors not in factors_to_chord_names and altered2_intervals not in intervals_to_chord_names:
-                                        factors_to_chord_names[altered2_factors] = altered2_name
-                                        intervals_to_chord_names[altered2_intervals] = altered2_name
+                                            altered2_factors = altered_factors + modifier2
+                                            altered2_intervals = altered2_factors.to_intervals()
+                                            # avoid the lower triangular: (e.g. m(no5)add9 vs madd9(no5))
+                                            if altered2_factors not in factors_to_chord_names and altered2_intervals not in intervals_to_chord_names:
+                                                factors_to_chord_names[altered2_factors] = altered2_name
+                                                intervals_to_chord_names[altered2_intervals] = altered2_name
 
-                                        # these are all rarity 7, the 'legendary chords'
-                                        new_rarities[7].append(altered2_name)
+                                                # these are all rarity 7, the 'legendary chords'
+                                                new_rarities[7].append(altered2_name)
 
 # update chord_names_by_rarity with new rarities:
 for r, names in new_rarities.items():

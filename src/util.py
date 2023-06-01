@@ -88,13 +88,20 @@ def auto_split(inp, allow='', allow_numerals=True, allow_letters=True):
         allow.update(string.ascii_letters)
     sep_char = None
     for c in inp:
-        if c not in allow:
+        # specifically allow whitespace, to catch separators like ' - ', but look for whitespace as sep later
+        if c not in allow and c != ' ':
             sep_char = c
             break
+    if sep_char is None and ' ' in inp:
+        # if no separator found yet, use whitespace if it is in the string:
+            sep_char = ' '
+
     if sep_char is None:
-        # no separator found, return input as single list item
+        # if no separator found,
+        # return input as single list item
         return [inp]
     else:
+        # split along detected separator
         splits = inp.split(sep_char)
         # strip whitespace in addition: in case our sep is something like ', '
         splits = [s.strip() for s in splits]

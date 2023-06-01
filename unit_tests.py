@@ -8,7 +8,7 @@ from src.guitar import Guitar, standard
 
 from src.test import test_util, test_parsing, test_qualities, test_intervals, test_notes, test_chords, test_scales, test_keys, test_guitar, test_display, test_progressions
 from src import util
-import ipdb
+import ipdb, cProfile
 
 util.log.verbose = True
 

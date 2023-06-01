@@ -182,14 +182,23 @@ class Key(Scale):
             gap = ' '
         return f'{self.tonic.name}{gap}{suffix}'
 
+    @property
+    def _marker(self):
+        return '𝄞'
+
     def __str__(self):
-        if self.diatonic:
-            note_names = [n.name for n in self.notes]
+        return f'{self._marker} Key of {self.name}'
+
+    def __repr__(self):
+        lb, rb = self.notes._brackets
+        if self.chromatic_notes is None:
+            note_names = [str(n) for n in self.notes]
         else:
             # show diatonic notes as in normal note list, and chromatic notes in square brackets
             note_names = [f'[{n}]' if n in self.chromatic_notes  else str(n)  for n in self.notes]
         notes_str = ', '.join(note_names)
-        return f'𝄞 Key of {self.name} 𝄃 {notes_str} 𝄂'
+        return f'{str(self)}  {lb}{notes_str}{rb}'
+
 
     def chord(self, degree, order=3, qualifiers=None):
         """overwrites Scale.chord, returns a Chord object instead of an AbstractChord"""
@@ -408,12 +417,25 @@ class Subkey(Key, Subscale):
         assert self.is_subscale
 
     @property
+    def scale(self):
+        """returns the abstract Subscale associated with this key"""
+        return Subscale(self.scale_name)
+
+    @property
     def name(self):
         subscale_name = Subscale.get_name(self)
         return f'{self.tonic.name} {subscale_name}'
 
-    def __str__(self):
-        return f'𝄲 Key of {self.name}  {self.notes}'
+    @property
+    def _marker(self):
+        return '𝄲'
+
+    # def __str__(self):
+    #     return f' Key of {self.name}  {self.notes}'
+
+    def __repr__(self):
+        # explicitly inherit from Key class:
+        return Key.__repr__(self)
 
 # subscale init:
     # def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, chromatic_intervals=None, assigned_name=None):
@@ -504,6 +526,8 @@ def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, req
                     does_not_contain_exclusions = False
                     break
             if require_roots and (chords is not None):
+                if t == 'F#' and intervals == Key('F# locrian').intervals:
+                    import pdb; pdb.set_trace()
                 for c in chords:
                     if c.root not in candidate_notes:
                         does_not_contain_exclusions = False
@@ -564,7 +588,7 @@ def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, req
                 title.append(f'(upweighted last chord: {chords[-1].name})')
             if upweight_pentatonics:
                 title.append('(and upweighted pentatonics)')
-            title.append(f'\n With note weights: {note_counts}')
+            # title.append(f'\n With note weights: {note_counts}')
         elif notes is not None:
             title = [f"Key matches for notes: {', '.join([n.name for n in notes])}"]
 

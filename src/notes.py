@@ -503,13 +503,13 @@ class OctaveNote(Note):
         else:
             return high_cand
 
-    def _wave(self, duration, type='KS', falloff=False):
+    def _wave(self, duration, type='KS', falloff=False, cache=True):
         """Outputs a sine wave corresponding to this note,
         by default with exponential volume increase and falloff"""
         from .audio import synth_wave
         # wave = sine_wave(freq=self.pitch, duration=duration)
         # use karplus-strong wave table synthesis for guitar-string timbre:
-        wave = synth_wave(freq=self.pitch, duration=duration, type=type, falloff=falloff)
+        wave = synth_wave(freq=self.pitch, duration=duration, type=type, falloff=falloff, cache=cache)
         return wave
 
     def play(self, duration=2, falloff=True, block=False):
