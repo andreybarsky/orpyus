@@ -8,8 +8,8 @@ def unit_test():
     compare([seven, dim], [7, AbstractChord('dim')])
 
     # test chordlist to numerals:
-    compare(ChordList('Em11', 'Csus4', 'G7', 'Dmin9').as_numerals_in('G', qualifiers=False, sep=' '), 'vi iv I v')
-    compare(ChordList('Em11', 'Csus4', 'G7', 'Dmin9').as_numerals_in('G', qualifiers=True, sep=' '), 'vim¹¹ ivs4 I⁷ vm⁹')
+    compare(ChordList('Em11', 'Csus4', 'G7', 'Dmin9').as_numerals_in('G', qualifiers=False, sep=' '), 'vi IV I v')
+    compare(ChordList('Em11', 'Csus4', 'G7', 'Dmin9').as_numerals_in('G', qualifiers=True, sep=' '), 'vim¹¹ IVs4 I⁷ vm⁹')
 
     # test arithmetic operations on ScaleDegree objects:
     # compare(ScaleDegree('I') + 3, ScaleDegree('IV'))

@@ -526,8 +526,6 @@ def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, req
                     does_not_contain_exclusions = False
                     break
             if require_roots and (chords is not None):
-                if t == 'F#' and intervals == Key('F# locrian').intervals:
-                    import pdb; pdb.set_trace()
                 for c in chords:
                     if c.root not in candidate_notes:
                         does_not_contain_exclusions = False

@@ -404,6 +404,8 @@ class ChordList(list):
         return root_degrees
 
     def as_numerals_in(self, key, sep=' ', qualifiers=True):
+        if isinstance(key, str):
+            key = Key(key)
         root_degrees = self.root_degrees_in(key)
         degree_chords = zip(root_degrees, self)
         numerals = [] # build a list of numerals, allocating case as we go
@@ -439,18 +441,18 @@ class ChordList(list):
 
     def find_key(self, verbose=True):
         """wraps around matching_keys but additionally uses cadence information to distinguish between competing candidates"""
-        matches = matching_keys(chords=self, return_matches=True, max_results=12, require_tonic=False, require_roots=True,
+        matches = matching_keys(chords=self, return_matches=True, max_results=12, require_tonic=True, require_roots=True,
                                 upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False)
 
         if len(matches) == 0:
             # if no matches at all first, open up the min recall property:
             matches = matching_keys(chords=self, return_matches=True, min_recall=0, max_results=12,
-                                    require_tonic=False, require_roots=True,
+                                    require_tonic=True, require_roots=True,
                                     upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False)
             if len(matches) == 0:
                 # open up everything:
                 matches = matching_keys(chords=self, return_matches=True, min_recall=0, min_precision=0, min_likelihood=0, max_results=12,
-                                        require_tonic=False, require_roots=True,
+                                        require_tonic=True, require_roots=True,
                                         upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False)
                 if len(matches) == 0:
                     raise Exception(f'No key matches at all found for chords: {self} \n(this should never happen!)')
