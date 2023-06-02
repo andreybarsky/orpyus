@@ -18,7 +18,7 @@ co5s_counterclockwise = {Note('C')-(7*i) : Note('C')-(7*(i+1)) for i in range(12
 
 class Key(Scale):
     """a Scale that is also rooted on a tonic, and therefore associated with a set of notes"""
-    def __init__(self, scale_name=None, intervals=None, tonic=None, notes=None, mode=1, chromatic_intervals=None, chromatic_notes=None, stacked=True):
+    def __init__(self, scale_name=None, intervals=None, tonic=None, notes=None, mode=1, chromatic_intervals=None, chromatic_notes=None, stacked=True, alias=None):
         """Initialised in one of three ways:
 
         1. from 'notes' arg, as a list or string of Notes or Note-like objects,
@@ -52,7 +52,7 @@ class Key(Scale):
             chromatic_intervals = [n - self.tonic for n in chromatic_notes]
 
         # initialise everything else as Scale class does:
-        super().__init__(scale_name, intervals, mode, chromatic_intervals, stacked)
+        super().__init__(scale_name, intervals, mode, chromatic_intervals, stacked, alias=alias)
         # (this sets self.base_scale, .quality, .intervals, .diatonic_intervals, .chromatic_intervals, .rotation)
 
         # set Key-specific attributes: notes, degree_notes, etc.
@@ -80,8 +80,6 @@ class Key(Scale):
         # these are the same for Key objects, but may differ for Subkeys:
         self.base_degree_notes = self.degree_notes
         self.note_base_degrees = self.note_degrees
-
-
 
         # update this Key's notes to prefer sharps/flats depending on its tonic:
         self._set_sharp_preference()
