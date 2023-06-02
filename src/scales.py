@@ -458,7 +458,7 @@ class Scale:
             tonic = notes.Note(tonic)
         # lazy import to avoid circular dependencies:
         from .keys import Key
-        return Key(intervals=self.diatonic_intervals, tonic=tonic, chromatic_intervals=self.chromatic_intervals, alias=self.alias)
+        return Key(intervals=self.diatonic_intervals, tonic=tonic, chromatic_intervals=self.chromatic_intervals, alias=self.assigned_name)
 
     def chords(self, order=3):
         """returns the list of chords built on every degree of this Scale"""
