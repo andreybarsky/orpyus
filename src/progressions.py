@@ -842,8 +842,8 @@ def most_grammatical_progression(progressions, verbose=False):
 
     if verbose:
         for p,c in zip(progressions, cadence_counts):
-            print(f'{p.analysis}\n  ({c} cadences)')
-
+            p.analysis
+            log(f'({c} cadences)')
     if len(top_matches) == 1:
         # one progression has the most cadences
         match_idx = top_matches[0]
