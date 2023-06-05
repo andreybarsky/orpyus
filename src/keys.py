@@ -410,7 +410,7 @@ class Subkey(Key, Subscale):
             self.assigned_name = assigned_name
 
         # update this Subkey's notes to prefer sharps/flats depending on its tonic (and maj/min/null quality):
-        self.is_natural = False
+        # self.is_natural = False
         self._set_sharp_preference()
         assert self.is_subscale
 
@@ -577,7 +577,7 @@ def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, req
     if display:
         # print result as nice dataframe instead of returning a dict
         if chords is not None:
-            title = [f"Key matches for chords: {', '.join([c.name for c in chords])}"]
+            title = [f"Key matches for chords: {', '.join([c.name for c in chords])} with notes: {NoteList(unique_notes)}"]
             if upweight_first:
                 title.append(f'(upweighted first chord: {chords[0].name})')
             if upweight_last:

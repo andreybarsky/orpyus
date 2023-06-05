@@ -94,7 +94,7 @@ class Scale:
 
         self.is_subscale = False
         self.assigned_name = alias
-        self.is_natural = (self.name in natural_scale_names)
+        # self.is_natural = (self.name in natural_scale_names)
 
     @staticmethod
     def _parse_input(name, intervals, mode, stacked):
@@ -402,6 +402,14 @@ class Scale:
         if verbose:
             print(f'Character of {self.name} scale: (with respect to {nearest_natural.name})')
         return IntervalList(scale_character)
+
+    @property
+    def is_natural(self):
+        # True for natural major and minor scales, False for everything else
+        if (self.intervals == MajorScale.intervals) or (self.intervals == MinorScale.intervals):
+            return True
+        else:
+            return False
 
     @property
     def blues(self):

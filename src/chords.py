@@ -185,6 +185,8 @@ class AbstractChord:
 
         note that both are ignored if the 'name' arg contains a slash."""
 
+        self.assigned_name = None # this gets overwritten later if some exotic chord is initialised, but can't be set at init
+
         self.factors, self.root_intervals, self.inversion = self._parse_input(name, factors, intervals, inversion, inversion_degree, qualifiers)
 
         # dict mapping chord factors to intervals from tonic:
@@ -351,7 +353,7 @@ class AbstractChord:
         elif self.intervals in intervals_to_chord_names:
             # set_trace(context=30) # can't remember what is going on here
             print(f' ++++ Could not find chord by factors ({self.factors}), but found it by inverted intervals: {self.intervals}')
-            raise Exception() # in case this ever comes up
+            import pdb; pdb.set_trace() # in case this ever comes up
             return intervals_to_chord_names[self.intervals] + f' (inverted from {self.root})'
         elif 5 not in self.factors:
             # try adding a 5 to see if this is a (no5) chord
@@ -365,6 +367,9 @@ class AbstractChord:
             return intervals_to_chord_names[self.intervals.flatten()]
         elif self.factors == _major_triad:
             return ''
+        elif self.assigned_name is not None:
+            # fall back on name given to an exotic chord like Am7/B if one was assigned
+            return self.assigned_name
         else:
             return f'(?){inv_string}'
 
@@ -767,12 +772,18 @@ class Chord(AbstractChord):
                         try:
                             new_notes = NoteList([bass] + [n for n in self.root_notes])
                             log(f"  --Re-identifying chord from notes: {new_notes}")
-                            new_notes.matching_chords(invert=False, min_precision=0.7, min_recall=0.8, display=False)
-                            likely_chord, stats = new_notes.most_likely_chord(invert=False, require_root=True, min_likelihood=0.5, stats=True)
-                            log(f"\n  --Identified most likely chord: {likely_chord}\n       (with {stats})")
-                            log(f" --Recursively re-initialising {self.root.name}{naive_chord_name}/{bass.name} as {bass.name}{likely_chord.suffix}")
-                            self.__init__(factors=likely_chord.factors, root=likely_chord.root, inversion=None)
-                            return self._parse_inversion(0)
+                            if log.verbose:
+                                new_notes.matching_chords(invert=False, min_precision=0.7, min_recall=0.8, min_likelihood=0, display=True)
+                            likely_chord, stats = new_notes.most_likely_chord(invert=False, require_root=True, min_likelihood=0, stats=True)
+                            if stats['precision'] == 1 and stats['recall'] == 1:
+                                log(f"\n  --Identified most likely chord: {likely_chord}\n       (with {stats})")
+                                log(f" --Recursively re-initialising {self.root.name}{naive_chord_name}/{bass.name} as {bass.name}{likely_chord.suffix}")
+                                self.__init__(factors=likely_chord.factors, root=likely_chord.root, inversion=None)
+                                return self._parse_inversion(0)
+                            else:
+                                log(f'Warning: Could not find a matching chord for {self.root.name}{naive_chord_name}/{bass.name}, closest match is {likely_chord} but not perfect')
+                                self.__init__(factors=likely_chord.factors, root=likely_chord.root, inversion=None)
+                                return self._parse_inversion(0)
                         except Exception as e:
                             raise Exception(f" Failed to re-initialise, uncaught error: {e}")
 
@@ -794,8 +805,7 @@ class Chord(AbstractChord):
                 if inversion_degree == deg:
                     inversion = x
                     break
-            if isinstance(inversion, str):
-                set_trace(context=30)
+            assert isinstance(inversion, int), f"Invalid inversion degree for this chord: {inversion}"
 
         # infer inverted note order by finding the bass's place in our root_notes notelist:
         # bass_place = [i for i, n in enumerate(self.root_notes) if n == bass][0]
@@ -1155,7 +1165,7 @@ for rarity, chord_names in chord_names_by_rarity.items():
                 if modifier.valid_on(base_chord.factors):
                     # (we check if base chord is major because the modifiers on their own apply to major chords,
                     #  i.e. the chord 'sus2' implies ['' + 'sus2'])
-                    if not (modifier in ind_modifiers) and (base_chord.quality.minor):
+                    if not ((modifier in ind_modifiers) and (base_chord.quality.minor)):
                         altered_name = chord_name + mod_name
 
                         altered_factors = base_chord.factors + modifier
@@ -1175,7 +1185,7 @@ for rarity, chord_names in chord_names_by_rarity.items():
                                 modifier2 = qualities.chord_modifiers[mod_name] # fetch ChordQualifier object by name
                                 # do not apply the same modifier twice, and do so only if valid:
                                 if (modifier2 is not modifier) and modifier2.valid_on(altered_factors):
-                                    if not (modifier2 in ind_modifiers) and (base_chord.quality.minor):
+                                    if not ((modifier2 in ind_modifiers) and (base_chord.quality.minor)):
                                         # and, special case, not if (no5) is the first mod, since it always comes last:
                                         if mod_name != '(no5)':
                                             altered2_name = altered_name + mod2_name
