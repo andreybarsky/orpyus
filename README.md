@@ -45,14 +45,17 @@ from orpyus.guitar import Guitar
 ```
 
 ### Chords
+The `Chord` class represents chords as combinations of specific notes
 ```
 # chord recognition by name:
-Chord('Csus2')
-AbstractChord('maj7')
+Chord('C7sus2')                  
+AbstractChord('maj7')            # AbstractChords are like Chords but without a root
+Chord('Ebb minor major seventh') # orpyus understands a wide range of aliases
+Chord('Dm9/E')                   # inversion can be specified as slash chord
 
 # chord recognition by (ordered) notes:
-Chord('CEbGD')
-Chord('AbCEGb')
+Chord('CEbGD')       # notes are parsed in ascending order; e.g. this D is recognised as a ninth, not a second
+Chord('AbCEGb')      # orpyus automatically chooses sharp/flat spelling in ambiguous cases, but respects spelling when it is given 
 
 # examine chord attributes:
 Chord('Cmaj7').notes
@@ -61,19 +64,23 @@ Chord('Cmaj7').factors
 Chord('Cmaj7').quality
 
 # invert or transpose chords:
-Chord('Cmaj7').invert(2)
-Chord('Cmaj7') + 2
+Chord('Cmaj7').invert(2)    # gives Cmaj7/G
+Chord('Cmaj7') + 3          # gives Ebmaj7
+
+# add or subtract notes from chords:
+Chord('Cmaj7') + 'D'    # gives Cmaj9
+Chord('Cmaj7') - 'G'    # gives Cmaj7(no5)
 
 # find matching chords from (partial or unordered) note clusters:
-matching_chords('CGFB')
+matching_chords('CGFB')    # recognised as a compound Cmaj7sus4
 
 # if audio dependencies are available: sound out any chord (experimental)
 Chord('Cmaj7').play()
 ```
 
 ### Scales/Keys
-Note that orpyus distinguishes between a 'Scale' like *natural minor*, which is described as an abstract series of intervals but not on any particular tonic, and a 'Key' like *C natural minor*, which is a Scale built on a specific tonic and therefore comprising a specific set of notes.  
-(this might not be a strictly musical distinction but it proved useful in the context of this program)
+Note that orpyus distinguishes between a 'Scale' like **natural minor**, which is described as an abstract series of intervals but not on any particular tonic, and a 'Key' like ***C* natural minor**, which is a Scale built on a specific tonic and therefore comprising a specific set of notes in addition.  
+(in real music theory I understand that the two words are not strongly distinguished and are often used interchangeably, but here it proves to be a useful distinction in practice)
 ```
 ### Scales
 # scale recognition by name:
@@ -128,8 +135,40 @@ Key('C lydian').play()
 ```
 
 ### Progressions
-(still under construction)
+As with the `AbstractChord`/`Chord` and `Scale`/`Key` distinction, orpyus distinguishes between a `Progression` which is a sequence of abstract scale-chords not in any specific key (usually denoted by Roman numerals), and a `ChordProgression` which is a sequence of specific chords in a specific key.
+```
+# a Progression can be initialised with case-sensitive Roman numerals, 
+# whether as list of strings or as a single string with some unambiguous separator char:
+Progression('I-vi-IV-V')
 
+# a Progression is implicitly in a Scale, and will try to guess that scale (between major and minor) if not specified
+# but can also be specified explicitly with the 'scale' keyword arg, even if some chords conflict with the scale:
+Progression('III VII I', scale='major')  
+# notice that the above is outputted with annotations: '[III] [VII] I', 
+# indicating that chords III and VII are not in the major scale
+Progression('III VII I', scale='minor')  
+# and that this one is outputted with annotations: 'III VII [I]',
+# indicating that the I chord is not in the minor scale
+
+# also notice the output of the following:
+Progression('ii V i')
+# which is displayed 'iiͫ  Vͪ  i', in the (auto-detected) natural minor scale
+# where the 'h' diacritic indicates that the V chord is not in natural minor, but is in *harmonic* minor
+# and the 'm' diacritic indicates that the ii chord is in neither natural or harmonic minor, but is in *melodic* minor
+
+# Progressions can also be initialised from integers, which makes the 'scale' keyword arg mandatory:
+Progression(1,6,4,5, scale='major')
+# scales are not limited to natural major or minor, but can be any exotic mode:
+Progression(1,6,4,5, scale='phrygian dominant')
+# notice that this produces the correct triad chords of that scale
+# e.g. the phrygian dominant progression comes out as: 'I  VI+  iv  v°'
+
+# and the AbstractChord objects associated with the resulting progression can be accessed
+# from the Progression.chords attribute:
+Progression(1,6,4,5, scale='phrygian dominant').chords
+
+
+```
 ### Guitar integration
 ```
 # guitar class can be initialised as default (EADGBE) tuning
