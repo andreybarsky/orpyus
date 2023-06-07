@@ -41,6 +41,7 @@ If that seems to run correctly, you should be able to import the rest of the mod
 from orpyus.chords import Chord, AbstractChord, matching_chords
 from orpyus.scales import Scale, Subscale
 from orpyus.keys import Key, matching_keys
+from orpyus.progressions import Progression, ChordProgression
 from orpyus.guitar import Guitar
 ```
 
@@ -232,10 +233,11 @@ g.find_key({1:[3], 2:[0,2,3], 3:[0,1]})
 # meaning: fret 3 on the 1st (E) string, frets 0, 2 and 3 and open on the 2nd (A) string, and frets 0 and 1 on the 3rd (D) string
 # which happens to match the keys of G harmonic major or C melodic minor
 
-# but most useful: a Guitar object can show a Note, Chord, Scale or Key object on its fretboard:
-# (which shows chord/scale degrees and note names by default)
+# but most useful: a Guitar object can show a Note, Chord, Scale, or Progression object on its fretboard:
+# (which displays chord/scale degrees and note names by default)
 g.show_chord('C7')
 g.show_key('C dorian')
+g.show_chord_progression('Cm E G D')
 
 # experimental: plug any orpyus object into the generic Guitar.show method:
 g.show(Chord('Cmmaj11'))
