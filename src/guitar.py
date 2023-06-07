@@ -136,7 +136,7 @@ class Guitar:
     def __call__(self, frets):
         """accepts a fretting pattern, prints out sounded notes, detected chord,
         and the chord diagram showing what note each string is playing"""
-        return self.query(frets)
+        return self.query(frets, return_chord=False)
 
         # TBI: find way to exclude frets from search? would need to modify precision_recall func probably
     def find_key(self, include=None, exclude=None, string=None, frets=None, tonic=None, show_fretboard=True):
@@ -195,7 +195,7 @@ class Guitar:
         notelist = self[frets]
         return most_likely_chord(notelist, *args, **kwargs)
 
-    def query(self, frets):
+    def query(self, frets, return_notes=False, return_chord=True):
         """parses the frets passed, displays the sounded notes, the auto-detected chord,
         and shows the resulting fret diagram"""
         sounded_notes = self.fret(frets)
@@ -209,6 +209,11 @@ class Guitar:
         ### TBI: capo support?
         fret_cells = {(s+1,f):string_contents[s] for s,f in enumerate(fret_ints) if (f != 0 and f is not None)}
         Fretboard(fret_cells, index=self.tuning, mute=mute, title=f'Frets: {frets}').disp(continue_strings=True)
+
+        if return_notes:
+            return sounded_notes
+        elif return_chord:
+            return sounded_chord
 
 
     def locate_note(self, note, match_octave=False, min_fret=0, max_fret=13):
@@ -397,7 +402,7 @@ class Guitar:
     def show_chord_progression(self, progression, end_fret=13, **kwargs):
         # try casting to ChordProgression type if it is not one:
         if type(progression) != ChordProgression:
-            progression = ChordProgression(Progression)
+            progression = ChordProgression(progression)
         # just display chords in sequence:
         if 'fret_size' not in kwargs:
             kwargs['fret_size'] = 6

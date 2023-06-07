@@ -31,8 +31,8 @@ standard_scale_suffixes = list([names[0] for names in interval_scale_names.value
 base_scale_names = {'natural major', 'melodic minor', 'harmonic minor', 'harmonic major'} # note that melodic major modes are just rotations of melodic minor modes
 # this is technically true in the reverse as well, but 'melodic minor' is more common / well-known than mel. major
 natural_scale_names = {'natural major', 'natural minor'}
-parallels = {'natural major': 'natural minor', 'natural minor': 'natural major',
-             'harmonic major': 'harmonic minor', 'harmonic minor': 'harmonic major'}
+# parallels = {'natural major': 'natural minor', 'natural minor': 'natural major',
+#              'harmonic major': 'harmonic minor', 'harmonic minor': 'harmonic major'}
 
 # this dict maps base scale names to dicts that map scale degrees to the modes of that base scale
 mode_idx_names = {
@@ -327,15 +327,21 @@ class Scale:
         """returns the pentatonic subscale of the natural major or minor scales.
         will function for other scales, though is not well-defined."""
         if self.quality.major and self.is_natural:
-            return self.subscale(degrees=[1,2,3,5,6])
+            # return self.subscale(degrees=[1,2,3,5,6])
+            return MajorPentatonic
         elif self.quality.minor and self.is_natural:
-            return self.subscale(degrees=[1,3,4,5,7])
+            # return self.subscale(degrees=[1,3,4,5,7])
+            return MinorPentatonic
         else:
+            # experimental: we've been asked for the pentatonic scale of a non-natural diatonic scale
+            # so we try to find one that maximises pairwise interval consonance while preserving scale character
             ordered_pent_scales = self.compute_pentatonics(preserve_character=True)
             preferred = list(ordered_pent_scales.keys())[0]
             if preferred in subscales_to_aliases:
+                # use existing pre-defined subscale name (like 'blues scale') if one exists:
                 return preferred
             else:
+                # otherwise just call this a subscale of its parent scale:
                 return self.subscale(omit=preferred.omit, name=f'{self.name} pentatonic')
 
     def compute_pentatonics(self, preserve_character=False, keep_quality=True):
@@ -369,15 +375,17 @@ class Scale:
 
     @property
     def nearest_natural_scale(self):
+        return self.find_nearest_natural_scale()
+
+    # quality-of-life alias (because I keep getting them mixed up):
+    @property
+    def closest_natural_scale(self):
+        return self.nearest_natural_scale
+
+    def find_nearest_natural_scale(self):
         """return the natural scale that has the most intervallic overlap with this scale
         (defaulting to major in the rare event of a tie)"""
-        # nat_min, nat_maj = Scale('natural minor'), Scale('natural major')
-        # nat_min_overlap = [iv for iv in self.intervals if iv in nat_min.intervals]
-        # nat_maj_overlap = [iv for iv in self.intervals if iv in nat_maj.intervals]
-        # if len(nat_maj_overlap) >= len(nat_min_overlap):
-        #     return nat_maj
-        # else:
-        #     return nat_min
+
         diffs_from_major = self.intervals - scale_name_intervals['major']
         dist_from_major = sum([abs(iv.value) for iv in diffs_from_major])
 
@@ -385,14 +393,27 @@ class Scale:
         dist_from_minor = sum([abs(iv.value) for iv in diffs_from_minor])
 
         if dist_from_major <= dist_from_minor:
-            return Scale('major')
+            return MajorScale
         elif dist_from_minor < dist_from_major:
-            return Scale('minor')
+            return MinorScale
+
+    @property
+    def parallel(self):
+        """returns the parallel minor or major or a natural major or minor scale,
+        or of harmonic/melodic minor or major scales"""
+        if self in parallel_scales:
+            return parallel_scales[self]
+        else:
+            raise Exception(f'No parallel scale defined for {self}')
 
     @property
     def character(self, verbose=False):
-        """returns the intervals of this mode that are different to its base scale"""
-        nearest_natural = self.nearest_natural_scale
+        """if this is a mode, returns the intervals of this mode that are different to its nearest natural scale.
+        if it is a natural scale, return the intervals that make it distinct from its parallel scale."""
+        if not self.is_natural:
+            nearest_natural = self.nearest_natural_scale
+        else:
+            nearest_natural = self.parallel
 
         base_intervals = nearest_natural.intervals
         scale_character = []
@@ -489,7 +510,7 @@ class Scale:
         """returns a Subscale initialised from this Scale with the desired degrees"""
         return Subscale(parent_scale=self, degrees=degrees, omit=omit, chromatic_intervals=chromatic_intervals, assigned_name=name) # [self[s] for s in degrees]
 
-    def find_neighbouring_scales(self):
+    def get_neighbouring_scales(self):
         """return a list of Scale objects that differ from this one by only a semitone"""
         neighbours = {}
         for degree, intv in self.degree_intervals.items(): # try modifying each interval in this scale
@@ -524,6 +545,10 @@ class Scale:
                         except KeyError as e:
                             log(f'Could not find neighbour of {self.name} with alteration {sharp_deg_qualifier.name}: {e}')
         return neighbours
+    @property
+    def neighbouring_scales(self):
+        return self.get_neighbouring_scales()
+
 
     def valid_chords(self, degree, max_order=4, min_likelihood=0.4, min_consonance=0, max_results=None, sort_by='likelihood', inversions=False, display=True, _root_note=None):
         """For a specified degree, returns all the chords that can be built on that degree
@@ -643,7 +668,9 @@ class Scale:
     # we define consonance for scales a little different to how we do for chords
     # instead of looking at every pairwise interval, we look at every second-and-third interval
     # for each degree in the scale. i.e. the intervals 1-2, 1-3, 2-3, 2-4, etc.
-    def pairwise_intervals(self, extra_tonic=False):
+
+
+    def get_pairwise_intervals(self, extra_tonic=False):
         pairwise = {}
 
         # outer loop is across degree intervals:
@@ -655,18 +682,24 @@ class Scale:
                 pairwise[(left, right)] = right - left
                 if extra_tonic and (deg == 1):
                     pairwise[('tonic', right)] = right - left # extra value for tonic, to upweight in weighted sum
-
         return pairwise
+    @property
+    def pairwise_intervals(self):
+        return self.get_pairwise_intervals(extra_tonic=False)
 
-    def pairwise_consonances(self, extra_tonic=False):
+
+    def get_pairwise_consonances(self, extra_tonic=False):
         # simply lifted from AbstractChord class:
-        return AbstractChord.pairwise_consonances(self, extra_tonic=extra_tonic)
+        return AbstractChord.get_pairwise_consonances(self, extra_tonic=extra_tonic)
         # (this internally calls self.pairwise_intervals, which is defined above)
+    @property
+    def pairwise_consonances(self):
+        return self.get_pairwise_consonances(extra_tonic=True)
 
     @property
     def consonance(self, tonic_weight=2):
         """simply the mean of pairwise interval consonances"""
-        cons_list = list(self.pairwise_consonances(extra_tonic=True).values())
+        cons_list = list(self.get_pairwise_consonances(extra_tonic=True).values())
         raw_cons = sum(cons_list) / len(cons_list)
         # return raw_cons
         # the raw consonance comes out as maximum=0.7231 for the most consonant scale (natural major)
@@ -750,25 +783,39 @@ class Subscale(Scale):
     if not None, should contain a list of Intervals that don't belong to the base scale, like blues notes.
     chords using those notes are valid, though they are never chord roots"""
 
-    def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, chromatic_intervals=None, assigned_name=None):
+    def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, intervals=None, chromatic_intervals=None, assigned_name=None):
 
         if subscale_name is not None:
             assert assigned_name is None
             # init by subscale name; reject all other input args
             assert parent_scale is None and degrees is None and chromatic_intervals is None
-            subscale_obj = subscales_by_name[subscale_name]
+            subscale_obj = subscales_by_name[subscale_name] # access the pre-initialised subscale with this name and re-initialise it
             parent_scale, degrees, chromatic_intervals = subscale_obj.parent_scale, subscale_obj.borrowed_degrees, subscale_obj.chromatic_intervals
             self.assigned_name = subscale_name
-        else:
+        elif intervals is not None:
+            # init by interval kwarg alone
+            self.intervals = IntervalList(intervals)
+            parent_scale = self.most_likely_parent
+            chromatic_intervals = parent_scale.chromatic_intervals
+            intervals = IntervalList(intervals)
+            degrees = [parent_scale.interval_degrees[iv] for iv in intervals]
             self.assigned_name = assigned_name
-
-        if degrees is None:
-            assert omit is not None
-            degrees = [d for d in range(1,8) if d not in omit]
-            self.omit = sorted(omit)
+        elif parent_scale is not None:
+            assert (degrees is not None) or (omit is not None), f"Subscale initialised by parent scale must have a 'degrees' or 'omit' arg"
+            self.assigned_name = assigned_name
         else:
-            assert omit is None
-            self.omit = [d for d in range(1,8) if d not in degrees]
+            raise Exception(f'Subscale init must have either a subscale name, a set of intervals, or a combination of parent scale and degrees/omit')
+
+
+        # if we're initialised from a parent scale, we require either its degrees or their ommission:
+        if parent_scale is not None:
+            if degrees is None:
+                assert omit is not None
+                degrees = [d for d in range(1,8) if d not in omit]
+                self.omit = sorted(omit)
+            else:
+                assert omit is None
+                self.omit = [d for d in range(1,8) if d not in degrees]
 
         assert 1 in degrees, "Subscale sub-degrees must include the tonic"
         self.parent_scale = parent_scale
@@ -853,10 +900,34 @@ class Subscale(Scale):
     #     ext_interval = Interval(flat_interval.value + (12*octave_span), degree=idx)
     #     return ext_interval
 
-    def possible_parents(self):
+    def get_possible_parents(self, fast=False, sort=True):
         """returns a list of Scales that are also valid parents for this Subscale"""
-        ... #TBI
-        #
+        parents = []
+        if fast:
+            # only search scales (not modes)
+            lookup_dict = interval_scale_names
+        else:
+            lookup_dict = interval_mode_names
+
+        stripped_intervals = self.intervals.strip()
+        for scale_intervals, scale_names in lookup_dict.items():
+            possible = True
+            for iv in stripped_intervals:
+                if iv not in scale_intervals:
+                    possible = False
+                    break
+            if possible:
+                parents.append(Scale(scale_names[0]))
+        # sort by likelihood: (and then by consonance)
+        if sort:
+            parents = sorted(parents, key=lambda x: (x.likelihood, x.consonance), reverse=True)
+        return parents
+    @property
+    def possible_parents(self):
+        return self.get_possible_parents(fast=False)
+    @property
+    def most_likely_parent(self):
+        return self.get_possible_parents(fast=False, sort=True)[0]
 
 
     def on_tonic(self, tonic):
@@ -865,7 +936,7 @@ class Subscale(Scale):
             tonic = notes.Note(tonic)
         # lazy import to avoid circular dependencies:
         from .keys import Subkey
-        return Subkey(subscale_name=self.name, tonic=tonic)
+        return Subkey(intervals=self.intervals, tonic=tonic)
 
 
 
@@ -1011,6 +1082,14 @@ HarmonicMinor = HarmonicMinorScale = Scale('harmonic minor')
 HarmonicMajor = HarmonicMajorScale = Scale('harmonic major')
 MelodicMinor = MelodicMinorScale = Scale('melodic minor')
 MelodicMajor = MelodicMajorScale = Scale('melodic major')
+
+
+# dict mapping parallel major/minor scales:
+parallel_scales = {NaturalMajor: NaturalMinor,
+                   HarmonicMajor: HarmonicMinor,
+                   MelodicMajor: MelodicMinor}
+# parallel scales are symmetric:
+parallel_scales.update(reverse_dict(parallel_scales))
 
 # special 'full minor' scale that includes notes of natural, melodic and harmonic minors:
 FullMinor = FullMinorScale = Scale('minor', chromatic_intervals=[M6, M7], alias='full minor')

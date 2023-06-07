@@ -58,7 +58,7 @@ class Interval:
             # should not be more than 1 away from the default:
             degree_distance_from_default = abs(degree - default_degree)
 
-            if degree_distance_from_default <= 1:
+            if degree_distance_from_default <= 2:
                 # all good - interval fits to the desired degree
                 pass
                 # self.extended_degree = abs(degree) * self.sign
@@ -67,11 +67,11 @@ class Interval:
                 # interval has been asked to correspond to a degree one octave higher or lower than default
                 # maybe this is fine fine: we can quietly re-init?
                 raise ValueError(f'Interval init specified that interval of semitone distance {self.value}' +
-                f' should correspond to degree={degree}, but that appears to be an octave up or down from default: {default_degree}')
+                f' should correspond to degree={degree}, but that appears to be an octave up or down from default degree: {default_degree}')
 
             else:
                 raise ValueError(f'Interval init specified that interval of semitone distance {self.value}' +
-                f' should correspond to degree={degree}, but that is too far from default: {default_degree}')
+                f' should correspond to degree={degree}, but that is too far from default degree: {default_degree}')
 
         # determine this interval's quality:
         self.quality = self._detect_quality()

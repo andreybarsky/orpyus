@@ -1,6 +1,6 @@
 from .intervals import Interval, IntervalList
 from .notes import Note, NoteList, sharp_major_tonics, sharp_minor_tonics, flat_major_tonics, flat_minor_tonics, relative_majors, relative_minors
-from .scales import Scale, Subscale, interval_mode_names, parallels
+from .scales import Scale, Subscale, NaturalMajor, NaturalMinor, interval_mode_names, parallel_scales
 from .chords import Chord, AbstractChord
 from . import parsing
 from .util import check_all, precision_recall, reverse_dict, log
@@ -262,12 +262,9 @@ class Key(Scale):
         """as Scale.subscale, but adds this key's tonic as well and initialises a Subkey instead"""
         return Subkey(parent_scale=self, degrees=degrees, omit=omit, chromatic_intervals=chromatic_intervals, assigned_name=name, tonic=self.tonic) # [self[s] for s in degrees]
 
-
     @property
-    def parallel_minor(self):
-        if not self.quality.major:
-            raise Exception(f'{self.name} is not major, and therefore has no parallel minor')
-
+    def pentatonic(self):
+        return self.scale.pentatonic.on_tonic(self.tonic)
 
     @property
     def relative_minor(self):
@@ -308,17 +305,24 @@ class Key(Scale):
 
     @property
     def parallel_minor(self):
-        if self.quality.major and self.is_natural:
-            return
+        if not self.quality.major:
+            raise Exception(f'{self.name} is not major, and therefore has no parallel minor')
+        else:
+            return self.parallel
+
+    @property
+    def parallel_major(self):
+        if not self.quality.minor:
+            raise Exception(f'{self.name} is not minor, and therefore has no parallel major')
+        else:
+            return self.parallel
 
     @property
     def parallel(self):
-        if self.quality.major and self.is_natural:
-            return self.parallel_minor
-        elif self.quality.minor and self.is_natural:
-            return self.parallel_major
+        if self.scale in parallel_scales:
+            return parallel_scales[self.scale].on_tonic(self.tonic)
         else:
-            raise Exception('Parallel major/minor not defined for non-natural Keys')
+            raise Exception(f'Parallel major/minor not defined for {self.name}')
 
     def __invert__(self):
         """~ operator returns the parallel major/minor of a key"""
@@ -368,7 +372,7 @@ class Key(Scale):
 class Subkey(Key, Subscale):
     """a Key that is built on a Subscale rather than a scale. Initialised as Subscale but also with a tonic."""
     # def __init__(self, subscale_name=None, intervals=None, tonic=None, notes=None, mode=1, chromatic_intervals=None, stacked=True):
-    def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, chromatic_intervals=None, assigned_name=None, tonic=None):
+    def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, intervals=None, chromatic_intervals=None, assigned_name=None, tonic=None):
 
         # get correct tonic and scale name from (key_name, tonic) input args:
         self.tonic, subscale_name = self._parse_tonic(subscale_name, tonic)
@@ -376,7 +380,7 @@ class Subkey(Key, Subscale):
 
 
         # as Subscale.init:
-        super(Key, self).__init__(subscale_name, parent_scale, degrees, omit, chromatic_intervals, assigned_name)
+        super(Key, self).__init__(subscale_name, parent_scale, degrees, omit, intervals, chromatic_intervals, assigned_name)
         # (this sets self.base_scale_name, .quality, .intervals, .diatonic_intervals, .chromatic_intervals, .rotation)
 
         self.base_degree_notes = {d:self.tonic + iv for d,iv in self.base_degree_intervals.items()}
@@ -403,6 +407,8 @@ class Subkey(Key, Subscale):
         if self.chromatic_intervals is not None:
             self.chromatic_notes = NoteList([self.tonic + i for i in self.chromatic_intervals])
             # self.diatonic_notes = NoteList([self.tonic + i for i in self.diatonic_intervals.pad()])
+        else:
+            self.chromatic_notes = None
 
         # take the tonic out of assigned name if one has been given:
         if assigned_name is not None:
@@ -440,7 +446,7 @@ class Subkey(Key, Subscale):
 
 
 def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, require_roots=True,
-                    display=True, return_matches=False,
+                    display=True, return_matches=False, natural_only=False,
                     upweight_first=True, upweight_last=True, upweight_chord_roots=True, upweight_key_tonics=True, upweight_pentatonics=False, # upweight_pentatonics might be broken
                     min_recall=0.8, min_precision=0.7, min_likelihood=0.5, max_results=5):
     """from an unordered set of chords, return a dict of candidate keys that could match those chord.
@@ -514,8 +520,15 @@ def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, req
         # we try building keys on any note that occurs in the chord list:
         candidate_tonics = unique_notes
 
+    if natural_only:
+        # search only natural major and minor scales:
+        shortlist_interval_scale_names = {NaturalMajor.intervals: 'natural major', NaturalMinor.intervals: 'natural minor'}
+    else:
+        # search all known scales and modes
+        shortlist_interval_scale_names = interval_mode_names
+
     for t in candidate_tonics:
-        for intervals, mode_names in interval_mode_names.items():
+        for intervals, mode_names in shortlist_interval_scale_names.items():
             candidate_notes = [t] + [t + i for i in intervals]
 
             does_not_contain_exclusions = True

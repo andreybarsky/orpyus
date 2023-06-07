@@ -13,14 +13,18 @@ quality_aliases = {'major': ['maj', 'M'],
            'minor': ['min', 'm'],
            'perfect': ['indeterminate', 'ind', 'null', 'perf', 'P'],
            'augmented': ['aug', 'A', '+'],
-           'diminished': ['dim', 'd', '°', 'o', '0']}
+           'diminished': ['dim', 'd', '°', 'o', '0'],
+           'doubly augmented': ['aaug', 'AA'],
+           'doubly diminished': ['ddim', 'dd']}
 alias_qualities = unpack_and_reverse_dict(quality_aliases, include_keys=True)
 
-quality_values = {'diminished': -2,
+quality_values = {   'doubly diminished': -3,
+                     'diminished': -2,
                      'minor': -1,
                      'perfect': 0,
                      'major': 1,
-                     'augmented': 2}
+                     'augmented': 2,
+                     'doubly augmented': 3}
 value_qualities = reverse_dict(quality_values)
 
 
@@ -47,10 +51,15 @@ class Quality:
         self.perfect = self.value == 0
         self.augmented = self.value == 2
         self.diminished = self.value == -2
+        self.doubly_augmented = self.value == 3
+        self.doubly_diminished = self.value == -3
 
         # an interval is 'major-ish' if it is major/augmented, and 'minor-ish' if it is minor/diminished:
         self.major_ish = self.value >= 1
         self.minor_ish = self.value <= -1
+
+        self.aug_ish = self.value >= 2
+        self.dim_ish = self.value <= -2
 
     def _parse_input(self, inp):
         """accepts either a string denoting quality name, or an existing quality.
@@ -91,7 +100,7 @@ class Quality:
             return self.full_name[0]
 
     def __str__(self):
-        return f'~{self.name}~'
+        return f'~{self.full_name}~'
 
     def __repr__(self):
         return str(self)
@@ -132,14 +141,18 @@ class Quality:
 
 # interval semitone distances from major or perfect interval degrees:
 
-offsets_wrt_major = {'diminished': -2,
+offsets_wrt_major = {'doubly diminished': -3,
+                     'diminished': -2,
                      'minor': -1,
                      'major': 0,
-                     'augmented': 1}
+                     'augmented': 1,
+                     'doubly augmented': 2}
 
-offsets_wrt_perfect = {'diminished': -1,
+offsets_wrt_perfect = {'doubly diminished': -2,
+                       'diminished': -1,
                        'perfect': 0,
-                       'augmented': 1}
+                       'augmented': 1,
+                       'doubly augmented': 2}
 
 major_offsets = reverse_dict(offsets_wrt_major)
 perfect_offsets = reverse_dict(offsets_wrt_perfect)
@@ -153,6 +166,8 @@ Minor = Min = m = Quality('minor')
 Perfect = Perf = P = Quality('perfect')
 Augmented = Aug = A = Quality('augmented')
 Diminished = Dim = d = Quality('diminished')
+DoublyAugmented = AAug = AA = Quality('doubly augmented')
+DoublyDiminished = DDim = dd = Quality('doubly diminished')
 
 #################################################################
 
@@ -503,6 +518,7 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      # special case, otherwise 'dmin9' doesn't parse correctly:
                      'hdmin9': ['hdmin9', 'hdimm9', 'hdimmin9'],
                      'dmin9': ['dmin9', 'dimm9', 'dimmin9'],
+                     '7b9': ['dm9', 'domin9', 'domm9'],
 
                       '#': ['♯', 'sharp', 'sharpened', 'sharped', 'raised'],
                       'b': ['♭', 'flat', 'flattened', 'flatted', 'lowered'],

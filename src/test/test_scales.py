@@ -29,7 +29,7 @@ def unit_test():
     compare(Subscale('blues minor').intervals[3], Dim5)
 
     # test neighbours:
-    major_neighbours = Scale('natural major').find_neighbouring_scales()
+    major_neighbours = Scale('natural major').neighbouring_scales
     print(f'Neighbours of natural major scale:')
     for a, sc in major_neighbours.items():
         print(f'with {a.name}: {sc}')
@@ -38,7 +38,7 @@ def unit_test():
     for intvs, names in interval_mode_names.items():
         name = names[0]
         sc = Scale(name)
-        neighbours = sc.find_neighbouring_scales()
+        neighbours = sc.neighbouring_scales
         # print(f'{name} scale has {len(neighbours)} neighbours')
 
     print('Valid chords from scale degrees:')

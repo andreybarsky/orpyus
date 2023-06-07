@@ -1,3 +1,7 @@
+### this demo script just imports the entire orpyus namespace for easy access.
+### it's intended to be used interactively without the need to install the package properly, e.g.
+### e.g.:  $ ipython -i demo.py
+
 import ipdb
 
 from src import util

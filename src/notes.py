@@ -662,6 +662,9 @@ class NoteList(list):
         root = octaved_notes[0]
         return IntervalList([o - root for o in octaved_notes])
 
+    def from_octave(self, octave):
+        return self.force_octave(start_octave=octave, min_octave=0, max_octave=9)
+
     @property
     def intervals(self):
         return self.ascending_intervals()

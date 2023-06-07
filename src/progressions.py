@@ -77,9 +77,13 @@ qualifier_marks = {'dim': '°',
                    'maj7': 'Δ⁷',
                    '5': '⁵',
                    '7': '⁷',
+                   'm7': '⁷',  # a kludge; here we replace out the 'm' because it is already implied by the lower case roman numeral
                    '9': '⁹',
+                   'm9': '⁹',
                    '11': '¹¹',
+                   'm11': '¹¹',
                    '13': '¹³',
+                   'm13': '¹³',
                    'sus': 's'}
 
 roman_degree_chords = {}
@@ -106,16 +110,23 @@ def parse_roman_numeral(numeral):
     deg, quality = out[0]
 
     qualifiers = []
+    inversion = 0
 
     if quality.minor:
         qualifiers.append(minor_qual)
 
     if len(out) > 1: # got one or more additional qualifiers as well
         rest = ''.join(out[1:])
+
+        rest_inv = rest.split('/')
+        if len(rest_inv) > 1:
+            assert len(rest_inv) == 2 # chord part and inversion part
+            rest, inversion = rest_inv[0], int(rest_inv[1])
+
         rest_quals = parse_chord_qualifiers(rest)
         qualifiers.extend(rest_quals)
 
-    chord = AbstractChord(qualifiers=qualifiers)
+    chord = AbstractChord(qualifiers=qualifiers, inversion=inversion)
 
     return deg, chord
 
@@ -177,7 +188,7 @@ class DegreeMovement:
 
     def _set_harmonic_functions(self):
         self.descending_fifth = self.down == 4
-        self.descending_fourth = self.down == 3
+        self.ascending_fifth = self.down == 3
         # self.function = ('primary ' if self.primary else 'substitute ') + ('dominant' if self.dominant else 'subdominant')
 
         # the 'size' of the movement: 2 to 1 has less magnitude than 5 to 1, but the same as 7 to 1
@@ -285,11 +296,18 @@ class DegreeMovement:
     def direction_str(self):
         if self.up == 0: # no direction
             return ' 0'
-        if self.descending_fifth or self.descending_fourth:
+
+        if self.descending_fifth:
             direction_char = self._down_arrow
+            distance_char = 5
+        elif self.ascending_fifth:
+            direction_char = self._up_arrow
+            distance_char = 5
         else:
-            direction_char = self._down_arrow if self.down < self.up else self._up_arrow
-        distance_char = 5 if self.magnitude == 3 else (self.magnitude+1)
+            distance, upward = self.magnitude, (self.distance > 0)
+            direction_char = self._up_arrow if upward else self._down_arrow
+            distance_char = self.magnitude + 1
+
         return f'{direction_char}{distance_char}'
 
     @property
@@ -438,8 +456,9 @@ class ChordList(list):
         # numerals = [numerals_roman[d]  if c.quality.major_ish else numerals_roman[d].lower()  for d,c in degree_chords]
         # add suffixes: (we ignore the 'm' suffix because it is denoted by lowercase instead)
         if qualifiers:
-            suffix_list = [c.suffix if c.suffix != 'm' else '' for c in self]
-            roman_chords_list = [f'{numerals[i]}{suffix_list[i]}' for i in range(len(self))]
+            suffix_list = [c.get_suffix(inversion=False) if c.get_suffix() != 'm' else '' for c in self]
+            inversion_list = ['' if c.inversion==0 else f'/{c.inversion}' for c in self]
+            roman_chords_list = [f'{numerals[i]}{suffix_list[i]}{inversion_list[i]}' for i in range(len(self))]
             # turn suffix qualifiers into superscript marks etc. where possible:
             roman_chords_list = [''.join(reduce_aliases(r, qualifier_marks)) for r in roman_chords_list]
         else:
@@ -455,25 +474,28 @@ class ChordList(list):
     def progression(self):
         return ChordProgression(self)
 
-    def find_key(self, verbose=True):
+    def find_key(self, natural_only=False, verbose=True):
         """wraps around matching_keys but additionally uses cadence information to distinguish between competing candidates"""
         matches = matching_keys(chords=self, return_matches=True, min_likelihood=0, max_results=12, require_tonic=True, require_roots=True,
-                                upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False)
+                                upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False, natural_only=natural_only)
 
         if len(matches) == 0:
             # if no matches at all first, open up the min recall property:
+            log(f'No key found matching notes using default parameters, widening search')
             matches = matching_keys(chords=self, return_matches=True, min_recall=0, min_likelihood=0, max_results=12,
-                                    require_tonic=True, require_roots=True,
+                                    require_tonic=True, require_roots=True, natural_only=natural_only,
                                     upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False)
             if len(matches) == 0:
                 # open up everything:
+                log(f'Still no key found with widened search, removing all search constraints')
                 matches = matching_keys(chords=self, return_matches=True, min_recall=0, min_precision=0, min_likelihood=0, max_results=12,
-                                        require_tonic=True, require_roots=True,
+                                        require_tonic=False, require_roots=False, natural_only=natural_only,
                                         upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False)
                 if len(matches) == 0:
                     raise Exception(f'No key matches at all found for chords: {self} \n(this should never happen!)')
         # try ideal matches (with perfect recall) first:
         ideal_matches = [(c,s) for c,s in matches.items() if s['recall'] == 1.0]
+        log(f'{len(matches)} possible key matches found')
 
         if len(ideal_matches) == 0:
             # no good matches, so open up to all matches that share the max recall:
@@ -514,14 +536,20 @@ class ChordList(list):
             else:
                 # multiple matches that are equally as good,
                 # so look for a cadence-based match around V-I resolutions or something
+
                 # log(f'Reducing the shortlist to those tied for highest likelihood')
                 # max_likely = max([s['likelihood'] for c,s in match_tuples])
                 # likely_matches = [(c,s) for c,s in match_tuples if s['likelihood'] == max_likely]
-                candidate_keys = [m[0] for m in precise_matches]
+
+                # limit shortlist to natural keys only if specified:
+                if natural_only:
+                    candidate_keys = [match for match,stats in precise_matches if match.is_natural]
+                else:
+                    candidate_keys = [match for match,stats in precise_matches]
                 log(f'Testing {len(candidate_keys)} candidate keys for grammaticity of this progression in those keys')
                 candidate_progressions = [Progression(self.as_numerals_in(k), scale=k.scale).in_key(k) for k in candidate_keys]
                 log(f'Candidate keys: {", ".join([str(p.key) for p in candidate_progressions])}')
-                grammatical_progressions = most_grammatical_progression(candidate_progressions, verbose=verbose)
+                grammatical_progressions = most_grammatical_progression(candidate_progressions, verbose=log.verbose)
                 grammatical_keys = [p.key for p in grammatical_progressions]
                 if len(grammatical_keys) == 1:
                     key = grammatical_keys[0]
@@ -535,9 +563,8 @@ class ChordList(list):
                     likely_keys = [k for k in grammatical_keys if k.likelihood == max_likely]
 
                     if len(likely_keys) == 1:
-                        # one key is more common than the other
                         key = likely_keys[0]
-                        log('One key is more likely than the others: {key}')
+                        log(f'One key is more likely than the others: {key}')
                     else:
                         # nothing else left, just tie-break by key consonance
                         keys_by_consonance = sorted(likely_keys, key=lambda x: x.consonance, reverse=True)
@@ -706,8 +733,7 @@ class Progression:
             log(f'    (inferred: natural minor scale)\n')
             return NaturalMinor
 
-    @property
-    def analysis(self):
+    def analyse(self, display=False, ret=True):
         """shows the harmonic functions of the chords in this progression"""
         out = []
         # sloppy for now: should be rolled into a dataframe from the Display module
@@ -736,9 +762,20 @@ class Progression:
             n2 = num2s[i].lower() if self.chords[i+1].quality.minor_ish else num2s[i]
             line = f'[{f}] {n1:{n1_len}}{arrow}{n2:{n2_len}}    {d1}:{c1:{c1_len}}{arrow}{d2}:{c2:{c2_len}}    {mv:{mv_len}}    {cad}'
             out.append(line)
-        print ('\n'.join(out))
+        if display:
+            print('\n'.join(out))
+        if ret:
+            return '\n'.join(out)
 
-    def _as_numerals(self, sep=' ', check_scale=False):
+    def analyze(self, *args, **kwargs):
+        """see Progression.analyse (this is just a quality-of-life alias for American spelling)"""
+        return self.analyse(*args, **kwargs)
+
+    @property
+    def analysis(self):
+        return self.analyse(display=True, ret=False)
+
+    def _as_numerals(self, sep='  ', check_scale=False):
         numerals = []
         for d,c in self.degree_chords:
             # use the quality of the chord if it is not indeterminate, otherwise use the quality of the key:
@@ -785,10 +822,10 @@ class Progression:
                         new_roman_chords.append(orig)
                     elif belongs_harmonic[i]:
                         # mark first character with combining 'h':
-                        new_roman_chords.append(f'\u036A{orig[0]}{orig[1:]}')
+                        new_roman_chords.append(f'{orig[0]}{orig[1:]}\u036A')
                     elif belongs_melodic[i]:
                         # mark first character with combining 'm':
-                        new_roman_chords.append(f'\u036A{orig[0]}{orig[1:]}')
+                        new_roman_chords.append(f'{orig[0]}{orig[1:]}\u036B')
                     else:
                         # mark out-of-scale chord with brackets:
                         new_roman_chords.append(f'[{orig}]')
@@ -901,6 +938,8 @@ def most_grammatical_progression(progressions, add_resolution=True, verbose=Fals
             if movement.cadence:
                 cadence_counts[i] += 1
                 cadence_scores[i] += movement.cadence_score
+        # normalise by progression length: (to compensate for added implied resolutions)
+        cadence_scores[i] = cadence_scores[i] / len(p)
     # take argmax of cadence count/score:
     max_cadences = max(cadence_scores)
     top_matches = []
@@ -910,6 +949,7 @@ def most_grammatical_progression(progressions, add_resolution=True, verbose=Fals
 
 
     for p,c in zip(progressions, cadence_scores):
+        log(f'\nTesting key: {p.key}')
         if verbose:
             p.pad_with_tonic().analysis
         log(f'cadence score:{c})\n')
@@ -953,7 +993,16 @@ class ChordMovement:
 
 class ChordProgression(Progression, ChordList):
     """ChordList subclass defined additionally over a specific key"""
-    def __init__(self, *chords, key=None):
+    def __init__(self, *chords, key=None, search_natural_keys_only=False):
+        """Initialised by a list or series of Chord objects, or strings that cast to Chord objects,
+        or by a list of integers combined with the (otherwise-optional) key argument.
+
+        If key is not given, we try to detect the most likely key using a
+        combination of the chord notes, and the likeliness of the progression
+        in specific keys with respect to cadence resolution etc.
+        By default, this key detection routine searches all keys that fit the
+        chords, but if search_natural_keys_only is True, we search natural major
+        and minor keys only  (useful for performance purposes)"""
 
         if len(chords) == 1:
             chords = chords[0]
@@ -988,8 +1037,7 @@ class ChordProgression(Progression, ChordList):
 
         if key is None:
             # detect most likely key:
-            self.key = self.chords.find_key()
-
+            self.key = self.chords.find_key(natural_only = search_natural_keys_only)
         else:
             self.key = key if isinstance(key, Key) else Key(key)
         # and rip out its scale:

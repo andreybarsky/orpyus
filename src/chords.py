@@ -185,24 +185,33 @@ class AbstractChord:
 
         note that both are ignored if the 'name' arg contains a slash."""
 
-        self.assigned_name = None # this gets overwritten later if some exotic chord is initialised, but can't be set at init
-
         self.factors, self.root_intervals, self.inversion = self._parse_input(name, factors, intervals, inversion, inversion_degree, qualifiers)
 
-        # dict mapping chord factors to intervals from tonic:
+        # dict mapping chord factors to intervals from tonic (and vice versa):
         self.factor_intervals = {i.extended_degree: i for i in self.root_intervals}
+        self.interval_factors = reverse_dict(self.factor_intervals)
 
         if self.inversion != 0: # list of self.intervals is with respect to this chord's inversion
             self.intervals = self.root_intervals.invert(self.inversion)
         else:
             self.intervals = self.root_intervals
 
-        # quality of a chord is the quality of its third:
-        self.quality = qualities.Perfect if 3 not in self.factors else self.factor_intervals[3].quality
+        self.quality = self._determine_quality()
+
 
     def _parse_input(self, name, factors, intervals, inversion, inversion_degree, qualifiers, _allow_note_name=False):
         """takes valid inputs to AbstractChord and parses them into factors, intervals and inversion.
         (see docstring for AbstractChord.__init__)"""
+
+        if isinstance(name, list):
+            # we've been fed a list, probably of integers or intervals:
+            if (type(name) == IntervalList) or (type(name) == list and check_all(name, 'isinstance', (int, Interval))):
+                # we've been fed an IntervalList as first (name) arg, which we quietly re-cast:
+                assert intervals is None
+                intervals = name
+                name = None
+            else:
+                raise ValueError(f'AbstractChord expected a string but was initialised with a list as first arg, and it does not seem to be a valid IntervalList: {name}')
 
         if name is None and factors is None and intervals is None:
             # we have been given nothing to init by, so initialise a basic major triad:
@@ -332,6 +341,28 @@ class AbstractChord:
 
         return factors, intervals.sorted(), inversion
 
+    def _determine_quality(self):
+        # quality of a chord is the quality of its third:
+        if 3 not in self.factors:
+            # use the quality of the 5th: usually perfect, but could be a dim5(no3) or something
+            return self.factor_intervals[5].quality
+        else:
+            if self.factor_intervals[3].quality.major:
+                # is augmented if the 5th is augmented, otherwise is major
+                if 5 in self.factors and self.factor_intervals[5].quality.augmented:
+                    return qualities.Augmented
+                else:
+                    return qualities.Major
+            elif self.factor_intervals[3].quality.minor:
+                if 5 in self.factors and self.factor_intervals[5].quality.diminished:
+                    return qualities.Diminished
+                else:
+                    return qualities.Minor
+            else:
+                # third is present but neither major or minor, meaning it is dim or aug (or ddim or aaug)
+                # so we'll just call this chord whatever the third is:
+                return self.factor_intervals[3].quality
+
     def __len__(self):
         return len(self.factors)
 
@@ -341,7 +372,10 @@ class AbstractChord:
         return f'/{self.inversion}' if (self.inversion != 0) else ''
 
     @property
-    def suffix(self, inversion=True):
+    def suffix(self):
+        return self.get_suffix(inversion=True)
+
+    def get_suffix(self, inversion=True):
         """dynamically determine chord suffix from factors and inversion"""
         inv_string = self._inv_string if inversion else ''
         if self.factors in factors_to_chord_names:
@@ -392,7 +426,7 @@ class AbstractChord:
         matches an existing chord, and returns that chord's inversion as a new object"""
         return self.inversions_from_intervals(self.intervals)
 
-    def pairwise_intervals(self, extra_tonic=False):
+    def get_pairwise_intervals(self, extra_tonic=False):
         pairwise = {}
         for i in range(len(self.intervals)):
             for j in range(i+1, len(self.intervals)):
@@ -400,19 +434,25 @@ class AbstractChord:
                 if extra_tonic:
                     raise Exception('not implemented')
         return pairwise
+    @property
+    def pairwise_intervals(self):
+        return self.get_pairwise_intervals(extra_tonic=False)
 
-    def pairwise_consonances(self, extra_tonic=False):
-        pw_intervals = self.pairwise_intervals(extra_tonic=extra_tonic)
+    def get_pairwise_consonances(self, extra_tonic=False):
+        pw_intervals = self.get_pairwise_intervals(extra_tonic=extra_tonic)
         pw_consonances = {}
         for pair, diff in pw_intervals.items():
             pw_consonances[pair] = diff.consonance
         return pw_consonances
+    @property
+    def pairwise_consonances(self):
+        return self.get_pairwise_consonances()
 
     @property
     def consonance(self, tonic_weight=2):
         """the weighted mean of pairwise interval consonances"""
         cons_list = []
-        for pair, cons in self.pairwise_consonances().items():
+        for pair, cons in self.pairwise_consonances.items():
             if (tonic_weight != 1) and (pair[0].value == 0): # intervals from root are counted double
                 cons_list.extend([cons]*tonic_weight)
             else:
@@ -463,6 +503,11 @@ class AbstractChord:
     @property
     def name(self):
         return f'{self.short_name} chord'
+
+    def invert(self, inversion=None, inversion_degree=None):
+        """returns a new AbstractChord based off this one, but inverted.
+        not to be confused with self.__invert__!"""
+        return AbstractChord(factors=self.factors, inversion=inversion, inversion_degree=inversion_degree)
 
     def on_root(self, root_note):
         """constructs a Chord object from this AbstractChord with respect to a desired root"""
@@ -1047,9 +1092,8 @@ class Chord(AbstractChord):
     def _get_flags(self):
         """Returns a list of the boolean flags associated with this object"""
         flags_names = {
-                       'inverted': self.inverted,
-                       'minor': self.minor,
-                       'major': self.major,
+                       'inversion': self.inversion,
+                       'quality': self.quality,
                        'suspended': self.suspended,
                        'diminished': self.diminished,
                        'augmented': self.augmented,
