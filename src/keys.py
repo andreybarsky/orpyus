@@ -368,6 +368,15 @@ class Key(Scale):
         # played_notes.play(*args, **kwargs)
         self.scale.play(*args, on=f'{self.tonic.name}3', **kwargs)
 
+    def progression(self, *degrees, order=3):
+        """accepts a sequence of (integer) degrees,
+        and produces a ChordProgression in this key rooted on those degrees"""
+        # if len(degrees) == 1:
+        #     # if a single list or tuple was provided, unpack it here:
+        #     degrees = degrees[0]
+        from .progressions import Progression
+        return Progression(*degrees, scale=self.scale, order=order).on_tonic(self.tonic)
+
 
 class Subkey(Key, Subscale):
     """a Key that is built on a Subscale rather than a scale. Initialised as Subscale but also with a tonic."""
