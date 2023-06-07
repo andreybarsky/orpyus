@@ -156,17 +156,17 @@ Progression('I-vi-IV-V')
 # a Progression is implicitly in a Scale, and will try to guess that scale (between major and minor) if not specified
 # but can also be specified explicitly with the 'scale' keyword arg, even if some chords conflict with the scale:
 Progression('III VII I', scale='major')  
-# notice that the above is outputted with annotations: [III] [VII] I, 
-# indicating that chords III and VII are not in the major scale
+    # notice that the above is outputted with annotations: [III] [VII] I, 
+    # indicating that chords III and VII are not in the major scale
 Progression('III VII I', scale='minor')  
-# and that this one is outputted with annotations: III VII [I],
-# indicating that the I chord is not in the minor scale
+    # and that this one is outputted with annotations: III VII [I],
+    # indicating that the I chord is not in the minor scale
 
 # also notice the output of the following:
 Progression('ii V i')
-# which is displayed 'iiͫ  Vͪ  i', in the (auto-detected) natural minor scale
-# where the 'h' diacritic indicates that the V chord is not in natural minor, but is in *harmonic* minor
-# and the 'm' diacritic indicates that the ii chord is in neither natural or harmonic minor, but is in *melodic* minor
+    # which is displayed 'iiͫ  Vͪ  i', in the (auto-detected) natural minor scale
+    # where the 'h' diacritic indicates that the V chord is not in natural minor, but is in *harmonic* minor
+    # and the 'm' diacritic indicates that the ii chord is in neither natural or harmonic minor, but is in *melodic* minor
 
 # Progressions can also be initialised from integers, which makes the 'scale' keyword arg mandatory:
 Progression(1,6,4,5, scale='major')
@@ -175,8 +175,8 @@ Progression(1,6,4,5, scale='major', order=4)    # gives tetrads built over degre
 
 # Progression scales are not limited to natural major or minor, but can be any exotic mode:
 Progression(1,6,4,5, scale='phrygian dominant')
-# notice that this produces the correct triad chords of that scale
-# e.g. the phrygian dominant progression comes out as: I  VI+  iv  v°
+    # notice that this produces the correct triad chords of that scale
+    # e.g. the phrygian dominant progression comes out as: I  VI+  iv  v°
 
 # the AbstractChord objects associated with the resulting progression can be accessed
 # from the Progression.chords attribute:
@@ -187,11 +187,8 @@ Progression('ii V i').analysis     # displays root movements as descending fifth
                                    # and notes authentic cadential resolution
 ```
 ```
-# ChordProgressions can be initialised from a sequence of valid chord names:
+# ChordProgressions can be initialised from a sequence of chords or unambiguous chord names:
 ChordProgression('C Am F G')
-
-# chords (or strings that cast to chords) can be added to progressions to append them:
-ChordProgression('C Am F G') + 'C'
 
 # just as a Progression is in a Scale, a ChordProgression is also in a Key
 # which is also guessed at if not given, though this is a more difficult (and error-prone) guess:
@@ -202,13 +199,16 @@ ChordProgression('Em C G D')     # this is placed in G and not Em,
 ChordProgression('D7 Bm Gmaj7 Am')     # gets placed in D mixolydian and parsed as: I⁷ vi IVΔ⁷ v
 
 # but Key can also be assigned explicitly, though note this does not change the chords as given:
-ChordProgression('D7 Bm Gmaj7 Am', key='D major')    # parsed as [I⁷] vi IVΔ⁷ [v], with out-of-key I and V chords
+ChordProgression('D7 Bm Gmaj7 Am', key='D major')    # parsed as [I⁷] vi IVΔ⁷ [v], with out-of-key I⁷ and v chords
 
-# ChordProgressions can also be initialised from Progressions using the Progression.on_tonic() method:
-Progression('I iv IV V').on_tonic('D')
+# ChordProgressions can also be initialised from a Progression instance using the Progression.on_tonic() method:
+Progression('I vi IV V').on_tonic('D')
+
+# or from a Key instance using the Key.progression() method:
+Key('D').progression(1,6,4,5)
 
 # this is handy for composing cohesive-sounding progressions in unusual keys:
-Progression(1,6,4,5, scale='lydian', order=4).on_tonic('F')    # gives:  Fmaj7 Dm7 Bhdim7 Cmaj7
+Key('F lydian').progression(1,6,4,5, order=4)      # gives:  Fmaj7 Dm7 Bhdim7 Cmaj7
 
 # just as with Chords and Keys, any ChordProgression can be sounded out using the .play() method: (experimental)
 Progression(1,6,4,5, scale='lydian', order=4).on_tonic('F').play()
@@ -230,8 +230,9 @@ g2('x32013')
 # we can find a matching key with respect to a set of played frets,
 # using this currently clunky notation:
 g.find_key({1:[3], 2:[0,2,3], 3:[0,1]})
-# meaning: fret 3 on the 1st (E) string, frets 0, 2 and 3 and open on the 2nd (A) string, and frets 0 and 1 on the 3rd (D) string
-# which happens to match the keys of G harmonic major or C melodic minor
+    # meaning: fret 3 on the 1st (E) string, frets 0, 2 and 3 and open on the 2nd (A) string, 
+    # and frets 0 and 1 on the 3rd (D) string
+    # which happens to match the keys of G harmonic major or C melodic minor
 
 # but most useful: a Guitar object can show a Note, Chord, Scale, or Progression object on its fretboard:
 # (which displays chord/scale degrees and note names by default)
