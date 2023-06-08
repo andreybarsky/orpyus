@@ -107,7 +107,7 @@ class Quality:
 
     def __invert__(self):
         """invert major to minor, aug to dim, or vice versa"""
-        return Quality(value = self.value * -1)
+        return value_qualities[self.value * -1]
 
     def __eq__(self, other):
         """qualities are equal to other qualities with the same name/value"""
