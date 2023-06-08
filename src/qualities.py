@@ -11,7 +11,7 @@ from .parsing import degree_names, is_valid_note_name, parse_alteration, acciden
 
 quality_aliases = {'major': ['maj', 'M'],
            'minor': ['min', 'm'],
-           'perfect': ['indeterminate', 'ind', 'null', 'perf', 'P'],
+           'perfect': ['indeterminate', 'ind', 'I', 'null', 'perf', 'per', 'P'],
            'augmented': ['aug', 'A', '+'],
            'diminished': ['dim', 'd', '°', 'o', '0'],
            'doubly augmented': ['aaug', 'AA'],
@@ -25,7 +25,7 @@ quality_values = {   'doubly diminished': -3,
                      'major': 1,
                      'augmented': 2,
                      'doubly augmented': 3}
-value_qualities = reverse_dict(quality_values)
+value_names = reverse_dict(quality_values)
 
 
 
@@ -42,7 +42,7 @@ class Quality:
             assert name is None, "Quality init must provide one of 'name' OR 'value', but got both"
 
             self.value = value
-            self.full_name = value_qualities[value]
+            self.full_name = value_names[value]
         else:
             raise Exception("Quality init must provide one of 'name' or 'value', but got neither")
 
@@ -133,11 +133,20 @@ class Quality:
 
     @staticmethod
     def from_offset_wrt_major(offset):
-        return Quality(major_offsets[offset])
+        # return Quality(major_offsets[offset])
+        ### use pre-initialised Quality instance:
+        return major_offset_qualities[offset]
 
     @staticmethod
     def from_offset_wrt_perfect(offset):
-        return Quality(perfect_offsets[offset])
+        # return Quality(perfect_offsets[offset])
+        ### use pre-initialised Quality instance:
+        return perfect_offset_qualities[offset]
+
+    @staticmethod
+    def from_value(value):
+        return value_qualities[value]
+
 
 # interval semitone distances from major or perfect interval degrees:
 
@@ -157,13 +166,19 @@ offsets_wrt_perfect = {'doubly diminished': -2,
 major_offsets = reverse_dict(offsets_wrt_major)
 perfect_offsets = reverse_dict(offsets_wrt_perfect)
 
+
+# pre-initialised quality dicts:
+major_offset_qualities = {o: Quality(q) for o,q in major_offsets.items()}
+perfect_offset_qualities = {o: Quality(q) for o,q in perfect_offsets.items()}
+value_qualities = {v: Quality(q) for v,q in value_names.items()}
+
 ###############################################################
 
 # pre-initialised interval qualities:
 
 Major = Maj = M = Quality('major')
 Minor = Min = m = Quality('minor')
-Perfect = Perf = P = Quality('perfect')
+Perfect = Perf = P = Ind = Indeterminate = Quality('perfect')
 Augmented = Aug = A = Quality('augmented')
 Diminished = Dim = d = Quality('diminished')
 DoublyAugmented = AAug = AA = Quality('doubly augmented')
@@ -481,7 +496,7 @@ chord_modifiers = { 'sus4': ChordQualifier(remove=3, add=4, verify={2:False}),
                     'add11': ChordQualifier(add=11, verify={9: False, 4:False}),
                     'add13': ChordQualifier(add=13, verify={11: False, 6:False, 5:0}), # verify natural 5 is a kludge, see: Bbdim9add13/C
 
-                    '(no5)': ChordQualifier(remove=5, verify={3: True, 10:False}),
+                    '(no5)': ChordQualifier(remove=5), # , verify={3: True, 10:False}),    # we don't need verifiers on this because no5s are not registered anywhere, just treated as a valid input
                     }
 
 
