@@ -190,6 +190,22 @@ class Note:
         """note and octavenote hash-equivalence is based on position alone, not value"""
         return hash(f'Note:{self.position}')
 
+    def __ge__(self, other):
+        """greater/lesser comparison between abstract Notes treats C as the 'lowest' note,
+        and B as the 'highest'"""
+        # slightly dubious, but this is based on octave numbering conventions
+        if type(other) == Note:
+            return self.position > other.position
+        else:
+            raise Exception('> operation for Notes only defined over other Notes')
+
+    def __lt__(self, other):
+        """see Note.__gt__"""
+        if type(other) == Note:
+            return self.position < other.position
+        else:
+            raise Exception('< operation for Notes only defined over other Notes')
+
     @property
     def _marker(self):
         """unicode marker for this class"""
@@ -795,10 +811,14 @@ sharp_tonic_names = ['G', 'D', 'A', 'E', 'B']
 flat_tonic_names = ['F', 'Bb', 'Eb', 'Ab', 'Db']
 neutral_tonic_names = ['C', 'Gb'] # no sharp/flat preference, fall back on default
 
-sharp_major_tonics = [Note(t) for t in sharp_tonic_names]
-flat_major_tonics = [Note(t) for t in flat_tonic_names]
+sharp_major_tonics = [Note(t, prefer_sharps=True) for t in sharp_tonic_names]
+flat_major_tonics = [Note(t, prefer_sharps=False) for t in flat_tonic_names]
 neutral_major_tonics = [Note(t) for t in neutral_tonic_names]
+major_tonics = sorted(sharp_major_tonics + flat_major_tonics + neutral_major_tonics)
 
-sharp_minor_tonics = [Note(relative_minors[t]) for t in sharp_tonic_names]
-flat_minor_tonics = [Note(relative_minors[t]) for t in flat_tonic_names]
+sharp_minor_tonics = [Note(relative_minors[t], prefer_sharps=True) for t in sharp_tonic_names]
+flat_minor_tonics = [Note(relative_minors[t], prefer_sharps=False) for t in flat_tonic_names]
 neutral_minor_tonics = [Note(relative_minors[t]) for t in neutral_tonic_names]
+minor_tonics = sorted(sharp_minor_tonics + flat_minor_tonics + neutral_minor_tonics)
+
+### TBI: improved recognition of double-sharp and double-flat notes for exotic keys
