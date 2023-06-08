@@ -1,5 +1,6 @@
 from .intervals import Interval, IntervalList
-from .notes import Note, NoteList, sharp_major_tonics, sharp_minor_tonics, flat_major_tonics, flat_minor_tonics, relative_majors, relative_minors
+from .notes import Note, NoteList
+from . import notes
 from .scales import Scale, Subscale, NaturalMajor, NaturalMinor, interval_mode_names, parallel_scales
 from .chords import Chord, AbstractChord
 from . import parsing
@@ -109,9 +110,9 @@ class Key(Scale):
     def _detect_sharp_preference(self, default=False):
         """detect if this key's tonic note should prefer sharp or flat labelling
         depending on its chroma and quality"""
-        if (self.quality.major and self.tonic in sharp_major_tonics) or (self.quality.minor and self.tonic in sharp_minor_tonics):
+        if (self.quality.major and self.tonic in notes.sharp_major_tonics) or (self.quality.minor and self.tonic in notes.sharp_minor_tonics):
             return True
-        elif (self.quality.major and self.tonic in flat_major_tonics) or (self.quality.minor and self.tonic in flat_minor_tonics):
+        elif (self.quality.major and self.tonic in notes.flat_major_tonics) or (self.quality.minor and self.tonic in notes.flat_minor_tonics):
             return False
         else:
             return default
@@ -158,6 +159,16 @@ class Key(Scale):
                         n._set_sharp_preference(prefer_sharps)
                 next_nat = parsing.next_natural_note[next_nat]
 
+    def _set_key_signature(self):
+        """reads the sharp and flat preference of the notes inside this Key
+        and sets internal attributes reflecting that key signature"""
+        self.num_sharps = sum([('#' in n.chroma) for n in self.notes])
+        self.num_flats = sum([('b' in n.chroma) for n in self.notes])
+
+        self.key_signature = {}
+        for n in self.notes:
+            if '#' in n.chroma:
+                self.key_signature
 
     @property
     def scale_name(self):
@@ -270,28 +281,21 @@ class Key(Scale):
     def relative_minor(self):
         # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
         assert self.quality.major, f'{self} is not major, and therefore has no relative minor'
-        rel_tonic = relative_minors[self.tonic.name]
-        if self.rotation == 1 or 'major' in self.scale_name: # i.e. not a mode
-            rel_scale = self.scale_name.replace('major', 'minor') # a kludge but it works
-            return Key(rel_scale, tonic=rel_tonic)
+        rel_tonic = notes.relative_minors[self.tonic.name]
+        if self.scale in parallel_scales:
+            return parallel_scales[self.scale].on_tonic(rel_tonic)
         else:
-            raise Exception('Relative major/minor not defined for non-natural Keys')
-            # figure out what to do here - what are the relative minors/majors of non-natural scales?
-            # just try lowering the third and see what happens?
-            # rel_intervals = IntervalList([i for i in self.intervals])
-            # rel_intervals[1] = Interval(rel_intervals[1]-1, degree=rel_intervals[1].degree)
-            # return Key(tonic=rel_tonic, intervals=rel_intervals)
+            raise Exception(f'Relative major/minor not defined for {self}')
 
     @property
     def relative_major(self):
         # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
         assert self.quality.minor, f'{self} is not minor, and therefore has no relative major'
-        rel_tonic = relative_majors[self.tonic.name]
-        if self.rotation == 1 or 'minor' in self.scale_name: # i.e. not a mode
-            rel_scale = self.scale_name.replace('minor', 'major') # a kludge but it works
-            return Key(rel_scale, tonic=rel_tonic)
+        rel_tonic = notes.relative_majors[self.tonic.name]
+        if self.scale in parallel_scales:
+            return parallel_scales[self.scale].on_tonic(rel_tonic)
         else:
-            raise Exception('Relative major/minor not defined for non-natural Keys')
+            raise Exception(f'Relative major/minor not defined for {self}')
 
 
     @property
