@@ -4,7 +4,7 @@ from .util import rotate_list, reverse_dict, unpack_and_reverse_dict, check_all,
 from .chords import ChordFactors, AbstractChord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
 from .qualities import ChordQualifier, Quality
 from .parsing import num_suffixes, numerals_roman
-from . import notes as notes
+from . import notes, _settings
 
 
 # standard keys are: natural/melodic/harmonic majors and minors
@@ -67,8 +67,11 @@ class Scale:
         self.degree_intervals = {1: Unison}
         for d, i in enumerate(self.intervals):
             deg = d+2 # starting from 2
-            self.degree_intervals[deg] = Interval(value=i.value, degree=deg)
+            self.degree_intervals[deg] = Interval.from_cache(value=i.value, degree=deg)
         self.interval_degrees = reverse_dict(self.degree_intervals)
+
+        # just the numbers from 1 to 7 for diatonic scales, but may be different for other scales:
+        self.degrees = list(self.degree_intervals.keys())
 
         # base degrees and degrees are identical for Scale objects, but may differ for Subscales:
         self.base_degree_intervals = self.degree_intervals
@@ -119,6 +122,7 @@ class Scale:
                 else:
                     new_intervals = IntervalList(name.intervals)
 
+
                 return new_intervals, name.base_scale_name, name.rotation
             elif isinstance(name, str):
                 if name in mode_lookup:
@@ -147,38 +151,66 @@ class Scale:
             assert intervals is not None, f'Received neither name or intervals arg to Scale init; need one or the other!'
 
             if isinstance(intervals, (list, tuple)):
-                # intervals = IntervalList(intervals)
-                sane_intervals = Scale.sanitise_intervals(intervals, stacked=stacked)
-                if sane_intervals in interval_mode_names:
-                    name = interval_mode_names[sane_intervals][-1]
+                if not isinstance(intervals, IntervalList):
+                    # force to IntervalList if it is not one:
+                    intervals = IntervalList(intervals)
+
+                # early check to see if these intervals are registered to a known scale:
+                # (and try sanitising them to canonical diatonic form if not)
+                if intervals not in interval_mode_names:
+                    intervals = Scale.sanitise_intervals(intervals, stacked='auto')
+                # allocate name, base scale etc. if the (sanitised) intervals are registered:
+                if intervals in interval_mode_names:
+                    name = interval_mode_names[intervals][-1]
                     base_scale, rotation = mode_lookup[name]
-
                     if mode != 1:
-                        sane_intervals = rotate_mode_intervals(sane_intervals, mode)
-                        rotation += (mode-1)
+                        intervals = intervals.rotate(mode-1)
 
-                    return sane_intervals, base_scale, rotation
+                    return intervals, base_scale, rotation
+
                 else:
-                    raise KeyError(f'No scale found that matches intervals: {intervals}')
+                    # not a known diatonic scale, so we treat this as a special case
+                    log(f'Unusual scale found with (sanitised) intervals: {intervals}')
+                    # name = 'unknown'
+                    # import pdb; pdb.set_trace()
+                    return intervals, None, None
+
             else:
                 raise TypeError(f'Invalid input to Scale init: expected second arg (intervals) to be an iterable of Intervals, but got: {type(inp)}')
 
     @staticmethod
-    def sanitise_intervals(intervals, stacked=True):
+    def sanitise_intervals(intervals, stacked='auto'):
         """forces a list of (assumed) stacked Intervals into canonical form,
+            which is diatonic if the intervals appear to correspond to a diatonic scale,
             with unisons neither at start nor end, and one interval for each degree.
-        if stacked=False, accepts unstacked intervals (of form: M2, m1, M2, M2, etc.) and stacks them first."""
+        if stacked==False, accepts unstacked intervals (of form: M2, m1, M2, M2, etc.) and stacks them first.
+        if stacked=='auto', tries to detect if the intervals are stacked or not and treats them appropriately."""
+
+        if stacked == 'auto':
+            # if the highest interval is a dim5 or greater, assume these are stacked:
+            stacked = (max(intervals) >= 6)
+
         if not stacked:
             intervals = IntervalList(intervals).strip().stack()
         elif stacked:
+            # check for diatonicity:
             intervals = IntervalList(intervals).flatten().strip()
 
+        full_padded_intervals = intervals.pad(left=True, right=True)
+        seems_diatonic = (len(full_padded_intervals) == 8)
+        log(f'checking for diatonicity of intervals: {seems_diatonic}')
+
         # sanitise interval list to have the exact desired degrees:
-        desired_degrees = range(2,8)
-        sanitised_intervals = IntervalList()
+        if seems_diatonic:
+            desired_degrees = range(2,8)
+        else:
+            # non diatonic scale can have more than 7 degrees
+            desired_degrees = range(2,len(intervals)+2)
+
+        sanitised_intervals = []
         for d, i in zip(desired_degrees, intervals):
-            sanitised_intervals.append(Interval(i.value, degree=d))
-        return sanitised_intervals
+            sanitised_intervals.append(Interval.from_cache(i.value, degree=d))
+        return IntervalList(sanitised_intervals)
 
     def _add_chromatic_intervals(self, chromatic_intervals):
         # cast as intervallist if non-Interval objects provided or if solo Interval outside list:
@@ -205,9 +237,8 @@ class Scale:
             return deg
 
     def __len__(self):
-        # diatonic scale by definition has 7 intervals:
-        assert len(self.degree_intervals) == 7
-        return 7
+        # diatonic scale by definition has 7 intervals, but chromatic scales like the bebop scale may have more
+        return (len(self.intervals))
 
     def __contains__(self, item):
         """if item is an Interval, does it fit in our list of diatonic-degree-intervals plus chromatic-intervals?
@@ -216,7 +247,7 @@ class Scale:
             if item % 12 == 0:
                 return True # by definition
             else:
-                return (Interval(item).flatten() in self.intervals)
+                return (Interval.from_cache(item).flatten() in self.intervals)
         elif isinstance(item, (list, IntervalList)):
             if type(item) == list:
                 item = IntervalList(item)
@@ -306,11 +337,11 @@ class Scale:
     def _marker(self):
         """unicode marker for Scale class"""
         return '𝄢'
+    #
+    # def __ident__(self):
+    #     return f'{self._marker} {self.name} scale'
 
     def __str__(self):
-        return f'{self._marker} {self.name} scale'
-
-    def __repr__(self):
         lb, rb = self.intervals._brackets
         if self.chromatic_intervals is None:
             iv_names = [iv.short_name for iv in self.intervals]
@@ -318,7 +349,7 @@ class Scale:
             # show diatonic intervals as in normal interval list, and chromatic intervals in square brackets
             iv_names = [f'[{iv.short_name}]' if iv in self.chromatic_intervals  else iv.short_name  for iv in self.intervals]
         iv_str = f'{lb}{", ".join(iv_names)}{rb}'
-        return f'{str(self)}  {iv_str}'
+        return f'{self._marker} {self.name}  {iv_str}'
 
     @property
     def aliases(self):
@@ -338,23 +369,30 @@ class Scale:
     def pentatonic(self):
         """returns the pentatonic subscale of the natural major or minor scales.
         will function for other scales, though is not well-defined."""
-        if self.quality.major and self.is_natural:
-            # return self.subscale(degrees=[1,2,3,5,6])
-            return MajorPentatonic
-        elif self.quality.minor and self.is_natural:
-            # return self.subscale(degrees=[1,3,4,5,7])
-            return MinorPentatonic
+        # return pre-computed pentatonic scale from cache if it exists:
+        if self in cached_pentatonics:
+            return cached_pentatonics[self]
         else:
-            # experimental: we've been asked for the pentatonic scale of a non-natural diatonic scale
-            # so we try to find one that maximises pairwise interval consonance while preserving scale character
-            ordered_pent_scales = self.compute_pentatonics(preserve_character=True)
-            preferred = list(ordered_pent_scales.keys())[0]
-            if preferred in subscales_to_aliases:
-                # use existing pre-defined subscale name (like 'blues scale') if one exists:
-                return preferred
+            if self.quality.major and self.is_natural:
+                # return self.subscale(degrees=[1,2,3,5,6])
+                pent = MajorPentatonic
+            elif self.quality.minor and self.is_natural:
+                # return self.subscale(degrees=[1,3,4,5,7])
+                pent = MinorPentatonic
             else:
-                # otherwise just call this a subscale of its parent scale:
-                return self.subscale(omit=preferred.omit, name=f'{self.name} pentatonic')
+                # experimental: we've been asked for the pentatonic scale of a non-natural diatonic scale
+                # so we try to find one that maximises pairwise interval consonance while preserving scale character
+                ordered_pent_scales = self.compute_pentatonics(preserve_character=True)
+                preferred = list(ordered_pent_scales.keys())[0]
+                if preferred in subscales_to_aliases:
+                    # use existing pre-defined subscale name (like 'blues scale') if one exists:
+                    pent = preferred
+                else:
+                    # otherwise just call this a subscale of its parent scale:
+                    pent = self.subscale(omit=preferred.omit, name=f'{self.name} pentatonic')
+        if _settings.DYNAMIC_CACHING:
+            cached_pentatonics[self] = pent
+        return pent
 
     def compute_pentatonics(self, preserve_character=False, keep_quality=True):
         """Given this scale and its degree-intervals,
@@ -468,50 +506,61 @@ class Scale:
             interval_deg = idx
         else: # subscale degrees are not associated with the degrees of their intervals
             interval_deg = None
-        ext_interval = Interval(flat_interval.value + (12*octave_span), degree=interval_deg)
+        ext_interval = Interval.from_cache(flat_interval.value + (12*octave_span), degree=interval_deg)
         return ext_interval
 
-    def chord(self, degree, order=3, qualifiers=None):
-        """returns an AbstractChord built on a desired degree of this scale,
+    def chord(self, degree, order=3, chromatic=False):
+        """returns an AbstractChord built on a desired degree of this Scale,
         and of a desired order (where triads are order=3, tetrads are order=4, etc.).
-        optionally accepts chord qualifiers in addition, to modify the chord afterward"""
+        optionally accepts chord qualifiers in addition, to modify the chord afterward.
+        if chromatic=True, the chord is built over scale intervals rather than scale degrees,
+        which affects chord construction in scales with chromatic tones like the blues or bebop scales."""
         root_degree = degree
         # calculate chord degrees by successively applying thirds:
-        desired_degrees = range(1, (2*order), 2)
-        chord_degrees = [root_degree] + [root_degree+(o*2) for o in range(1, order)] # e.g. third and fifth degrees for order=3
-        root_interval = self[root_degree]
-        # note we use self.get_higher_interval(d) instead of self[d] to avoid the mod behaviour:
-        chord_intervals = [self.get_higher_interval(d) - root_interval for d in chord_degrees]
+        if not chromatic:
+            desired_degrees = range(1, (2*order), 2)
+            chord_degrees = [root_degree] + [root_degree+(o*2) for o in range(1, order)] # e.g. third and fifth degrees for order=3
+            root_interval = self[root_degree]
+            # note we use self.get_higher_interval(d) instead of self[d] to avoid the mod behaviour:
+            chord_intervals = [self.get_higher_interval(d) - root_interval for d in chord_degrees]
 
-        chord_interval_offsets = [i.offset_from_degree(d) for i,d in zip(chord_intervals, desired_degrees)]
-        chord_factors = ChordFactors({d: o for d,o in zip(desired_degrees, chord_interval_offsets)})
+            chord_interval_offsets = [i.offset_from_degree(d) for i,d in zip(chord_intervals, desired_degrees)]
+            chord_factors = ChordFactors({d: o for d,o in zip(desired_degrees, chord_interval_offsets)})
 
-        return AbstractChord(factors=chord_factors, qualifiers=qualifiers)
+        else:
+            # root_interval_place  ### TBI: fix this
+            pass
+
+        return AbstractChord(factors=chord_factors)
 
     def on_tonic(self, tonic):
         """returns a Key object corresponding to this Scale built on a specified tonic"""
         if isinstance(tonic, str):
-            tonic = notes.Note(tonic)
+            tonic = notes.Note.from_cache(tonic)
         # lazy import to avoid circular dependencies:
         from .keys import Key
         return Key(intervals=self.diatonic_intervals, tonic=tonic, chromatic_intervals=self.chromatic_intervals, alias=self.assigned_name)
 
-    def chords(self, order=3):
+    def chords(self, order=3, chromatic_roots=False):
         """returns the list of chords built on every degree of this Scale."""
-        chord_list = []
-        for d, iv in self.degree_intervals.items():
-            chord_list.append(self.chord(d, order=order))
-        return chord_list
+        chord_dict = {}
+        if not chromatic_roots:
+            for d, iv in self.degree_intervals.items():
+                chord_dict[d] = self.chord(d, order=order)
+        else:
+            for iv in self.intervals:
+                chord_dict[iv] = self.chord(interval=iv, order=order)
+        return chord_dict
 
-    def triad(self, degree, qualifiers=None):
+    def triad(self, degree):
         """wrapper for self.chord() to create a tetrad (i.e. 7-chord)
         on the chosen degree of this scale"""
-        return self.chord(degree, order=3, qualifiers=qualifiers)
+        return self.chord(degree, order=3)
 
-    def tetrad(self, degree, qualifiers=None):
+    def tetrad(self, degree):
         """wrapper for self.chord() to create a tetrad (i.e. 7-chord)
         on the chosen degree of this scale"""
-        return self.chord(degree, order=4, qualifiers=qualifiers)
+        return self.chord(degree, order=4)
 
     def subscale(self, degrees=None, omit=None, chromatic_intervals=None, name=None):
         """returns a Subscale initialised from this Scale with the desired degrees"""
@@ -528,7 +577,7 @@ class Scale:
                     interval_to_modify = flat_deg_intervals[degree-2]
                     new_value = interval_to_modify.value -1
                     if (new_value not in flat_deg_intervals) and (new_value % 12 != 0):
-                        new_interval = Interval(new_value, degree=degree)
+                        new_interval = Interval.from_cache(new_value, degree=degree)
                         flat_deg_intervals[degree-2] = new_interval
 
                         flat_deg_qualifier = ChordQualifier(modify={degree:-1})
@@ -543,7 +592,7 @@ class Scale:
                     interval_to_modify = sharp_deg_intervals[degree-2]
                     new_value = interval_to_modify.value +1
                     if (new_value not in sharp_deg_intervals) and (new_value % 12 != 0): # don't raise intervals to a degree that's already in the scale
-                        new_interval = Interval(new_value, degree=degree)
+                        new_interval = Interval.from_cache(new_value, degree=degree)
                         sharp_deg_intervals[degree-2] = new_interval
                         # sharp_deg_intervals[degree] = Interval(sharp_deg_intervals[degree-2]+1, degree)
                         sharp_deg_qualifier = ChordQualifier(modify={degree:+1})
@@ -558,7 +607,7 @@ class Scale:
         return self.get_neighbouring_scales()
 
 
-    def valid_chords(self, degree, max_order=4, min_likelihood=0.4, min_consonance=0, max_results=None, sort_by='likelihood', inversions=False, display=True, _root_note=None):
+    def valid_chords(self, degree, order=None, min_order=2, max_order=4, min_likelihood=0.4, min_consonance=0, max_results=None, sort_by='likelihood', inversions=False, display=True, _root_note=None, no5s=False):
         """For a specified degree, returns all the chords that can be built on that degree
         that fit perfectly into this scale."""
 
@@ -566,10 +615,19 @@ class Scale:
         degrees_above_this_degree = [d for d in self.higher_degrees if d > degree]
         intervals_from_this_degree = IntervalList([self.get_higher_interval(d) - root_interval for d in degrees_above_this_degree])
 
-        # built a dict of candidates as we go, keying AbstractChord objects to (likelihood, consonance) tuples
-        candidates = {}
+        if self.chromatic_intervals is not None:
+            # add chromatic intervals to the intervallist
+            intervals_from_this_degree = IntervalList(list(intervals_from_this_degree) + list(self.chromatic_intervals))
+
+        if order is not None:
+            # overwrite min and max order:
+            min_order = max_order = order
+
+        # built a list of matching candidates as we go:
+        shortlist = []
         for rarity, chord_names in chord_names_by_rarity.items():
-            for name in [c for c in chord_names if '(no5)' not in c]: # ignore no5 chords
+            # for name in [c for c in chord_names if '(no5)' not in c]: # ignore no5 chords (no longer needed, no5s are not in that list:)
+            for name in chord_names:
 
                 # this will be a one-item dict if inversions are not allowd, or contain all possible inversions if they are
                 candidate_intervals_by_inversion = {0: chord_names_to_intervals[name]}
@@ -593,32 +651,55 @@ class Scale:
                         candidate = AbstractChord(factors=chord_names_to_factors[name], inversion=inversion)
                         if _root_note is not None: # for easy inheritance by Key class
                             candidate = candidate.on_bass(_root_note)
+                        shortlist.append(candidate)
 
+                        if no5s:
+                            # also add the no5 version of this chord if it is at least a tetrad (but not for inversions)
+                            if (inversion == 0) and (candidate.order >= 4) and (5 in candidate):
+                                no5_candidate = AbstractChord(candidate.suffix + '(no5)')
+                                shortlist.append(no5_candidate)
 
-                        if candidate.order <= max_order and candidate.likelihood >= min_likelihood and candidate.consonance >= min_consonance:
-                            candidates[candidate] = {'order': candidate.order,
-                                                     'likelihood': round(candidate.likelihood,2),
-                                                     'consonance': round(candidate.consonance,3)}
+        # apply statistical minimums and maximums to our shortlist to decide what to keep:
+        candidate_stats = {}
+        # (and initialise sets containing 'normal' chord intervals for pruning):
+        if inversions:
+            non_inverted_intervals = set()
+        if no5s:
+            non_no5_intervals = set()
+
+        for candidate in shortlist:
+            if candidate.order <= max_order and candidate.order >= min_order:
+                if candidate.likelihood >= min_likelihood and candidate.consonance >= min_consonance:
+                    candidate_stats[candidate] = {'order': candidate.order,
+                                                  'likelihood': round(candidate.likelihood,2),
+                                                  'consonance': round(candidate.consonance,3)}
+                    # add normal chords' intervals to the pruning comparison sets:
+                    if inversions and (candidate.inversion == 0):
+                        non_inverted_intervals.add(candidate_intervals)
+                    if no5s and (5 in candidate):
+                        non_no5_intervals.add(candidate.intervals)
 
         # if inversions were allowed, we prune the candidate list to remove inversions that have the same intervals as a non-inverted candidate:
-
         # TBI: we could prune repeated inversions having the same intervals too, by pruning for each inversion-place starting from the highest?
         # (idea: we could keep a dict that maps intervals to chords matching those intervals, and take the least rare from each)
-
         if inversions:
-            non_inverted_intervals = {c.intervals for c in candidates if c.inversion == 0}
-            pruned_candidates = {c:v for c,v in candidates.items() if (c.inversion == 0) or (c.intervals not in non_inverted_intervals)}
-            candidates = pruned_candidates
+            # non_inverted_intervals = {c.intervals for c in candidate_stats if c.inversion == 0}
+            pruned_candidates = {c:v for c,v in candidate_stats.items() if (c.inversion == 0) or (c.intervals not in non_inverted_intervals)}
+            candidate_stats = pruned_candidates
+        if no5s: # prune no5s as well:
+            # non_no5_intervals = {c.intervals for c in candidate_stats if '(no5)' not in c.suffix}
+            pruned_candidates = {c:v for c,v in candidate_stats.items() if (5 in c) or (c.intervals not in non_no5_intervals)}
+            candidate_stats = pruned_candidates
 
         # sort result: (always by chord size first)
         if sort_by=='likelihood':
-            sort_key = lambda c: (-candidates[c]['order'], candidates[c]['likelihood'], candidates[c]['consonance'])
+            sort_key = lambda c: (-candidate_stats[c]['order'], candidate_stats[c]['likelihood'], candidate_stats[c]['consonance'])
         elif sort_by=='consonance':
-            sort_key = lambda c: (-candidates[c]['order'], candidates[c]['consonance'], candidates[c]['likelihood'])
+            sort_key = lambda c: (-candidate_stats[c]['order'], candidate_stats[c]['consonance'], candidate_stats[c]['likelihood'])
         else:
             raise ValueError(f"valid_chords sort_by arg must be one of: 'likelihood', 'consonance', not: {sort_by}")
 
-        sorted_cands = sorted(candidates, key=sort_key, reverse=True)[:max_results]
+        sorted_cands = sorted(candidate_stats, key=sort_key, reverse=True)[:max_results]
 
         if display:
             longest_result_len = max([len(str(c)) for c in sorted_cands])+3
@@ -710,20 +791,25 @@ class Scale:
         return self.get_pairwise_consonances(extra_tonic=True)
 
     @property
-    def consonance(self, tonic_weight=2):
+    def consonance(self):
         """simply the mean of pairwise interval consonances"""
-        cons_list = list(self.get_pairwise_consonances(extra_tonic=True).values())
-        raw_cons = sum(cons_list) / len(cons_list)
-        # return raw_cons
-        # the raw consonance comes out as maximum=0.7231 for the most consonant scale (natural major)
-        # and 0.6731 for the most dissonant scale, the half-diminished scale (mode 6 of melodic minor)
-        # so we set the former to be just below 1 and the latter to be just above 0,
-        # and rescale the entire raw consonance range within those bounds:
-        max_cons = 0.76 # 0.7231 0.6584752093299405
-        min_cons = 0.62 # 0.6731 0.6347743068389496
+        if self in cached_consonances:
+            return cached_consonances[self]
+        else:
+            cons_list = list(self.get_pairwise_consonances(extra_tonic=True).values())
+            raw_cons = sum(cons_list) / len(cons_list)
+            # return raw_cons
+            # the raw consonance comes out as maximum=0.7231 for the most consonant scale (natural major)
+            # and 0.6731 for the most dissonant scale, the half-diminished scale (mode 6 of melodic minor)
+            # so we set the former to be just below 1 and the latter to be just above 0,
+            # and rescale the entire raw consonance range within those bounds:
+            max_cons = 0.76 # 0.7231 0.6584752093299405
+            min_cons = 0.62 # 0.6731 0.6347743068389496
 
-        rescaled_cons = (raw_cons - min_cons) / (max_cons - min_cons)
-        return rescaled_cons
+            rescaled_cons = (raw_cons - min_cons) / (max_cons - min_cons)
+            if _settings.DYNAMIC_CACHING:
+                cached_consonances[self] = rescaled_cons
+            return rescaled_cons
 
     @property
     def rarity(self):
@@ -782,6 +868,16 @@ class Scale:
             notes_down = full_notes[-2::-1]
             full_notes.extend(notes_down)
         full_notes.play(**kwargs)
+
+    def show(self, tuning='EADGBE'):
+        """just a wrapper around the Guitar.show method, which is generic to most musical classes,
+        so this method is also inherited by all Scale subclasses"""
+        from .guitar import Guitar
+        Guitar(tuning).show(self)
+    @property
+    def fretboard(self):
+        # just a quick accessor for guitar.show in standard tuning
+        return self.show()
 
 ### TBI: should Subscale and DiatonicScale be subclasses of a GenericScale class?
 class Subscale(Scale):
@@ -852,6 +948,7 @@ class Subscale(Scale):
 
         self.degree_intervals = self.base_degree_intervals # this equivalence is intended for compatibility with Scale methods but may cause problems
 
+        self.degrees = list(self.degree_intervals.keys())
 
         self.diatonic_intervals = self.intervals
         if chromatic_intervals is not None: # chromatic intervals are intervals without a degree
@@ -937,31 +1034,103 @@ class Subscale(Scale):
     #     ext_interval = Interval(flat_interval.value + (12*octave_span), degree=idx)
     #     return ext_interval
 
-    def chord(self, degree, order=3):
+    def chord(self, degree, order=3, sub_degree=False):
         """returns an AbstractChord built on a desired degree of this Subscale,
         and of a desired order (where triads are order=3, tetrads are order=4, etc.).
         for Subscales this is poorly defined, since triad degrees cannot be guaranteed,
-        so instead we try and make the most consonant chord we can from the degrees available"""
+        so instead we try and make the most consonant chord we can from the degrees available.
 
-        root_degree = degree
-        # calculate chord degrees by successively applying thirds:
-        desired_degrees = range(1, (2*order), 2)
-        chord_degrees = [root_degree] + [root_degree+(o*2) for o in range(1, order)] # e.g. third and fifth degrees for order=3
-        root_interval = self[root_degree]
-        # note we use self.get_higher_interval(d) instead of self[d] to avoid the mod behaviour:
-        chord_intervals = [self.get_higher_interval(d) - root_interval for d in chord_degrees]
+        if sub_degree=True, we construct chords by the "skip-one-play-one" principle,
+        which means that, for example, the second chord of Am pentatonic becomes Am/C, instead of Cm"""
 
-        chord_interval_offsets = [i.offset_from_degree(d) for i,d in zip(chord_intervals, desired_degrees)]
-        chord_factors = ChordFactors({d: o for d,o in zip(desired_degrees, chord_interval_offsets)})
 
-        return AbstractChord(factors=chord_factors, qualifiers=qualifiers)
+        if sub_degree:
+            # use the sub-degrees of this subscale, instead of the base degrees
+            # i.e. play-one-skip-one style triad chords
+            log(f'Building chord in subscale: {self.name} off of sub-degree: {degree}')
+            assert degree in self.sub_degree_intervals
+            # to allow usage of chromatic notes, we find the place of the chord root in our interval attribute:
+            root_interval_place = [i for (i,(d,iv)) in enumerate(self.sub_degree_intervals.items()) if d == degree][0]
+            padded_intervals = self.intervals.pad(left=True, right=False)
+            padded_compound_intervals = list(padded_intervals) + list(padded_intervals + 12) + list(padded_intervals + 24)
+            root_interval = padded_compound_intervals[root_interval_place]
 
-    def chords(self, order=3):
-        """returns the list of chords built on every degree of this Subscale."""
-        chord_list = []
-        for d, iv in self.degree_intervals.items():
-            chord_list.append(self.chord(d, order=order))
-        return chord_list
+            higher_places = [root_interval_place + (2*o) for o in range(1, order)]
+            higher_intervals = [padded_compound_intervals[p] for p in higher_places]
+            chord_intervals = IntervalList([root_interval] + higher_intervals) - root_interval
+            return AbstractChord(intervals=chord_intervals)
+
+        else:
+            # use the base degrees, and try to build the most likely/consonant chords from those
+            # (preferring chords with 3rds and 5ths if possible)
+            log(f'Building chord in subscale: {self.name} off of base degree: {degree}')
+            assert degree in self.degree_intervals, f'{self.name} does not have a degree {degree}'
+            root_degree = degree
+            desired_factors = range(1, (2*order), 2) # i.e. chord factors 1, 3, 5, etc.
+            desired_degrees = [f + (root_degree-1) for f in desired_factors]
+            all_degrees_available = True
+            for d in desired_degrees:
+                if d not in self.higher_degrees:
+                    all_degrees_available = False
+                    log(f'Degree {d} not available in this subscale, so we cannot build an ordinary triad')
+                    break
+            if all_degrees_available:
+                # simply build a triad chord since we have all the notes needed:
+                log(f'All desired degrees {list(desired_degrees)} are available, so we can build an ordinary triad')
+                root_interval = self.degree_intervals[root_degree]
+                chord_intervals = IntervalList([self.get_higher_interval(d) for d in desired_degrees])
+                log(f'With root interval: {root_interval} and chord intervals: {chord_intervals}, resulting in: {chord_intervals - root_interval}')
+                return AbstractChord(intervals=chord_intervals - root_interval)
+            else:
+                ### otherwise, fall back on valid_chords method:
+                valid_chords_on_root = self.valid_chords(root_degree, min_likelihood=0.7, min_consonance=0.5, min_order=order, max_order=order, no5s=False, inversions=False, display=False)
+                log(f'Instead choosing a consonant chord from the valid chords that can be built on this degree:\n {valid_chords_on_root}')
+
+                if len(valid_chords_on_root) == 0:
+                    log(f'Did not find any with initial parameters, so expanding search parameters')
+                    valid_chords_on_root = self.valid_chords(root_degree, min_likelihood=0.5, min_consonance=0.4, min_order=order, max_order=order, no5s=True, inversions=False, display=False)
+                    if len(valid_chords_on_root) == 0:
+                        log(f'Did not find any with expanded parameters, so dropping all search constraints except subscale membership')
+                        valid_chords_on_root = self.valid_chords(root_degree, min_likelihood=0, min_consonance=0, min_order=order, max_order=order, no5s=True, inversions=False, display=False)
+                        assert len(valid_chords_on_root) > 0, f"Could somehow not make any chords at all of order={order} on degree {degree} of subscale: {self.name}"
+                # secondary filtering step:
+                shortlist = []
+                for c in valid_chords_on_root:
+                    # prefer chords with 3rds and 5th if possible:
+                    if (3 in c) and (5 in c):
+                        log(f'Found a potential chord that contains a 3rd and a 5th: {c}')
+                        shortlist.append(c) # (since valid_chords is already sorted, shortlist is sorted by extension)
+                if len(shortlist) >= 1:
+                    # return the most likely/consonant
+                    return shortlist[0]
+                else:
+                    # just return the most likely/consonant valid one
+                    log(f'Did not find any chords that contain a 3rd and 5th, so just taking the first match')
+                    return valid_chords_on_root[0]
+
+        # potential_factor_degrees = {}
+        # possible_factor_degrees = {}
+        # for f in desired_factors:
+        #     potential_factor_degrees[f] = [f, f-1, f+1]
+        #     possible_factor_degrees[f] = [pd for pd in potential_factor_degrees if pd in self.degree_intervals]
+        #
+        # for f,d in possible_factor_degrees:
+        #     if len(d) == 0:
+        #         raise Exception(f'Cannot build any viable chords of order={order} on degree {degree} of subscale: {self.name}')
+        #
+        # root_interval = self[root_degree]
+        # # try all possible permutations of our N-order chord:
+        # factor_intervals = []
+        # for f in desired_factors[1:]:
+        #
+
+
+    # def chords(self, order=3):
+    #     """returns the list of chords built on every degree of this Subscale."""
+    #     chord_list = []
+    #     for d, iv in self.degree_intervals.items():
+    #         chord_list.append(self.chord(d, order=order))
+    #     return chord_list
 
     def get_possible_parents(self, fast=False, sort=True):
         """returns a list of Scales that are also valid parents for this Subscale"""
@@ -996,7 +1165,7 @@ class Subscale(Scale):
     def on_tonic(self, tonic):
         """returns a Subkey object corresponding to this Subscale built on a specified tonic"""
         if isinstance(tonic, str):
-            tonic = notes.Note(tonic)
+            tonic = notes.Note.from_cache(tonic)
         # lazy import to avoid circular dependencies:
         from .keys import Subkey
         return Subkey(intervals=self.intervals, tonic=tonic)
@@ -1048,7 +1217,7 @@ def rotate_mode_intervals(scale_intervals_from_tonic, degree):
         mode_intervals_from_tonic = rotated_relative_intervals.stack().strip()
 
         # ensure that intervals are one-per-degree:
-        mode_intervals_from_tonic = IntervalList([Interval(i.value, d+2) for d, i in enumerate(mode_intervals_from_tonic)])
+        mode_intervals_from_tonic = IntervalList([Interval.from_cache(i.value, d+2) for d, i in enumerate(mode_intervals_from_tonic)])
 
         return mode_intervals_from_tonic
     else:
@@ -1132,13 +1301,17 @@ for base in mode_bases:
 mode_name_intervals = unpack_and_reverse_dict(interval_mode_names)
 ######################
 
+# initialise empty caches:
+cached_consonances = {}
+cached_pentatonics = {}
+
 # pre-initialised scales for efficient import by other modules instead of re-init:
 NaturalMajor = MajorScale = Scale('major')
 Dorian = DorianScale = Scale('dorian')
 Phrygian = PhrygianScale = Scale('phrygian')
 Lydian = LydianScale = Scale('lydian')
 Mixolydian = MixolydianScale = Scale('mixolydian')
-NaturalMinor = MinorScale = Scale('minor')
+NaturalMinor = MinorScale = Aeolian = AeolianScale = Scale('minor')
 Locrian = LocrianScale = Scale('locrian')
 
 HarmonicMinor = HarmonicMinorScale = Scale('harmonic minor')
@@ -1146,6 +1319,7 @@ HarmonicMajor = HarmonicMajorScale = Scale('harmonic major')
 MelodicMinor = MelodicMinorScale = Scale('melodic minor')
 MelodicMajor = MelodicMajorScale = Scale('melodic major')
 
+BebopScale = Scale('major', chromatic_intervals = [m6])
 
 # dict mapping parallel major/minor scales:
 parallel_scales = {NaturalMajor: NaturalMinor,
@@ -1192,3 +1366,11 @@ subscale_name_intervals = unpack_and_reverse_dict(interval_subscale_names)
 
 MajorPentatonic = MajorPentatonicScale = MajorPent = MajPent = Subscale('major pentatonic')
 MinorPentatonic = MinorPentatonicScale = MinorPent = MinPent = Subscale('minor pentatonic')
+
+common_scales = [MajorScale, Dorian, Phrygian, Lydian, Mixolydian, Aeolian, Locrian, HarmonicMajor, HarmonicMinor, MelodicMajor, MelodicMinor]
+common_subscales = list(subscales_to_aliases.keys())
+
+# cached scale attributes for performance:
+if _settings.PRE_CACHE_SCALES:
+    cached_consonances.update({c: c.consonance for c in (common_scales + common_subscales)})
+    cached_pentatonics.update({c: c.pentatonic for c in common_scales})

@@ -99,9 +99,9 @@ class Key(Scale):
             else:
                 assert tonic is not None, f'Key object initiated by Scale name ({name}) but no tonic note provided'
                 scale_name = name
-            tonic = Note(tonic)
+            tonic = Note.from_cache(tonic)
         elif tonic is not None:
-            tonic = Note(tonic)
+            tonic = Note.from_cache(tonic)
             scale_name = name # i.e. None
         else:
             raise Exception('neither scale_name nor tonic provided to Key init, we need one or the other!')
@@ -209,21 +209,31 @@ class Key(Scale):
         return f'{str(self)}  {lb}{notes_str}{rb}'
 
 
-    def chord(self, degree, order=3, qualifiers=None):
+    def chord(self, degree, order=3, sub_degree=False):
         """overwrites Scale.chord, returns a Chord object instead of an AbstractChord"""
-        abstract_chord = super().chord(degree, order, qualifiers)
-        root = self.degree_notes[degree]
-        chord_obj = abstract_chord.on_root(root)
+        abstract_chord = super().chord(degree, order) # ignored for now, sub_degree=sub_degree)
+        if not sub_degree:
+            root = self.degree_notes[degree]
+        else:
+            root = self.sub_degree_notes[degree]
+        chord_obj = abstract_chord.on_bass(root)
         # initialised chords inherit this key's sharp preference:
         chord_obj._set_sharp_preference(self.prefer_sharps)
         return chord_obj
 
-    def chords(self, order=3):
+    def chords(self, order=3, sub_degrees=False, re_spell=False):
         """returns the list of chords built on every degree of this Key"""
-        chord_list = []
-        for d, note in self.degree_notes.items():
-            chord_list.append(self.chord(d, order=order))
-        return chord_list
+        if sub_degrees:
+            degree_notes = self.sub_degree_notes
+        else:
+            degree_notes = self.base_degree_notes
+        chord_dict = {}
+        for d, note in degree_notes.items():
+            chord_dict[d] = self.chord(d, order=order, sub_degree=sub_degrees)
+            if re_spell:
+                # re-spell the Chord by initialising a new Chord object from the built one
+                chord_dict[d] = Chord(notes=chord_dict[d].notes)
+        return chord_dict
 
     def valid_abstract_chords(self, *args, **kwargs):
         """wrapper around Scale.get_valid_chords method"""
@@ -406,8 +416,12 @@ class Subkey(Key, Subscale):
         self.diatonic_note_intervals = {self.diatonic_notes[i]: padded_diatonic_intervals[i] for i in range(len(self.diatonic_notes))}
         self.diatonic_interval_notes = {padded_diatonic_intervals[i]: self.diatonic_notes[i] for i in range(len(self.diatonic_notes))}
 
-        self.degree_notes = {d+1: self.diatonic_notes[d] for d in range(len(self.degree_intervals))}
-        self.note_degrees = {self.diatonic_notes[d]: d+1 for d in range(len(self.degree_intervals))}
+        self.sub_degree_notes = {d+1: self.diatonic_notes[d] for d in range(len(self.degree_intervals))}
+        self.note_sub_degrees = {self.diatonic_notes[d]: d+1 for d in range(len(self.degree_intervals))}
+
+        # as with Subscale, the default 'degree' of a Subkey is the base degree, not the sub degree
+        self.degree_notes = self.base_degree_notes
+        self.note_degrees = self.note_base_degrees
 
         # TBI: this could use refactoring? no need to pad if we can just append/update dicts
 

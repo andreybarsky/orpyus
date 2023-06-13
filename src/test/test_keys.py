@@ -7,8 +7,10 @@ def unit_test():
     # 3 types of initialisation:
     compare(Key(scale_name='natural minor', tonic='B'), Key('Bm'))
     compare(Key(intervals=[2,4,5,7,9,11], tonic='C'), Key(notes='CDEFGAB'))
-
     compare(Key('Cm').intervals, Scale('natural minor').intervals)
+
+    # and by import from Scale class:
+    compare(Scale('dorian').on_tonic('D'), Key('D dorian'))
 
     print('Test Key __contains__:')
     # normal scale-degree triads/tetrads:

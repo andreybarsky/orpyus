@@ -22,11 +22,11 @@ def unit_test():
     compare(Scale('lydian b3').chord(1, order=7), AbstractChord('mmaj13'))
 
     print('Subscales:')
-    compare(Scale('major').pentatonic.intervals, [0, 2, 4, 7, 9])
-    compare(Scale('minor').blues.intervals, [0, 3, 5, 6, 7, 10])
+    compare(Scale('major').pentatonic.intervals, [2, 4, 7, 9])
+    compare(Scale('minor').blues.intervals, [3, 5, 6, 7, 10])
 
-    compare(Subscale('pentatonic minor')[2], m3)
-    compare(Subscale('blues minor').intervals[3], Dim5)
+    compare(Subscale('pentatonic minor')[3], m3)
+    compare(Subscale('blues minor').intervals[2], Scale('minor').blues.chromatic_intervals[0])
 
     # test neighbours:
     major_neighbours = Scale('natural major').neighbouring_scales

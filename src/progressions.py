@@ -11,13 +11,7 @@ from . import parsing
 
 from collections import Counter
 
-# import numpy as np
-
-
-# IDEA / TO DO: model movements not just of chord roots, but of _every_ note in triad/tetrad chords,
-# to capture perfect/imperfect cadence based on bass/soprano voicings of chords etc.
-
-
+# import numpy as np  # not needed yet
 
 
 
@@ -41,6 +35,23 @@ from collections import Counter
 # root-progression by step can “substitute” for a fifth-progression in the opposite direction
 
 
+### harmonic flowchart in major:
+
+major_harmonic_model_functions = {'T': ['TP', 'PD', 'D'],  # tonic to tonic prolongation, predominant, or dominant
+                        'TP': ['TP', 'PD'],
+                        'PD': ['PD', 'D'],
+                        'D': ['D', 'T']}
+major_harmonic_model_degrees = {1: [3,6,4,2,7,5],
+                                3: [6,4,2],
+                                6: [4,2],
+                                4: [2,7,5],
+                                2: [7,5],
+                                7: [5,1],
+                                5: [1]}
+major_harmonic_model_degrees_exceptions = {4: [1], 5: [6]}
+
+
+major_function_chords = {'T': [1], 'TP': [3,6], 'PD': [4,2], 'D': [7,5]}
 
 # functions of (major?) scale chords, indexed by interval (not degree)
 scale_functions = { 0: "T", # 1st, tonic

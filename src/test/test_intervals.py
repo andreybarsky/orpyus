@@ -38,8 +38,48 @@ def unit_test():
     compare(IntervalList([M3, P5]), IntervalList([P1, M3, P5, P8]).strip())
     compare(IntervalList([M2, M3, P5]), IntervalList([M3, P5, M9]).flatten())
 
+    # test execution time for init by various methods:
+    def repeat_init_by_value(n):
+        print('Testing interval init by value:')
+        for i in range(n):
+            for j in range(-24, 24):
+                x = Interval(j)
+    def repeat_init_by_degree(n):
+        print('Testing interval init by value/degree:')
+        values = range(-24, 24)
+        degrees = [Interval(v).extended_degree for v in values]
+        value_degrees = zip(values, degrees)
+        for i in range(n):
+            for v,d in value_degrees:
+                x = Interval(v,d)
+    def repeat_init_by_int_addition(n):
+        print('Testing interval init by addition with int:')
+        base_iv = Interval(1)
+        for i in range(n):
+            for j in range(-24, 24):
+                x = base_iv + j
+    def repeat_init_by_iv_addition(n):
+        print('Testing interval init by addition with interval:')
+        base_iv = Interval(1)
+        add_ivs = [Interval(j) for j in range(-24, 24)]
+        for i in range(n):
+            for j in add_ivs:
+                x = base_iv + j
+    def repeat_init_by_negation(n):
+        print('Testing interval init by negation:')
+        ivs = [Interval(j) for j in range(-24, 24)]
+        for i in range(n):
+            for iv in ivs:
+                x = -iv
+
+    # n = 10000
+    # repeat_init_by_value(        n=n)
+    # repeat_init_by_degree(       n=n)
+    # repeat_init_by_int_addition( n=n)
+    # repeat_init_by_iv_addition(  n=n)
+    # repeat_init_by_negation(     n=n)
 
 
 
 if __name__ == '__main__':
-    unit_compare()
+    unit_test()

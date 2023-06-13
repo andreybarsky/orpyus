@@ -1,12 +1,11 @@
 # new chord class with explicit factor recognition and compositional name generation/recognition
 
 # import notes
-from .notes import Note, NoteList, chromatic_scale, relative_minors, relative_majors, sharp_minor_tonics, sharp_major_tonics, flat_minor_tonics, flat_major_tonics
+from .notes import Note, NoteList, chromatic_scale
 from .intervals import Interval, IntervalList, P5
 from .util import log, precision_recall, rotate_list, check_all, auto_split, reverse_dict, unpack_and_reverse_dict
-from . import parsing
-from . import qualities
 from .qualities import Quality, ChordQualifier, parse_chord_qualifiers
+from . import notes, parsing, qualities, _settings
 
 from collections import defaultdict
 
@@ -205,7 +204,7 @@ class AbstractChord:
 
         if isinstance(name, list):
             # we've been fed a list, probably of integers or intervals:
-            if (type(name) == IntervalList) or (type(name) == list and check_all(name, 'isinstance', (int, Interval))):
+            if (type(name) == IntervalList) or (type(name) == list and isinstance(name[0], (int, Interval))): # check_all(name, 'isinstance', (int, Interval))):
                 # we've been fed an IntervalList as first (name) arg, which we quietly re-cast:
                 assert intervals is None
                 intervals = name
@@ -250,9 +249,9 @@ class AbstractChord:
                 sanitised_intervals = []
                 for i in intervals:
                     if i in {3,4}: # could this be a major/minor third?
-                        sanitised_intervals.append(Interval(i, degree=3))
+                        sanitised_intervals.append(Interval.from_cache(i, degree=3))
                     elif i in {6,7,8}: # could this be a dim/perf/aug fifth?
-                        sanitised_intervals.append(Interval(i, degree=5))
+                        sanitised_intervals.append(Interval.from_cache(i, degree=5))
                     else:
                         sanitised_intervals.append(i)
                 intervals = sanitised_intervals
@@ -342,11 +341,8 @@ class AbstractChord:
         return factors, intervals.sorted(), inversion
 
     def _determine_quality(self):
-        # quality of a chord is the quality of its third:
-        if 3 not in self.factors:
-            # use the quality of the 5th: usually perfect, but could be a dim5(no3) or something
-            return self.factor_intervals[5].quality
-        else:
+        # quality of a chord is primarily the quality of its third:
+        if 3 in self.factors:
             if self.factor_intervals[3].quality.major:
                 # is augmented if the 5th is augmented, otherwise is major
                 if 5 in self.factors and self.factor_intervals[5].quality.augmented:
@@ -362,6 +358,15 @@ class AbstractChord:
                 # third is present but neither major or minor, meaning it is dim or aug (or ddim or aaug)
                 # so we'll just call this chord whatever the third is:
                 return self.factor_intervals[3].quality
+        else:
+            # if no 3rd; try using the 5th instead
+            # (this is usually perfect, but could be a dim5(no3) or something
+            if 5 in self.factors:
+                return self.factor_intervals[5].quality
+            else:
+                # no 5th OR 3rd; this means it's something horrible like a sus4(no5)
+                # so just return ind
+                return qualities.Perfect
 
     def __len__(self):
         return len(self.factors)
@@ -410,7 +415,19 @@ class AbstractChord:
     @property
     def rarity(self):
         """an integer denoting how rarely this chord is used in practice"""
-        return chord_name_rarities[factors_to_chord_names[self.factors]]
+        if self.factors in factors_to_chord_names:
+            return chord_name_rarities[factors_to_chord_names[self.factors]]
+        else:
+            # no5 chords have no registered rarity; so here we check the rarity of this chord
+            # WITH a perfect 5th, and make it one step rarer than that
+            assert 5 not in self.factors
+            intervals_with_5 = IntervalList(list(self.intervals) + [P5])
+            intervals_with_5.sort()
+            if intervals_with_5 in intervals_to_chord_names:
+                rarity_with_5 = chord_name_rarities[intervals_to_chord_names[intervals_with_5]]
+                return rarity_with_5 + 1
+            else:
+                raise Exception(f'No rarity registered for chord: {self}')
 
     @property
     def likelihood(self):
@@ -449,28 +466,36 @@ class AbstractChord:
         return self.get_pairwise_consonances()
 
     @property
-    def consonance(self, tonic_weight=2):
+    def consonance(self):
         """the weighted mean of pairwise interval consonances"""
-        cons_list = []
-        for pair, cons in self.pairwise_consonances.items():
-            if (tonic_weight != 1) and (pair[0].value == 0): # intervals from root are counted double
-                cons_list.extend([cons]*tonic_weight)
-            else:
-                cons_list.append(cons)
-        raw_cons = sum(cons_list) / len(cons_list)
 
-        # the raw consonance comes out as maximum=0.933 (i.e. 14/15) for the most consonant chord (the octave)
-        # by definition because of the constant 15 in the interval dissonance calculation, where
-        # perfect consonance (unison) has dissonance 0 and the octave has dissonance 1.
+        if self.suffix in cached_consonances_by_suffix:
+            return cached_consonances_by_suffix[self.suffix]
+        else:
+            tonic_weight = 2
 
-        # chords cannot be on unison, so we'll set the ceiling to 1 instead of 0.9333.
+            cons_list = []
+            for pair, cons in self.pairwise_consonances.items():
+                if (tonic_weight != 1) and (pair[0].value == 0): # intervals from root are counted double
+                    cons_list.extend([cons]*tonic_weight)
+                else:
+                    cons_list.append(cons)
+            raw_cons = sum(cons_list) / len(cons_list)
 
-        # and the empirically observed minimum is just above 0.49 for the awful tritone plus minor ninth
-        # so we set that to be just around 0, and rescale the entire raw consonance range within those bounds:
-        max_cons = 14/15
-        min_cons = 0.49
-        rescaled_cons = (raw_cons - min_cons) / (max_cons - min_cons)
-        return round(rescaled_cons, 3)
+            # the raw consonance comes out as maximum=0.933 (i.e. 14/15) for the most consonant chord (the octave)
+            # by definition because of the constant 15 in the interval dissonance calculation, where
+            # perfect consonance (unison) has dissonance 0 and the octave has dissonance 1.
+
+            # chords cannot be on unison, so we'll set the ceiling to 1 instead of 0.9333.
+
+            # and the empirically observed minimum is just above 0.49 for the awful tritone plus minor ninth
+            # so we set that to be just around 0, and rescale the entire raw consonance range within those bounds:
+            max_cons = 14/15
+            min_cons = 0.49
+            rescaled_cons = (raw_cons - min_cons) / (max_cons - min_cons)
+            if _settings.DYNAMIC_CACHING:
+                cached_consonances_by_suffix[self.suffix] = rescaled_cons
+            return round(rescaled_cons, 3)
 
     @staticmethod
     def inversions_from_intervals(intervals):
@@ -521,8 +546,18 @@ class AbstractChord:
         else:
             # construct the root note from the desired bass note and this AbstractChord's inversion:
             root_to_bass_interval = self.root_intervals[self.inversion]
-            root_note = Note(bass_note) - root_to_bass_interval
+            root_note = Note.from_cache(bass_note) - root_to_bass_interval
             return Chord(root=root_note, factors=self.factors, inversion=self.inversion)
+
+    @property
+    def triad(self):
+        """returns the simple major or minor triad associated with this AbstractChord"""
+        if self.quality.major_ish:
+            return AbstractChord()
+        elif self.quality.minor_ish:
+            return AbstractChord('m')
+        else:
+            raise Exception(f'{self} has indeterminate quality and therefore has no associated triad')
 
     def __len__(self):
         """this chord's order, i.e. the number of notes/factors"""
@@ -539,7 +574,7 @@ class AbstractChord:
         if isinstance(other, str):
             # parse if this str is a note or a chord, preferring note first:
             if parsing.is_valid_note_name(other):
-                other = Note(other)
+                other = Note.from_cache(other)
             else:
                 other = Chord(other)
 
@@ -562,7 +597,7 @@ class AbstractChord:
         pass # TBI, but should include subtraction by interval, subtraction by note (deletion), or by chord (difference/distance)
         if isinstance(other, str):
             if parsing.is_valid_note_name(other):
-                other = Note(other)
+                other = Note.from_cache(other)
             elif parsing.begins_with_valid_note_name(other):
                 other = Chord(other)
 
@@ -689,7 +724,7 @@ class Chord(AbstractChord):
         # allow inversion by bass keyword arg, by reallocating into inversion arg for _parse_input:
         if bass is not None:
             assert inversion is None
-            inversion = Note(bass).name
+            inversion = Note.from_cache(bass).name
 
         # recover factor offsets, intervals from root, and inversion position from input args:
         self.factors, self.root_intervals, inversion = self._parse_input(suffix, factors, intervals, inversion, inversion_degree, qualifiers, _allow_note_name=True)
@@ -754,9 +789,9 @@ class Chord(AbstractChord):
         returns root as a Note object, and chord suffix as string or None"""
         if name is not None:
             root_name, suffix = parsing.note_split(name)
-            root = Note(root_name)
+            root = Note.from_cache(root_name)
         elif root is not None:
-            root = Note(root)
+            root = Note.from_cache(root)
             suffix = name
         else:
             raise Exception('neither name nor root provided to Chord init, we need one or the other!')
@@ -782,7 +817,7 @@ class Chord(AbstractChord):
             inversion_degree = self.root_intervals[inversion].degree
             bass = self.root_notes[inversion]
         elif isinstance(inversion, (Note, str)):
-            bass = Note(inversion)
+            bass = Note.from_cache(inversion)
 
             ####################################################################
 
@@ -875,16 +910,16 @@ class Chord(AbstractChord):
         """detect if a chord should prefer sharp or flat labelling
         depending on its tonic and quality"""
         if self.quality.major:
-            if self.root in sharp_major_tonics:
+            if self.root in notes.sharp_major_tonics:
                 return True
-            elif self.root in flat_major_tonics:
+            elif self.root in notes.flat_major_tonics:
                 return False
             else:
                 return default
         elif self.quality.minor:
-            if self.root in sharp_minor_tonics:
+            if self.root in notes.sharp_minor_tonics:
                 return True
-            elif self.root in flat_minor_tonics:
+            elif self.root in notes.flat_minor_tonics:
                 return False
             else:
                 return default
@@ -908,12 +943,12 @@ class Chord(AbstractChord):
     @property
     def sharp_notes(self):
         """returns notes inside self, all with sharp preference"""
-        return NoteList([Note(n.chroma, prefer_sharps=True) for n in self.notes])
+        return NoteList([Note.from_cache(n.chroma, prefer_sharps=True) for n in self.notes])
 
     @property
     def flat_notes(self):
         """returns notes inside self, all with flat preference"""
-        return NoteList([Note(n.chroma, prefer_sharps=False) for n in self.notes])
+        return NoteList([Note.from_cache(n.chroma, prefer_sharps=False) for n in self.notes])
 
     @property
     def name(self):
@@ -972,7 +1007,7 @@ class Chord(AbstractChord):
         elif isinstance(item, int):
             return item in self.factors
         elif isinstance(item, (Note, str)):
-            n = Note(item)
+            n = Note.from_cache(item)
             return n in self.notes
         else:
             raise TypeError(f'Chord object cannot contain items of type: {type(item)}')
@@ -1016,7 +1051,7 @@ class Chord(AbstractChord):
     def relative_minor(self):
         # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
         assert self.quality.major, f'{self} is not major, and therefore has no relative minor'
-        rel_root = relative_minors[self.root.name]
+        rel_root = notes.relative_minors[self.root.name]
         new_factors = ChordFactors(self.factors)
         new_factors[3] -= 1 # flatten third
         if 5 in self.factors: # if fifth is aug/dim, make it dim/aug
@@ -1027,7 +1062,7 @@ class Chord(AbstractChord):
     def relative_major(self):
         # assert not self.major, f'{self} is already major, and therefore has no relative major'
         assert self.quality.minor, f'{self} is not minor, and therefore has no relative major'
-        rel_root = relative_majors[self.root.name]
+        rel_root = notes.relative_majors[self.root.name]
         new_factors = ChordFactors(self.factors)
         new_factors[3] += 1 # raise third
         if 5 in self.factors: # if fifth is aug/dim, make it dim/aug
@@ -1071,6 +1106,16 @@ class Chord(AbstractChord):
             return self.parallel_major
         else:
             raise Exception(f'Chord {self} is neither major or minor, and therefore has no parallel')
+
+    @property
+    def triad(self):
+        """returns the simple major or minor triad with the same root and quality as this chord"""
+        if self.quality.major_ish:
+            return major_triads[self.tonic]
+        elif self.quality.minor_ish:
+            return minor_triads[self.tonic]
+        else:
+            raise Exception(f'{self} has indeterminate quality and therefore has no associated triad')
 
     def __neg__(self):
         """returns the parallel major or minor (using negation operator '-')"""
@@ -1132,6 +1177,34 @@ class Chord(AbstractChord):
 
     def summary(self):
         print(self.properties)
+
+
+    @staticmethod
+    def from_cache(name=None, factors=None, root=None):
+        # efficient chord init by cache lookup of proper name or proper ChordFactors object:
+        if name is not None:
+            if name in cached_chord_names:
+                return cached_chord_names[name]
+            else:
+                chord_obj = Chord(name)
+                if _settings.DYNAMIC_CACHING:
+                    log(f'Registering chord by name {name} to cache')
+                    cached_chord_names[name] = chord_obj
+                return chord_obj
+
+        elif factors is not None:
+            if isinstance(root, Note): # cast Note obj to string for cache registration
+                root = root.chroma
+            if (factors,root) in cached_chord_factors:
+                return cached_chord_factors[(factors,root)]
+            else:
+                chord_obj = Chord(factors=factors, root=root)
+                if _settings.DYNAMIC_CACHING:
+                    log(f'Registering chord by root {root} and factors {factors} to cache')
+                    cached_chord_factors[(factors, root)] = chord_obj
+                return chord_obj
+        else:
+            raise Exception(f'Chord init from cache must include one of: "name", or both "factors" and "root"')
 
 
     #### audio methods:
@@ -1254,6 +1327,25 @@ chord_name_rarities = unpack_and_reverse_dict(chord_names_by_rarity)
 # reverse these too:
 chord_names_to_factors = reverse_dict(factors_to_chord_names)
 chord_names_to_intervals = reverse_dict(intervals_to_chord_names)
+
+### pre-initialised major and minor chords on each tonic:
+major_triads = {n: Chord(n.chroma) for n in notes.major_tonics}
+minor_triads = {n: Chord(n.chroma + 'm') for n in notes.minor_tonics}
+
+# empty caches to be filled later, by pre-caching and/or dynamic caching:
+cached_abstract_chord_names = {}
+cached_abstract_chord_factors = {}
+cached_chord_names = {}
+cached_chord_factors = {}
+cached_consonances_by_suffix = {}
+
+if _settings.PRE_CACHE_CHORDS: # initialise common chord objects in cache for faster access later
+    cached_abstract_chord_names.update({chord_name: AbstractChord(chord_name) for chord_name, rarity in chord_name_rarities.items() if rarity <= 1}) # not currently used
+    cached_abstract_chord_factors.update({c.factors: c for c in cached_abstract_chord_names.values()})  # not currently used
+    cached_chord_names.update({(tonic+chord_name): Chord(tonic+chord_name) for tonic in parsing.common_note_names for chord_name, rarity in chord_name_rarities.items() if rarity <= 1})
+    cached_chord_factors.update({(c.factors, c.root.chroma): c for c in cached_chord_names.values()})
+    cached_consonances_by_suffix.update({ac.suffix: ac.consonance for ac in cached_abstract_chord_names.values()}) # does this perform a double update if _settings.DYNAMIC_CACHING is on?
+
 
 ######################################################
 
@@ -1395,6 +1487,9 @@ def most_likely_chord(note_list, stats=False, **kwargs):
         return best_match
 
 
+
+
+
 ### WIP, incomplete class
 class ChordVoicing(Chord):
     """a Chord built on a specific note of a specific pitch, whose members are OctaveNotes.
@@ -1419,7 +1514,7 @@ class ChordVoicing(Chord):
             assert root is None, f"ChordVoicing initialised with name string ({name}) as root, but also received mutually exclusive root keyword: {root}"
             assert octave is not None, f"ChordVoicing initialised with name string ({name}) as root but no octave arg provided"
             root_name, chord_name = parsing.note_split(name)
-            root = Note(root_name)
+            root = Note.from_cache(root_name)
             if len(chord_name) == 0:
                 chord_name = None
             return root, octave, chord_name
@@ -1442,5 +1537,5 @@ class ChordVoicing(Chord):
                 else:
                     assert octave is not None, f"ChordVoicing initialised with Note string ({root}) as root but no octave arg provided"
                     octave = octave
-                    root = Note(root).in_octave(octave)
+                    root = Note.from_cache(root).in_octave(octave)
             return root, octave, name

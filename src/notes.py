@@ -1,15 +1,15 @@
-# python library for handling musical notes, intervals, and chords
+### this module contains the Note, OctaveNote, and NoteList classes.
+### Notes are abstract pitch classes in no particular octave, such as the note C.
+### OctaveNotes are specific notes like the keys of a piano, such as C4 (aka middle C)
+### NoteLists are simply lists of either types of note, with some useful methods.
 
 from .intervals import Interval, IntervalList
 from . import parsing
-# from parsing import parsing.note_positions, preferred_note_names, parse_octavenote_name, is_flat, is_sharp, is_valid_note_name, parse_out_note_names
 from . import conversion as conv
-
 from .util import log, rotate_list
+from . import _settings
 
 import math
-
-### TBI: enharmonic equivalence operator? &? ^?
 
 
 # relative values (positions within scale) with respect to C major, starting with 0=C:
@@ -130,13 +130,13 @@ class Note:
             # note transposition by interval
             # interval = other.value  # cast to int
             new_pos = (self.position + int(other)) % 12
-            new_note = Note(position = new_pos, prefer_sharps = self.prefer_sharps) # inherit sharpness from self
+            new_note = Note.from_cache(position = new_pos, prefer_sharps = self.prefer_sharps) # inherit sharpness from self
             # log(f'Adding interval ({interval}) to self ({self}) to produce Note: {chrm}')
             return new_note
         elif isinstance(other, (str, Note)):
             # addition with other note to produce chord
             if isinstance(other, str):
-                other = Note(other)
+                other = Note.from_cache(other)
             assert isinstance(other, Note)
             from .chords import Chord # lazy import
             chord_notes = [self, other]
@@ -151,7 +151,7 @@ class Note:
 
         if isinstance(other, (int, Interval)): # construct Note
             new_pos = (self.position - other) % 12
-            new_note = Note(position = new_pos, prefer_sharps = self.prefer_sharps)
+            new_note = Note.from_cache(position = new_pos, prefer_sharps = self.prefer_sharps)
             # log(f'Subtracting interval ({other}) from self ({self}) to produce Note: {chrm}')
             return new_note
         elif isinstance(other, Note):       # construct Interval
@@ -178,7 +178,7 @@ class Note:
 
         if isinstance(other, str) and parsing.is_valid_note_name(other):
             # cast string to Note if possible
-            other = Note(other)
+            other = Note.from_cache(other)
         if isinstance(other, Note):
             return self.position == other.position
         # elif isinstance(other, OctaveNote):
@@ -234,6 +234,32 @@ class Note:
     def summary(self):
         """Prints all the properties of this Note object"""
         print(self.properties)
+
+    @staticmethod
+    def from_cache(name=None, position=None, prefer_sharps=None):
+        # efficient note init by cache of names to note objects
+        if name is not None:
+            if isinstance(name, Note): # recast note object input to string
+                name = name.chroma
+            if (name, prefer_sharps) in cached_notes:
+                return cached_notes[(name, prefer_sharps)]
+            else:
+                note_obj = Note(name, prefer_sharps=prefer_sharps)
+                if _settings.DYNAMIC_CACHING:
+                    log(f'Registering note with name {name} and prefer_sharps={prefer_sharps} to cache')
+                    cached_notes[(name, prefer_sharps)] = note_obj
+                return note_obj
+        elif position is not None:
+            if (position, prefer_sharps) in cached_notes:
+                return cached_notes[(position, prefer_sharps)]
+            else:
+                note_obj = Note(position=position, prefer_sharps=prefer_sharps)
+                if _settings.DYNAMIC_CACHING:
+                    log(f'Registering note with position {position} and prefer_sharps={prefer_sharps} to cache')
+                    cached_notes[(position, prefer_sharps)] = note_obj
+                return note_obj
+        else:
+            raise Exception(f'Note init from cache must include one of "name" or "position"')
 
     ## chord constructors:
     def chord(self, arg='major'):
@@ -421,7 +447,7 @@ class OctaveNote(Note):
     def note(self):
         """returns the parent class Note object
         associated with this OctaveNote"""
-        return Note(self.chroma)
+        return Note.from_cache(self.chroma)
 
     ## ChordVoicing constructor
     def chord(self, *args):
@@ -569,11 +595,11 @@ class NoteList(list):
             strip_octave = self.strip_octave
         if isinstance(note_obj, OctaveNote):
             if strip_octave:
-                return Note(note_obj.position)
+                return Note.from_cache(position=note_obj.position)
             else:
                 return OctaveNote(note_obj.name)
         elif isinstance(note_obj, Note):
-            return Note(note_obj.position)
+            return Note.from_cache(position=note_obj.position)
         else:
             raise TypeError(f'Cannot recast non-Note object: {type(note_obj)}')
 
@@ -584,7 +610,7 @@ class NoteList(list):
         for item in items:
             if isinstance(item, str):
                 if parsing.begins_with_valid_note_name(item):
-                    note_items.append(Note(item, strip_octave=strip_octave))
+                    note_items.append(Note.from_cache(item)) # , strip_octave=strip_octave))
                 else:
                     raise ValueError(f'{item} is a string but does not cast to a note name')
             elif isinstance(item, Note):
@@ -799,6 +825,10 @@ Ab = Note('Ab')
 # all chromatic pitch classes:
 chromatic_scale = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
 
+# note cache by name for efficient init:
+cached_notes = {n: Note(n, prefer_sharps=s) for n in parsing.common_note_names for s in [None, False, True]}
+cached_notes.update({p : Note(position=p, prefer_sharps=s) for p in range(12) for s in [None, False, True]})
+
 # relative minors/majors of all chromatic notes:
 relative_minors = {c.name : (c - 3).name for c in chromatic_scale}
 relative_minors.update({c.sharp_name: (c-3).sharp_name for c in chromatic_scale})
@@ -821,4 +851,4 @@ flat_minor_tonics = [Note(relative_minors[t], prefer_sharps=False) for t in flat
 neutral_minor_tonics = [Note(relative_minors[t]) for t in neutral_tonic_names]
 minor_tonics = sorted(sharp_minor_tonics + flat_minor_tonics + neutral_minor_tonics)
 
-### TBI: improved recognition of double-sharp and double-flat notes for exotic keys
+### TBI: improved recognition of double-sharp and double-flat notes for exotic keys?

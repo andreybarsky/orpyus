@@ -26,7 +26,7 @@ tunings = {'standard':(String('E2'), String('A2'), String('D3'), String('G3'), S
 
 tuning_aliases = reverse_dict(tunings)
 
-class Guitar:
+class Guitar: ### TBI: allow ukelele tunings?
     def __init__(self, tuning='standard', strings=6, capo=0, verbose=False):
         """tuning can be one of:
         a descriptive string: standard, dropD, openE, etc.

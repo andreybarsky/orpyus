@@ -71,9 +71,6 @@ for c in accidental_offsets.keys():
     pos_dict = note_names_by_accidental[c]
     note_names_by_accidental[c] = {p : pos_dict[p] for p in sorted(pos_dict.keys())}
 
-natural_note_positions = set(note_positions[n] for n in natural_note_names)
-valid_note_names = set(note_positions.keys())
-
 # now the preferred name of each note by preference:
 preferred_note_names = {}
 for preference in 'b', '#':
@@ -83,6 +80,12 @@ for preference in 'b', '#':
     names = [nat_notes[p] if p in nat_notes else acc_notes[p] for p in range(12)]
     preferred_note_names[preference] = names
 preferred_note_names['generic'] = generic_note_names # in rare cases where we want neither preference
+
+natural_note_positions = set(note_positions[n] for n in natural_note_names)
+valid_note_names = set(note_positions.keys())
+# common note names are cached for chord init, they are just the natural notes plus the commonly typed sharp and flat accidentals:
+common_note_names = set(preferred_note_names['b'] + preferred_note_names['#'])
+
 
 
 #
