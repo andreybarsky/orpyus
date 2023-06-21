@@ -522,12 +522,12 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      '2': ['two', '2nd', 'second'],
                      '4': ['four', '4th', 'fourth'],
                      '5': ['five', '5th', 'fifth', '(no 3)', 'power', 'power chord', '⁵'],
-                     '6': ['six', '6th', 'sixth', 'add6'], # no such thing as an add6!
+                     '6': ['six', '6th', 'sixth', 'add6', '⁶'],
                      '7': ['seven', '7th', 'seventh', '⁷'],
                      '9': ['nine', '9th', 'ninth', '⁹'],
-                     '10': ['ten', '10th', 'tenth'],
+                     '10': ['ten', '10th', 'tenth', '¹⁰'],
                      '11': ['eleven', '11th', 'eleventh', '¹¹'],
-                     '12': ['twelve', '12th', 'twelfth'],
+                     '12': ['twelve', '12th', 'twelfth', '¹²'],
                      '13': ['thirteen', '13th', 'thirteenth', '¹³'],
 
                      # special case, otherwise 'dmin9' doesn't parse correctly:

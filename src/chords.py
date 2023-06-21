@@ -197,6 +197,8 @@ class AbstractChord:
 
         self.quality = self._determine_quality()
 
+        self.assigned_name = None
+
 
     def _parse_input(self, name, factors, intervals, inversion, inversion_degree, qualifiers, _allow_note_name=False):
         """takes valid inputs to AbstractChord and parses them into factors, intervals and inversion.
@@ -703,6 +705,8 @@ class Chord(AbstractChord):
             if '#' in name[1:3]:
                 # prefer_sharps = ('#' in name[1:3])
                 prefer_sharps = True
+
+        self.assigned_name = None # remains None unless a registered chord is not identified during init
 
         # re-parse args to detect if 'name' is a list of notes, a list of intervals, or a dict of chordfactors:
         name, root, factors, intervals, notes = self._reparse_args(name, root, factors, intervals, notes)
