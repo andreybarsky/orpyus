@@ -2,7 +2,7 @@
 
 from .intervals import Interval
 from .chords import Chord, AbstractChord
-from .qualities import Major, Minor, Perfect, Diminished, parse_chord_qualifiers, ChordQualifier
+from .qualities import Major, Minor, Perfect, Diminished, parse_chord_modifiers, ChordModifier
 from .scales import Scale, Subscale, scale_name_intervals, NaturalMajor, NaturalMinor, MelodicMinor, HarmonicMinor, MelodicMajor, HarmonicMajor
 from .keys import Key, Subkey, matching_keys, most_likely_key
 from .util import reduce_aliases, auto_split, check_all, reverse_dict, log
@@ -82,20 +82,20 @@ scale_function_names = {0: "tonic", # 1st
                         11: "leading tone", # 7th (major)
                         }
 
-qualifier_marks = {'dim': '°',
+modifier_marks = { 'dim':  '°',
                    'hdim': 'ø',
-                   'aug': '+',
+                   'aug':  '+',
                    'maj7': 'Δ⁷',
-                   '5': '⁵',
-                   '7': '⁷',
-                   'm7': '⁷',  # a kludge; here we replace out the 'm' because it is already implied by the lower case roman numeral
-                   '9': '⁹',
-                   'm9': '⁹',
-                   '11': '¹¹',
-                   'm11': '¹¹',
-                   '13': '¹³',
-                   'm13': '¹³',
-                   'sus': 's'}
+                   '5':    '⁵',
+                   '7':    '⁷',
+                   'm7':   '⁷',  # a kludge; here we replace out the 'm' because it is already implied by the lower case roman numeral
+                   '9':    '⁹',
+                   'm9':   '⁹', # ditto for m9, m11, m13
+                   '11':   '¹¹',
+                   'm11':  '¹¹',
+                   '13':   '¹³',
+                   'm13':  '¹³',
+                   'sus':  's'}
 
 roman_degree_chords = {}
 # render as an alias dict linking numerals to major/minor qualities:
@@ -107,26 +107,26 @@ degree_chords_roman = reverse_dict(roman_degree_chords)
 
 progression_aliases = dict(roman_degree_chords)
 # kludge: we have to specifically ignore 'dim' when reading roman numerals,
-# because it contains a roman numeral ('i')
+# because it is the only modifier that contains a roman numeral ('i')
 progression_aliases['dim'] = 'dim'
 
-minor_qual = ChordQualifier('minor')
+minor_mod = ChordModifier('minor')
 
 def parse_roman_numeral(numeral):
     """given a (string) roman numeral, in upper or lower case,
-    with a potential chord qualifier at the end,
+    with a potential chord modifier at the end,
     parse into a (degree, AbstractChord) tuple, where degree is an int between 1-7"""
     out = reduce_aliases(numeral, progression_aliases)
     assert isinstance(out[0], tuple) # an integer, quality tuple
     deg, quality = out[0]
 
-    qualifiers = []
+    modifiers = []
     inversion = 0
 
     if quality.minor:
-        qualifiers.append(minor_qual)
+        modifiers.append(minor_mod)
 
-    if len(out) > 1: # got one or more additional qualifiers as well
+    if len(out) > 1: # got one or more additional modifiers as well
         rest = ''.join(out[1:])
 
         rest_inv = rest.split('/')
@@ -134,10 +134,10 @@ def parse_roman_numeral(numeral):
             assert len(rest_inv) == 2 # chord part and inversion part
             rest, inversion = rest_inv[0], int(rest_inv[1])
 
-        rest_quals = parse_chord_qualifiers(rest)
-        qualifiers.extend(rest_quals)
+        rest_mods = parse_chord_modifiers(rest)
+        modifiers.extend(rest_mods)
 
-    chord = AbstractChord(qualifiers=qualifiers, inversion=inversion)
+    chord = AbstractChord(modifiers=modifiers, inversion=inversion)
 
     return deg, chord
 
@@ -339,7 +339,7 @@ class ChordList(list):
             arg = items[0]
             if isinstance(arg, str):
                 # could be a dash-separated string of chord names or something, try auto-split:
-                items = auto_split(arg, allow='°øΔ♯♭♮+𝄫𝄪#/' + ''.join(qualifier_marks.values()))
+                items = auto_split(arg, allow='°øΔ♯♭♮+𝄫𝄪#/' + ''.join(modifier_marks.values()))
             else:
                 assert isinstance(arg, (list, tuple)), f"Expected list or tuple of chord-like objects, but got single non-list/tuple arg: {type(arg)}"
                 items = arg
@@ -448,7 +448,7 @@ class ChordList(list):
         root_degrees = [key.interval_degrees[iv]  if iv in key  else iv.degree  for iv in root_intervals_from_tonic]
         return root_degrees
 
-    def as_numerals_in(self, key, sep=' ', qualifiers=True):
+    def as_numerals_in(self, key, sep=' ', modifiers=True):
         if isinstance(key, str):
             key = Key(key)
         root_degrees = self.root_degrees_in(key)
@@ -456,7 +456,7 @@ class ChordList(list):
         numerals = [] # build a list of numerals, allocating case as we go
         for d,c in degree_chords:
             # use the quality of the chord if it is not indeterminate, otherwise use the quality of the key:
-            chord_qual = c.quality if not c.quality.perfect else key.quality
+            chord_mod = c.quality if not c.quality.perfect else key.quality
             if chord_qual.major_ish:
                 numerals.append(numerals_roman[d])
             elif chord_qual.minor_ish:
@@ -466,12 +466,12 @@ class ChordList(list):
 
         # numerals = [numerals_roman[d]  if c.quality.major_ish else numerals_roman[d].lower()  for d,c in degree_chords]
         # add suffixes: (we ignore the 'm' suffix because it is denoted by lowercase instead)
-        if qualifiers:
+        if modifiers:
             suffix_list = [c.get_suffix(inversion=False) if c.get_suffix() != 'm' else '' for c in self]
             inversion_list = ['' if c.inversion==0 else f'/{c.inversion}' for c in self]
             roman_chords_list = [f'{numerals[i]}{suffix_list[i]}{inversion_list[i]}' for i in range(len(self))]
-            # turn suffix qualifiers into superscript marks etc. where possible:
-            roman_chords_list = [''.join(reduce_aliases(r, qualifier_marks)) for r in roman_chords_list]
+            # turn suffix modifiers into superscript marks etc. where possible:
+            roman_chords_list = [''.join(reduce_aliases(r, modifier_marks)) for r in roman_chords_list]
         else:
             roman_chords_list = [f'{numerals[i]}' for i in range(len(self))]
         if sep is not None:
@@ -611,7 +611,7 @@ class Progression:
                 b. if scale is provided, and 'ignore_conflicting_case' is False, we parse chords according to their case/quality,
                     even if they conflict with the scale given.
                 c. if scale is provided, and ignore_conflicting_case is True, we ignore the case/quality of the chord numerals
-                    and instantiate chords solely according to their root degree and qualifiers, in the scale given.
+                    and instantiate chords solely according to their root degree and modifiers, in the scale given.
                         in either case (?), if 'auto_qualify' is True, we also qualify chords automatically as required by the scale,
                         for example making the 7-chord diminished in major.
         2. 'numerals' input is a list of integers denoting root degrees of chords, and 'scale' is a Scale object (or string that casts to Scale),
@@ -626,7 +626,7 @@ class Progression:
 
         if isinstance(numerals, str):
             original_numerals = numerals
-            split_numerals = auto_split(numerals, allow='°øΔ♯♭♮+𝄫𝄪#/' + ''.join(qualifier_marks.values()))
+            split_numerals = auto_split(numerals, allow='°øΔ♯♭♮+𝄫𝄪#/' + ''.join(modifier_marks.values()))
             assert len(split_numerals) > 1, f"Expected a string of roman numerals separated by dashes (or other obvious separator), but got: {numerals[0]}"
             numerals = split_numerals
         # is now an iterable of roman numeral strings OR of integers
@@ -655,7 +655,7 @@ class Progression:
                 self.scale = scale
 
                 if ignore_conflicting_case:
-                    # ignore case (but not qualifiers) of roman numeral chords provided
+                    # ignore case (but not modifiers) of roman numeral chords provided
                     # and instantiate them from scale instead:
                     scale_chords = ChordList([self.scale.chord(d) for d in self.root_degrees])
                     self.chords = scale_chords
@@ -790,7 +790,7 @@ class Progression:
         numerals = []
         for d,c in self.degree_chords:
             # use the quality of the chord if it is not indeterminate, otherwise use the quality of the key:
-            chord_qual = c.quality if not c.quality.perfect else self.scale.quality
+            chord_mod = c.quality if not c.quality.perfect else self.scale.quality
             if chord_qual.major_ish:
                 numerals.append(numerals_roman[d])
             elif chord_qual.minor_ish:
@@ -846,8 +846,8 @@ class Progression:
                 belongs = [self.scale.contains_degree_chord(d,c) for d,c in self.degree_chords]
                 roman_chords_list = [f'{roman_chords_list[i]}' if belongs[i]  else f'[{roman_chords_list[i]}]'  for i in range(len(self))]
 
-        # turn suffix qualifiers into superscript marks etc. where possible:
-        roman_chords_list = [''.join(reduce_aliases(r, qualifier_marks)) for r in roman_chords_list]
+        # turn suffix modifiers into superscript marks etc. where possible:
+        roman_chords_list = [''.join(reduce_aliases(r, modifier_marks)) for r in roman_chords_list]
         if sep is not None:
             roman_chords_str = sep.join(roman_chords_list)
             return roman_chords_str
@@ -898,7 +898,7 @@ class Progression:
         return str(self)
 
     def __eq__(self, other):
-        """progressions are equal to each other if they have the same chords built on the same degrees"""
+        """progressions are emod to each other if they have the same chords built on the same degrees"""
         return self.degree_chords == other.degree_chords
 
     def __add__(self, other):
@@ -1021,7 +1021,7 @@ class ChordProgression(Progression, ChordList):
         if isinstance(chords, str):
             # if chords is a plain string instead of iterable,
             # try auto splitting:
-            chords = auto_split(chords, allow='°øΔ♯♭♮+𝄫𝄪#/' + ''.join(qualifier_marks.values()))
+            chords = auto_split(chords, allow='°øΔ♯♭♮+𝄫𝄪#/' + ''.join(modifier_marks.values()))
 
         # iterate through list and cast to chord objectss:
         valid_chords = []

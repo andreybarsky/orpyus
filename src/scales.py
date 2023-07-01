@@ -2,7 +2,7 @@ from .intervals import *
 # from scales import interval_scale_names, key_name_intervals
 from .util import rotate_list, reverse_dict, unpack_and_reverse_dict, check_all, log
 from .chords import ChordFactors, AbstractChord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
-from .qualities import ChordQualifier, Quality
+from .qualities import ChordModifier, Quality
 from .parsing import num_suffixes, numerals_roman
 from . import notes, _settings
 
@@ -54,7 +54,7 @@ mode_idx_names = {
 
 
 
-### TBI: should scales be able to be modified by ChordQualifiers or something similar, like ChordFactors can?
+### TBI: should scales be able to be modified by ChordModifiers or something similar, like ChordFactors can?
 
 ### TBI: Scales should accept arbitrary degree alterations as init, like 'lydian b3' or whatever
 class Scale:
@@ -283,9 +283,9 @@ class Scale:
         else:
             return IntervalList([self.degree_intervals[self.mod_degree(d)] for d in idx])
 
-    def __call__(self, degree, order=3, qualifiers=None):
+    def __call__(self, degree, order=3, modifiers=None):
         """wrapper around self.chord - returns a chord object built on desired degree"""
-        return self.chord(degree=degree, order=order, qualifiers=qualifiers)
+        return self.chord(degree=degree, order=order, modifiers=modifiers)
 
     def __eq__(self, other):
         if isinstance(other, Scale):
@@ -512,7 +512,7 @@ class Scale:
     def chord(self, degree, order=3, chromatic=False):
         """returns an AbstractChord built on a desired degree of this Scale,
         and of a desired order (where triads are order=3, tetrads are order=4, etc.).
-        optionally accepts chord qualifiers in addition, to modify the chord afterward.
+        optionally accepts chord modifiers in addition, to modify the chord afterward.
         if chromatic=True, the chord is built over scale intervals rather than scale degrees,
         which affects chord construction in scales with chromatic tones like the blues or bebop scales."""
         root_degree = degree
@@ -580,12 +580,12 @@ class Scale:
                         new_interval = Interval.from_cache(new_value, degree=degree)
                         flat_deg_intervals[degree-2] = new_interval
 
-                        flat_deg_qualifier = ChordQualifier(modify={degree:-1})
+                        flat_deg_modifier = ChordModifier(modify={degree:-1})
                         try:
                             flat_deg_scale = Scale(intervals=flat_deg_intervals)
-                            neighbours[flat_deg_qualifier] = flat_deg_scale
+                            neighbours[flat_deg_modifier] = flat_deg_scale
                         except KeyError as e:
-                            log(f'Could not find neighbour of {self.name} with alteration {flat_deg_qualifier.name}: {e}')
+                            log(f'Could not find neighbour of {self.name} with alteration {flat_deg_modifier.name}: {e}')
 
                 if not intv.quality.augmented: # and don't raise augmented degrees (they're already sharp)
                     sharp_deg_intervals = IntervalList(self.diatonic_intervals)
@@ -595,12 +595,12 @@ class Scale:
                         new_interval = Interval.from_cache(new_value, degree=degree)
                         sharp_deg_intervals[degree-2] = new_interval
                         # sharp_deg_intervals[degree] = Interval(sharp_deg_intervals[degree-2]+1, degree)
-                        sharp_deg_qualifier = ChordQualifier(modify={degree:+1})
+                        sharp_deg_modifier = ChordModifier(modify={degree:+1})
                         try:
                             sharp_deg_scale = Scale(intervals=sharp_deg_intervals)
-                            neighbours[sharp_deg_qualifier] = sharp_deg_scale
+                            neighbours[sharp_deg_modifier] = sharp_deg_scale
                         except KeyError as e:
-                            log(f'Could not find neighbour of {self.name} with alteration {sharp_deg_qualifier.name}: {e}')
+                            log(f'Could not find neighbour of {self.name} with alteration {sharp_deg_modifier.name}: {e}')
         return neighbours
     @property
     def neighbouring_scales(self):

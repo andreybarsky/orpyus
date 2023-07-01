@@ -1,4 +1,4 @@
-from ..qualities import Quality, ChordQualifier, parse_chord_qualifiers, cast_alterations
+from ..qualities import Quality, ChordModifier, parse_chord_modifiers, cast_alterations
 from .testing_tools import compare
 
 def unit_test():
@@ -12,10 +12,10 @@ def unit_test():
     compare(Quality.from_offset_wrt_major(-1), Quality('minor'))
     compare(Quality.from_offset_wrt_perfect(1), Quality('augmented'))
 
-    # test chordqualifier parsing:
-    compare(parse_chord_qualifiers('minormajor7 add11b5'),
-    [ChordQualifier('min'), ChordQualifier('major 7'), ChordQualifier('added eleven'), ChordQualifier('flattened fifth')])
+    # test chordmodifier parsing:
+    compare(parse_chord_modifiers('minormajor7 add11b5'),
+    [ChordModifier('min'), ChordModifier('major 7'), ChordModifier('added eleven'), ChordModifier('flattened fifth')])
 
     # test alterations:
-    compare(cast_alterations('#9b11'), [ChordQualifier(make={9:1}), ChordQualifier(make={11:-1})])
-    # compare(parse_chord_qualifiers('maj7#9'), parse_chord_qualifiers('maj9#9'))
+    compare(cast_alterations('#9b11'), [ChordModifier(make={9:1}), ChordModifier(make={11:-1})])
+    # compare(parse_chord_modifiers('maj7#9'), parse_chord_modifiers('maj9#9'))

@@ -5,8 +5,6 @@ from .parsing import degree_names, is_valid_note_name, parse_alteration, acciden
 
 # TBI: double dim/aug qualities?
 
-# TBI: rename ChordQualifiers to ChordModifiers for less confusion with Qualities?
-
 #### interval qualities:
 
 quality_aliases = {'major': ['maj', 'M'],
@@ -110,7 +108,7 @@ class Quality:
         return value_qualities[self.value * -1]
 
     def __eq__(self, other):
-        """qualities are equal to other qualities with the same name/value"""
+        """qualities are emod to other qualities with the same name/value"""
         return self.value == other.value
 
     def __hash__(self):
@@ -187,23 +185,23 @@ DoublyDiminished = DDim = dd = Quality('doubly diminished')
 #################################################################
 
 
-class ChordQualifier:
+class ChordModifier:
     """a class representing the ways in which a Chord can be different from a major triad"""
 
 
 
     def __init__(self, alias=None, remove=None, add=None, make=None, modify=None, verify=None):
-        """each Qualifier can be instantiated by an alias, which searches the aliases of existing Qualifiers,
+        """each Modifier can be instantiated by an alias, which searches the aliases of existing Modifiers,
         but is fully identified by its keyword args:
         remove (int or iterable): specify chord degree/s to remove, error if the specified degree does not exist.
-        add (int, iterable or dict): specify a chord degree to add, and optionally an interval value to modify it by.
+        add (int, iterable or dict): specify a chord degree to add, and optionally an interval value to modify it by. error if that degree already exists
         make (dict): sets a chord degree to a specific distance-from-default, whether it exists or not
-        modify (dict): specify an existing chord degree to modify up or down by some number of semitones
-        verify (dict): specify that certain chord degrees must be satisfied:
+        modify (dict): specify an existing chord degree to modify up or down by some number of semitones. error if it doesn't exist
+        verify (dict): specify that certain chord degrees must be satisfied, or gives error:
                        either present (True), absent (False) or a specific value (int)"""
 
         if alias is not None:
-            assert (remove is None and add is None and modify is None), "ChordQualifier must have either an alias OR some keyword args"
+            assert (remove is None and add is None and modify is None), "ChordModifier must have either an alias OR some keyword args"
             remove, add, make, modify, verify = self._parse_name(alias)
         else:
             # must have one or more keyword args:
@@ -212,7 +210,7 @@ class ChordQualifier:
 
         removals, additions, makes, modifications, verifications = remove, add, make, modify, verify
 
-        # set of the degrees affected by this qualifier:
+        # set of the degrees affected by this modifier:
         self.degrees = set()
         # dict of degree alterations (similar to a ChordFactors object) that gets parsed into a name later:
         # (for display purposes only, we do not guarantee this dict to have any consistent behaviour for strange inputs)
@@ -220,7 +218,7 @@ class ChordQualifier:
 
         # remove any number of degrees:
         if removals is not None:
-            assert isinstance(removals, (int, list, tuple)), f'"remove" arg to ChordQualifier expected int, or iterable of ints, but got: {type(additions)}'
+            assert isinstance(removals, (int, list, tuple)), f'"remove" arg to ChordModifier expected int, or iterable of ints, but got: {type(additions)}'
             self.removals = [removals] if isinstance(removals, int) else removals
             # self.degrees.update(removals)
             self.summary.update({r: False for r in self.removals})
@@ -235,14 +233,14 @@ class ChordQualifier:
             elif isinstance(additions, dict):
                 self.additions = additions
             else:
-                raise TypeError(f'"add" arg to ChordQualifier expected int, or iterable/dict of ints, but got: {type(additions)}')
+                raise TypeError(f'"add" arg to ChordModifier expected int, or iterable/dict of ints, but got: {type(additions)}')
             self.degrees.update(self.additions.keys())
             self.summary.update(self.additions)
         else:
             self.additions = {}
 
         if make is not None:
-            assert isinstance(make, dict), f'"make" arg to ChordQualifier must be a dict, but got: {type(make)}'
+            assert isinstance(make, dict), f'"make" arg to ChordModifier must be a dict, but got: {type(make)}'
             self.makes = makes
             self.degrees.update(self.makes.keys())
             self.summary.update(makes)
@@ -250,9 +248,9 @@ class ChordQualifier:
             self.makes = {}
 
         if modifications is not None:
-            assert isinstance(modifications, dict), f'"modify" arg to ChordQualifier must be a dict, but got: {type(modifications)}'
+            assert isinstance(modifications, dict), f'"modify" arg to ChordModifier must be a dict, but got: {type(modifications)}'
             for d, v in modifications.items():
-                assert v != 0, f'"modify" arg to ChordQualifier tried to modify degree {d} by 0, which does nothing'
+                assert v != 0, f'"modify" arg to ChordModifier tried to modify degree {d} by 0, which does nothing'
                 if d in self.summary:
                     self.summary[d] += v
                 else:
@@ -263,7 +261,7 @@ class ChordQualifier:
             self.modifications = {}
 
         if verifications is not None:
-            assert isinstance(verifications, dict), f'"verify" arg to ChordQualifier must be a dict, but got: {type(verifications)}'
+            assert isinstance(verifications, dict), f'"verify" arg to ChordModifier must be a dict, but got: {type(verifications)}'
             self.verifications = verifications
         else:
             self.verifications = {}
@@ -274,29 +272,29 @@ class ChordQualifier:
         self.summary = {k : self.summary[k] for k in sorted(self.summary.keys())}
 
     def apply(self, factors):
-        """modify a ChordFactors object with the alterations specified in this Qualifier and return the result"""
-        assert isinstance(factors, dict), f"ChordQualifiers can only be applied to ChordFactors or  dicts, but was attempted on: {type(factors)}"
+        """modify a ChordFactors object with the alterations specified in this Modifier and return the result"""
+        assert isinstance(factors, dict), f"ChordModifiers can only be applied to ChordFactors or  dicts, but was attempted on: {type(factors)}"
         # in order: remove, add, modify
         new_factors = factors.copy()
 
         # verify that certain degrees are present, absent or modified:
         for d, v in self.verifications.items():
             if v is False:
-                assert d not in new_factors.keys(), f'ChordQualifier {self.name} verification failed, expected no degree={d} in factors={factors}'
+                assert d not in new_factors.keys(), f'ChordModifier {self.name} verification failed, expected no degree={d} in factors={factors}'
             elif v is True:
-                assert d in new_factors.keys(), f'ChordQualifier {self.name} verification failed, expected degree={d} in factors={factors}'
+                assert d in new_factors.keys(), f'ChordModifier {self.name} verification failed, expected degree={d} in factors={factors}'
             elif isinstance(v, int):
-                assert new_factors[d] == v, f'ChordQualifier {self.name} verification failed, expected degree={d} to be {v}, but was {factors[d]}'
+                assert new_factors[d] == v, f'ChordModifier {self.name} verification failed, expected degree={d} to be {v}, but was {factors[d]}'
 
 
         # remove any number of existing degrees
         for d in self.removals:
-            assert d in factors.keys(), f"ChordQualifier {self.name} tried to remove missing degree={d} from Chord with factors={new_factors}"
+            assert d in factors.keys(), f"ChordModifier {self.name} tried to remove missing degree={d} from Chord with factors={new_factors}"
             del new_factors[d]
 
         # add any number of degrees:
         for d, v in self.additions.items():
-            assert d not in factors.keys(), f"ChordQualifier {self.name} tried to add existing degree={d} to factors because it already exists: {new_factors}"
+            assert d not in factors.keys(), f"ChordModifier {self.name} tried to add existing degree={d} to factors because it already exists: {new_factors}"
             new_factors[d] = v
 
         for d, v in self.makes.items():
@@ -304,23 +302,23 @@ class ChordQualifier:
 
         # modify any number of existing degrees
         for d, v in self.modifications.items():
-            assert d in factors.keys(), f"ChordQualifier {self.name} tried to modify missing degree={d} from factors={new_factors}"
+            assert d in factors.keys(), f"ChordModifier {self.name} tried to modify missing degree={d} from factors={new_factors}"
             new_factors[d] += v
 
         return new_factors
 
     def _parse_name(self, alias):
-        """accepts the alias of a ChordQualifier and returns appropriate parameters"""
-        # re-cast existing ChordQualifier as input:
-        if isinstance(alias, ChordQualifier):
+        """accepts the alias of a ChordModifier and returns appropriate parameters"""
+        # re-cast existing ChordModifier as input:
+        if isinstance(alias, ChordModifier):
             return alias.params
         elif isinstance(alias, str):
-            if alias in alias_qualifiers:
-                alias = alias_qualifiers[alias]
+            if alias in alias_modifiers:
+                alias = alias_modifiers[alias]
             if alias in chord_aliases:
-                # this is already the name of a qualifier e.g. maj7
-                qual = chord_aliases[alias]
-                return qual.params
+                # this is already the name of a modifier e.g. maj7
+                mod = chord_aliases[alias]
+                return mod.params
             elif alias[0] in accidental_offsets:
                 # this is an alteration, like b5 or #11:
                 alter_dict = parse_alteration(alias)
@@ -329,20 +327,20 @@ class ChordQualifier:
 
             else:
                 # this needs to be reduced to one
-                quals = parse_chord_qualifiers(alias)
-                if len(quals) == 1:
-                    return quals[0].params
-                elif len(quals) > 2:
-                    raise ValueError(f'{alias} refers not to one ChordQualifier but to multiple: {quals}')
+                mods = parse_chord_modifiers(alias)
+                if len(mods) == 1:
+                    return mods[0].params
+                elif len(mods) > 2:
+                    raise ValueError(f'{alias} refers not to one ChordModifier but to multiple: {mods}')
                 else:
                     raise Exception
         else:
-            raise TypeError(f'ChordQualifier initialised with alias, expected to be string or ChordQualifier object but got: {type(alias)}')
+            raise TypeError(f'ChordModifier initialised with alias, expected to be string or ChordModifier object but got: {type(alias)}')
 
 
 
     def valid_on(self, other):
-        """returns True if this is a valid qualifier to apply to a given ChordFactors object, and false otherwise"""
+        """returns True if this is a valid modifier to apply to a given ChordFactors object, and false otherwise"""
         # from chords import ChordFactors # lazy import to avoid circular dependencies
         # proxy = ChordFactors(other)
         try:
@@ -353,7 +351,7 @@ class ChordQualifier:
             return True
 
     def describe(self):
-        """Describes this ChordQualifier object in natural language"""
+        """Describes this ChordModifier object in natural language"""
         removals, additions, makes, modifications, verifications = [], [], [], [], []
         for d in self.removals:
             d_name = degree_names[d]
@@ -393,13 +391,13 @@ class ChordQualifier:
 
     @property
     def name(self):
-        """lookup whether this qualifier exists in the definition dicts, otherwise call it unnamed"""
+        """lookup whether this modifier exists in the definition dicts, otherwise call it unnamed"""
         for lookup in [chord_types, chord_modifiers]: #, chord_alterations]:
             rev_lookup = reverse_dict(lookup)
             if self in rev_lookup:
-                qual_name = rev_lookup[self]
+                mod_name = rev_lookup[self]
 
-                return qual_name
+                return mod_name
 
         # no lookup exists: as a last resort, build up from self.summary instead:
         name_str = []
@@ -416,7 +414,7 @@ class ChordQualifier:
     @property
     def order(self):
         """returns, as an integer, the order of the resulting chord
-        if this qualifier were to be applied to a major triad."""
+        if this modifier were to be applied to a major triad."""
         order = 3 # by default
         added_degrees = set(self.degrees)
         # 1, 3 and 5 degrees are implicit, so remove them from set and don't consider them
@@ -446,22 +444,22 @@ class ChordQualifier:
 
 # chord 'types' are those used to characterise a chord in its completeness:
 
-chord_types =  {'m': ChordQualifier(make={3:-1}),
-                '5': ChordQualifier(remove=3, verify={5:0}),
-                'dim': ChordQualifier(make={3:-1, 5:-1}),         # dimininished chord (m3+m3)
-                '+': ChordQualifier(modify={5:+1}, verify={3:0}),   # augmented chord (M3+M3)
-                '6': ChordQualifier(add=6),                         # 6 chord aka add6
+chord_types =  {'m': ChordModifier(make={3:-1}),
+                '5': ChordModifier(remove=3, verify={5:0}),
+                'dim': ChordModifier(make={3:-1, 5:-1}),         # dimininished chord (m3+m3)
+                '+': ChordModifier(modify={5:+1}, verify={3:0}),   # augmented chord (M3+M3)
+                '6': ChordModifier(add=6),                         # 6 chord aka add6
 
-                '7': ChordQualifier(add={7:-1}), # dominant 7th
-                'dim7': ChordQualifier(make={3:-1, 5:-1}, add={7:-2}),
-                '7b5': ChordQualifier(add={7: -1}, modify={5:-1}),
+                '7': ChordModifier(add={7:-1}), # dominant 7th
+                'dim7': ChordModifier(make={3:-1, 5:-1}, add={7:-2}),
+                '7b5': ChordModifier(add={7: -1}, modify={5:-1}),
 
                 # note: m7, m9 etc. are implicit concatenations of 'm' and '7', '9' etc.
                 # and mmaj7 is an implicit concatenation of 'm' and 'maj7'
 
                 # but maj7 is NOT a concatenation of 'maj' and '7', since '7' implies dominant:
-                'maj7': ChordQualifier(add={7: 0}),
-                # 'maj7b5': ChordQualifier(add={7: 0}, modify={5:-1}),
+                'maj7': ChordModifier(add={7: 0}),
+                # 'maj7b5': ChordModifier(add={7: 0}, modify={5:-1}),
 
                 # explicit concatenations: (for chords that ought to be recognised during chord name searching)
                 'm6': ['m', '6'],
@@ -484,16 +482,16 @@ chord_types =  {'m': ChordQualifier(make={3:-1}),
 
 # chord 'modifiers' are those that could conceivably modify an existing chord type:
 # note that this dict order matters, since it affects the order in which chords get named: (e.g. add9sus4 instead of sus4add9)
-chord_modifiers = { 'sus4': ChordQualifier(remove=3, add=4, verify={2:False}),
-                    'sus2': ChordQualifier(remove=3, add=2, verify={4:False}),
+chord_modifiers = { 'sus4': ChordModifier(remove=3, add=4, verify={2:False}),
+                    'sus2': ChordModifier(remove=3, add=2, verify={4:False}),
 
-                    'add4': ChordQualifier(add=4, verify={9: False, 11:False}), # are these real? or just add11s
+                    'add4': ChordModifier(add=4, verify={9: False, 11:False}), # are these real? or just add11s
 
-                    'add9': ChordQualifier(add={9:0}, verify={7: False, 2:False}),
-                    'add11': ChordQualifier(add=11, verify={9: False, 4:False}),
-                    'add13': ChordQualifier(add=13, verify={11: False, 6:False, 5:0}), # verify natural 5 is a kludge, see: Bbdim9add13/C
+                    'add9': ChordModifier(add={9:0}, verify={7: False, 2:False}),
+                    'add11': ChordModifier(add=11, verify={9: False, 4:False}),
+                    'add13': ChordModifier(add=13, verify={11: False, 6:False, 5:0}), # verify natural 5 is a kludge, see: Bbdim9add13/C
 
-                    '(no5)': ChordQualifier(remove=5), # , verify={3: True, 10:False}),    # we don't need verifiers on this because no5s are not registered anywhere, just treated as a valid input
+                    '(no5)': ChordModifier(remove=5), # , verify={3: True, 10:False}),    # we don't need verifiers on this because no5s are not registered anywhere, just treated as a valid input
                     }
 
 # add degree alterations too:
@@ -501,13 +499,13 @@ chord_alterations = {}
 for acc in ['b', '#']:
    for deg in range(5,14):
        acc_val = accidental_offsets[acc]
-       chord_alterations[f'{acc}{deg}'] = ChordQualifier(make={deg:acc_val})
+       chord_alterations[f'{acc}{deg}'] = ChordModifier(make={deg:acc_val})
 
 # union of them all:
 chord_aliases = {**chord_types, **chord_modifiers, **chord_alterations}
 
 # string replacements for chord searching:
-qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
+modifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      'm': ['minor', 'min', '-',],
                      'sus': ['s', 'suspended'],
                      'dim': ['o', '°', 'diminished'],
@@ -553,102 +551,102 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                       # '♭5': ['b5', 'flat5', 'lowered fifth'],
                      }
 
-alias_qualifiers = unpack_and_reverse_dict(qualifier_aliases)
+alias_modifiers = unpack_and_reverse_dict(modifier_aliases)
 
 
-def parse_chord_qualifiers(qual_str, verbose=False, allow_note_names=False):
-    """given a string of qualifiers that typically follows a chord root,
+def parse_chord_modifiers(mod_str, verbose=False, allow_note_names=False):
+    """given a string of modifiers that typically follows a chord root,
     e.g. 7sus4add11♯5,
-    recursively parse them into a list of ChordQualifier objects"""
+    recursively parse them into a list of ChordModifier objects"""
 
-    reduced_quals = reduce_aliases(qual_str, qualifier_aliases, reverse=True, include_keys=True)
+    reduced_mods = reduce_aliases(mod_str, modifier_aliases, reverse=True, include_keys=True)
     if not allow_note_names:
-        if is_valid_note_name(reduced_quals[0], case_sensitive=True):
-            raise ValueError(f'parse_chord_qualifiers got fed a string starting with a note name: {qual_str} (parsed as {reduced_quals})')
+        if is_valid_note_name(reduced_mods[0], case_sensitive=True):
+            raise ValueError(f'parse_chord_modifiers got fed a string starting with a note name: {mod_str} (parsed as {reduced_mods})')
 
-    # we need to catch a special case: 'major' as first qualifier NOT followed by an extended degree number
-    major_in_front = (len(reduced_quals) >= 1 and reduced_quals[0] == 'maj')
-    followed_by_degree = (len(reduced_quals) >= 2 and reduced_quals[1] in ['7', '9', '11', '13'])
+    # we need to catch a special case: 'major' as first modifier NOT followed by an extended degree number
+    major_in_front = (len(reduced_mods) >= 1 and reduced_mods[0] == 'maj')
+    followed_by_degree = (len(reduced_mods) >= 2 and reduced_mods[1] in ['7', '9', '11', '13'])
     if major_in_front:
         if not followed_by_degree:
-            reduced_quals = reduced_quals[1:]
+            reduced_mods = reduced_mods[1:]
 
-    standard_form_qualifier_string = ''.join(reduced_quals)
+    standard_form_modifier_string = ''.join(reduced_mods)
 
-    raw_qual_ops = reduce_aliases(standard_form_qualifier_string, chord_aliases, discard=True)
+    raw_mod_ops = reduce_aliases(standard_form_modifier_string, chord_aliases, discard=True)
 
     # have we ended up with an empty list, even though we had something OTHER than just 'major' in the input?
-    found_nothing = len(raw_qual_ops) == 0 and not major_in_front
-    found_major_and_nothing = len(raw_qual_ops) == 0 and major_in_front and len(reduced_quals) >= 2
+    found_nothing = len(raw_mod_ops) == 0 and not major_in_front
+    found_major_and_nothing = len(raw_mod_ops) == 0 and major_in_front and len(reduced_mods) >= 2
     if found_nothing or found_major_and_nothing:
-        raise ValueError(f"Tried to parse chord qualifiers but did not find any matches for: {''.join(reduced_quals)}")
+        raise ValueError(f"Tried to parse chord modifiers but did not find any matches for: {''.join(reduced_mods)}")
 
-    # raw_qual_ops might include iterables (concatenations),
+    # raw_mod_ops might include iterables (concatenations),
     # so we loop through those and process them:
     # try:
-    qual_ops = cast_qualifiers(raw_qual_ops, verbose=verbose)
+    mod_ops = cast_modifiers(raw_mod_ops, verbose=verbose)
     # except ValueError as e:
-    #     raise Exception(f'Could not understand {qual_str} (parsed as {reduced_quals}) as valid chord alias.\nSpecific issue: {e}')
+    #     raise Exception(f'Could not understand {mod_str} (parsed as {reduced_mods}) as valid chord alias.\nSpecific issue: {e}')
 
-    return qual_ops
+    return mod_ops
 
-def cast_qualifiers(qual, verbose=False):
-    """accepts a ChordQualifier object, a string that casts to one, or a list of either,
-    and recursively returns a strict list of ChordQualifier objects"""
-    qual_list = []
-    if isinstance(qual, ChordQualifier):
+def cast_modifiers(mod, verbose=False):
+    """accepts a ChordModifier object, a string that casts to one, or a list of either,
+    and recursively returns a strict list of ChordModifier objects"""
+    mod_list = []
+    if isinstance(mod, ChordModifier):
         if verbose:
-            print(f'{qual} is already a ChordQualifier, appending...')
-        qual_list.append(qual)
-    elif isinstance(qual, str):
+            print(f'{mod} is already a ChordModifier, appending...')
+        mod_list.append(mod)
+    elif isinstance(mod, str):
         # could be a string that exists in chord_types or chord_modifiers
-        # so fetch it and convert to ChordQualifier object(or list of such)
-        if qual in chord_aliases:
-            fetched_qual = chord_aliases[qual]
-            if isinstance(fetched_qual, ChordQualifier):
-                qual_list.append(fetched_qual)
-            elif isinstance(fetched_qual, (list, tuple)):
+        # so fetch it and convert to ChordModifier object(or list of such)
+        if mod in chord_aliases:
+            fetched_mod = chord_aliases[mod]
+            if isinstance(fetched_mod, ChordModifier):
+                mod_list.append(fetched_mod)
+            elif isinstance(fetched_mod, (list, tuple)):
                 if verbose:
-                    print(f'Recursively going down a level to parse: {fetched_qual} (which turns out to be a list)')
-                qual_list.extend(cast_qualifiers(fetched_qual, verbose=verbose))
-            elif isinstance(fetched_qual, str):
-                if fetched_qual in chord_aliases:
-                    qual_list.extend(cast_qualifiers(fetched_qual, verbose=verbose))
+                    print(f'Recursively going down a level to parse: {fetched_mod} (which turns out to be a list)')
+                mod_list.extend(cast_modifiers(fetched_mod, verbose=verbose))
+            elif isinstance(fetched_mod, str):
+                if fetched_mod in chord_aliases:
+                    mod_list.extend(cast_modifiers(fetched_mod, verbose=verbose))
                 else:
-                    raise ValueError(f'Invalid string provided to cast_qualifiers: {qual} (parsed as {fetched_qual}) does not indicate a chord type')
+                    raise ValueError(f'Invalid string provided to cast_modifiers: {mod} (parsed as {fetched_mod}) does not indicate a chord type')
         else:
             # # could be a chord alteration, like ♭5 or ♯7
-            # alter_dict = parse_alteration(qual)
-            # qual_list.append(ChordQualifier(make=alter_dict))
-            log(f'Found a possible chord alteration: {qual}')
-            quals = cast_alterations(qual)
-            log(f'Parsed as: {quals}')
-            qual_list.extend(quals)
-            # if (len(qual) in [2,3]) and (qual[0] in accidental_ops):
-            #     degree = qual[1:]
-            #     op = accidental_ops[qual[0]]
-            #     qual_list.append(ChordQualifier(make={degree:op}))
+            # alter_dict = parse_alteration(mod)
+            # mod_list.append(ChordModifier(make=alter_dict))
+            log(f'Found a possible chord alteration: {mod}')
+            mods = cast_alterations(mod)
+            log(f'Parsed as: {mods}')
+            mod_list.extend(mods)
+            # if (len(mod) in [2,3]) and (mod[0] in accidental_ops):
+            #     degree = mod[1:]
+            #     op = accidental_ops[mod[0]]
+            #     mod_list.append(ChordModifier(make={degree:op}))
             # else:
 
-            # raise ValueError(f'Invalid string provided to cast_qualifiers: {qual} \n  (expected a chord_type, chord_modifier or chord_alteration)')
-    elif isinstance(qual, (list, tuple)):
+            # raise ValueError(f'Invalid string provided to cast_modifiers: {mod} \n  (expected a chord_type, chord_modifier or chord_alteration)')
+    elif isinstance(mod, (list, tuple)):
         # is an iterable of acceptable objects, so call recursively
-        for each_qual in qual:
+        for each_mod in mod:
             if verbose:
                 from ipdb import set_trace; set_trace(context=30)
-                print(f'Recursively going down a level to parse: {each_qual} (which is an item in a list)')
-            qual_list.extend(cast_qualifiers(each_qual, verbose=verbose))
+                print(f'Recursively going down a level to parse: {each_mod} (which is an item in a list)')
+            mod_list.extend(cast_modifiers(each_mod, verbose=verbose))
     else:
-        raise TypeError(f'cast_qualifiers expected a ChordQualifier, or a string that casts to one, or a list/tuple of either, but got: {type(qual)}')
-    return qual_list
+        raise TypeError(f'cast_modifiers expected a ChordModifier, or a string that casts to one, or a list/tuple of either, but got: {type(mod)}')
+    return mod_list
 
 
 def cast_alterations(name):
     """given a string that contains one or more chord alterations,
-    like '#9' or 'b9b11', parse them into a list of ChordQualifiers"""
+    like '#9' or 'b9b11', parse them into a list of ChordModifiers"""
 
     # assume that 'name' has already been reduced to standard form,
-    # i.e. qualifier_aliases keys
+    # i.e. modifier_aliases keys
 
     # loop through the string to parse out accidentals
     # and the degrees they modify:
@@ -680,10 +678,10 @@ def cast_alterations(name):
     degree = int(''.join(current_degree_chars))
     accidental_degrees.append((current_accidental, degree))
 
-    # loop through alterations and make ChordQualifier objects:
-    qualifiers = []
+    # loop through alterations and make ChordModifier objects:
+    modifiers = []
     for acc,degree in accidental_degrees:
         acc_value = accidental_offsets[acc]
-        qual = ChordQualifier(make={degree: acc_value})
-        qualifiers.append(qual)
-    return qualifiers
+        mod = ChordModifier(make={degree: acc_value})
+        modifiers.append(mod)
+    return modifiers
