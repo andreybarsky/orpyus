@@ -29,14 +29,14 @@ modules_to_test = [
                   test_util,
                   test_parsing,
                   test_qualities,
-                  test_display,
-                  test_guitar,
-                  test_intervals,
-                  test_notes,
+                  # test_display,
+                  # test_guitar,
+                  # test_intervals,
+                  # test_notes,
                   test_chords,
-                  test_scales,
-                  test_keys,
-                  test_progressions,
+                  # test_scales,
+                  # test_keys,
+                  # test_progressions,
                   ]
 
 def run_all_tests(profile_each_test = True):

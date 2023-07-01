@@ -472,7 +472,7 @@ chord_types =  {'m': ChordQualifier(make={3:-1}),
                 'dim9': ['dim7', '♮9'],    # diminished 9th
                 'dmin9': ['dim7', '♭9'],   # diminished minor 9th
                 'hdmin9': ['hdim7', '♭9'],   # half diminished minor 9th
-                '7#9': ['7', '♯9'],        # dominant 7 sharp 9, i.e. Hendrix chord
+                # '7#9': ['7', '♯9'],        # dominant 7 sharp 9, i.e. Hendrix chord
 
                 '11': ['9', '♮11'],        # dominant 11th
                 'maj11': ['maj9', '♮11'],  # major 11th
@@ -487,11 +487,8 @@ chord_types =  {'m': ChordQualifier(make={3:-1}),
 chord_modifiers = { 'sus4': ChordQualifier(remove=3, add=4, verify={2:False}),
                     'sus2': ChordQualifier(remove=3, add=2, verify={4:False}),
 
-                    # why does including these slow down chord.unit_test() so much?
-                    'b5': ChordQualifier(verify={5:0}, make={5:-1}),
-                    '#5': ChordQualifier(verify={5:0}, make={5:+1}),
-
                     'add4': ChordQualifier(add=4, verify={9: False, 11:False}), # are these real? or just add11s
+
                     'add9': ChordQualifier(add={9:0}, verify={7: False, 2:False}),
                     'add11': ChordQualifier(add=11, verify={9: False, 4:False}),
                     'add13': ChordQualifier(add=13, verify={11: False, 6:False, 5:0}), # verify natural 5 is a kludge, see: Bbdim9add13/C
@@ -499,10 +496,15 @@ chord_modifiers = { 'sus4': ChordQualifier(remove=3, add=4, verify={2:False}),
                     '(no5)': ChordQualifier(remove=5), # , verify={3: True, 10:False}),    # we don't need verifiers on this because no5s are not registered anywhere, just treated as a valid input
                     }
 
+# add degree alterations too:
+chord_alterations = {}
+for acc in ['b', '#']:
+   for deg in range(5,14):
+       acc_val = accidental_offsets[acc]
+       chord_alterations[f'{acc}{deg}'] = ChordQualifier(make={deg:acc_val})
 
 # union of them all:
-chord_aliases = {**chord_types, **chord_modifiers}
-
+chord_aliases = {**chord_types, **chord_modifiers, **chord_alterations}
 
 # string replacements for chord searching:
 qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
@@ -519,6 +521,15 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      # so we map 'dom' to nothing and it works fine
                      '': ['dominant', 'dom'],
 
+                     # another kludge: "maj7", "maj9" in particular need to be caught as
+                     # explicit concatenations:
+                     'maj7': ['maj7', 'add7'],
+                     # (add7 is an awkward case because a maj7 shouldn't really be called that,
+                     # but if you DO say 'add7' it implies a natural rather than a flat 7)
+                     'maj9': ['maj9'],
+                     'maj11': ['maj11'],
+                     'maj13': ['maj13'],
+
                      '2': ['two', '2nd', 'second'],
                      '4': ['four', '4th', 'fourth'],
                      '5': ['five', '5th', 'fifth', '(no 3)', 'power', 'power chord', '⁵'],
@@ -533,7 +544,7 @@ qualifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      # special case, otherwise 'dmin9' doesn't parse correctly:
                      'hdmin9': ['hdmin9', 'hdimm9', 'hdimmin9'],
                      'dmin9': ['dmin9', 'dimm9', 'dimmin9'],
-                     '7b9': ['dm9', 'domin9', 'domm9'],
+                     # '7b9': ['dm9', 'domin9', 'domm9'],
 
                       '#': ['♯', 'sharp', 'sharpened', 'sharped', 'raised'],
                       'b': ['♭', 'flat', 'flattened', 'flatted', 'lowered'],
@@ -562,7 +573,9 @@ def parse_chord_qualifiers(qual_str, verbose=False, allow_note_names=False):
         if not followed_by_degree:
             reduced_quals = reduced_quals[1:]
 
-    raw_qual_ops = reduce_aliases(''.join(reduced_quals), chord_aliases, discard=True)
+    standard_form_qualifier_string = ''.join(reduced_quals)
+
+    raw_qual_ops = reduce_aliases(standard_form_qualifier_string, chord_aliases, discard=True)
 
     # have we ended up with an empty list, even though we had something OTHER than just 'major' in the input?
     found_nothing = len(raw_qual_ops) == 0 and not major_in_front
@@ -605,8 +618,12 @@ def cast_qualifiers(qual, verbose=False):
                     raise ValueError(f'Invalid string provided to cast_qualifiers: {qual} (parsed as {fetched_qual}) does not indicate a chord type')
         else:
             # # could be a chord alteration, like ♭5 or ♯7
-            alter_dict = parse_alteration(qual)
-            qual_list.append(ChordQualifier(make=alter_dict))
+            # alter_dict = parse_alteration(qual)
+            # qual_list.append(ChordQualifier(make=alter_dict))
+            log(f'Found a possible chord alteration: {qual}')
+            quals = cast_alterations(qual)
+            log(f'Parsed as: {quals}')
+            qual_list.extend(quals)
             # if (len(qual) in [2,3]) and (qual[0] in accidental_ops):
             #     degree = qual[1:]
             #     op = accidental_ops[qual[0]]
@@ -624,3 +641,49 @@ def cast_qualifiers(qual, verbose=False):
     else:
         raise TypeError(f'cast_qualifiers expected a ChordQualifier, or a string that casts to one, or a list/tuple of either, but got: {type(qual)}')
     return qual_list
+
+
+def cast_alterations(name):
+    """given a string that contains one or more chord alterations,
+    like '#9' or 'b9b11', parse them into a list of ChordQualifiers"""
+
+    # assume that 'name' has already been reduced to standard form,
+    # i.e. qualifier_aliases keys
+
+    # loop through the string to parse out accidentals
+    # and the degrees they modify:
+    accidental_degrees = []
+
+    current_accidental = None
+    current_degree_chars = []
+    for char in name:
+        if char in accidental_offsets:
+
+            if len(current_degree_chars) == 0:
+                # start of loop
+                current_accidental = char
+            else:
+                # found a second-or-more accidental:
+                # so turn the previous degree into an int:
+                degree = int(''.join(current_degree_chars))
+                accidental_degrees.append((current_accidental, degree))
+                # and start a new alteration:
+                current_accidental = char
+                current_degree_chars = []
+
+        else:
+            # must be a number! if it is, append to current degree
+            assert char.isnumeric()
+            current_degree_chars.append(char)
+
+    # add last-parsed-one to list as well:
+    degree = int(''.join(current_degree_chars))
+    accidental_degrees.append((current_accidental, degree))
+
+    # loop through alterations and make ChordQualifier objects:
+    qualifiers = []
+    for acc,degree in accidental_degrees:
+        acc_value = accidental_offsets[acc]
+        qual = ChordQualifier(make={degree: acc_value})
+        qualifiers.append(qual)
+    return qualifiers

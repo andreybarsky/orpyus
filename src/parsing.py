@@ -7,7 +7,7 @@ from .util import reverse_dict, unpack_and_reverse_dict, log
 # map semitone offset values to accidental character aliases:
 offset_accidentals = {-2: ['𝄫', '♭♭', 'bb'],
                 -1: ['♭', 'b'],
-                 0: ['', '♮'],
+                 0: ['', '♮', 'N'],
                  1: ['♯', '#'],
                  2: ['𝄪', '♯♯', '##']}
 # map accidental aliases to offsets:

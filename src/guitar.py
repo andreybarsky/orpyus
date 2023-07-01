@@ -14,11 +14,12 @@ class String(OctaveNote):
 
 
 tunings = {'standard':(String('E2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')),
+              'Eb':   (String('Eb2'),String('Ab2'),String('Db2'),String('Gb3'),String('Bb3'),String('Eb4')), # i.e. GnR tuning
            'dropD':   (String('D2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')),
            'dropC':   (String('C2'), String('G2'), String('C3'), String('F3'), String('A3'), String('D4')),
            'dropB':   (String('B1'), String('Gb2'), String('B2'), String('E3'), String('Ab3'), String('Db4')),
            'openE':   (String('E2'), String('B2'), String('E3'), String('G#3'), String('B3'), String('E4')),
-           # 'DADGAD':   (String('D2'), String('A2'), String('D3'), String('G3'), String('A3'), String('D4')),
+          'celtic':   (String('D2'), String('A2'), String('D3'), String('G3'), String('A3'), String('D4')),
            'openD':   (String('D2'), String('A2'), String('D3'), String('F#3'), String('A3'), String('D4')),
            'openC':   (String('C2'), String('G2'), String('C3'), String('G3'), String('C4'), String('E4')),
            'openG':   (String('D2'), String('G2'), String('D3'), String('G3'), String('B3'), String('D4')),

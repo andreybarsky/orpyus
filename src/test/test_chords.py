@@ -12,6 +12,9 @@ def unit_test():
     compare(Chord('Am/C').notes, Chord('C6(no5)').notes)
     compare(Chord('Am/C').intervals, Chord('C6(no5)').intervals)
 
+    # test recursive/arbitrary alterations:
+    compare(Chord('Emaj7#9'), Chord('Eadd#9add7'))
+
     # test magic methods: transposition:
     compare(Chord('Caug7') + Interval(4), Chord('Eaug7'))
 

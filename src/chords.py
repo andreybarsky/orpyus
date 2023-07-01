@@ -181,8 +181,12 @@ class AbstractChord:
                 the bass note is the X+1th note in the chord, with notes ordered ascending.
         or
             'inversion_degree' as int, denoting the degree that the chord's bass note is on.
-
         note that both are ignored if the 'name' arg contains a slash."""
+
+        if type(name) == str:
+            self.assigned_name = name # record the name this chord was initialised by
+        else:
+            self.assigned_name = None
 
         self.factors, self.root_intervals, self.inversion = self._parse_input(name, factors, intervals, inversion, inversion_degree, qualifiers)
 
@@ -197,10 +201,10 @@ class AbstractChord:
 
         self.quality = self._determine_quality()
 
-        self.assigned_name = None
 
 
-    def _parse_input(self, name, factors, intervals, inversion, inversion_degree, qualifiers, _allow_note_name=False):
+
+    def _parse_input(self, name, factors, intervals, inversion, inversion_degree, qualifiers, _allow_note_name=False, max_inversion_rarity=2):
         """takes valid inputs to AbstractChord and parses them into factors, intervals and inversion.
         (see docstring for AbstractChord.__init__)"""
 
@@ -268,7 +272,8 @@ class AbstractChord:
                 supplied_interval_chord_name = intervals_to_chord_names[intervals]
                 supplied_rarity = chord_name_rarities[supplied_interval_chord_name]
             else:
-                supplied_rarity = 10 # max possible
+                # supplied_rarity = 10 # max possible
+                supplied_rarity = max_inversion_rarity # call this an inversion of a more common chord
 
             # search for possible inversions if this is not already one,
             # and adopt the most common, if it's more common than what we've been given:
@@ -282,9 +287,10 @@ class AbstractChord:
                     if isinstance(self, Chord):
                         self.root -= intervals[inversion]
                 else:
-                    # we've failed to find an inversion, so just use the intervals and root as they are
-                    if intervals not in intervals_to_chord_names:
-                        log(f'Failed to find a matching chord or inversion for intervals: {intervals}')
+                    # we've failed to find an inversion, so just use the intervals as they are
+                    inversion = 0
+                    # if intervals not in intervals_to_chord_names:
+                    #     log(f'Failed to find a matching chord or inversion for intervals: {intervals}')
 
             # build factors by looping through intervals:
             factors = ChordFactors({1:0}) # note: NOT a major triad
@@ -412,7 +418,7 @@ class AbstractChord:
             # fall back on name given to an exotic chord like Am7/B if one was assigned
             return self.assigned_name
         else:
-            return f'(?){inv_string}'
+            return f'(altered){inv_string}'
 
     @property
     def rarity(self):
@@ -706,10 +712,9 @@ class Chord(AbstractChord):
                 # prefer_sharps = ('#' in name[1:3])
                 prefer_sharps = True
 
-        self.assigned_name = None # remains None unless a registered chord is not identified during init
-
         # re-parse args to detect if 'name' is a list of notes, a list of intervals, or a dict of chordfactors:
         name, root, factors, intervals, notes = self._reparse_args(name, root, factors, intervals, notes)
+
 
         if notes is not None: # initialise from ascending note list by casting notes as intervals from root
             # ignore intervals/factors/root inputs
@@ -719,9 +724,13 @@ class Chord(AbstractChord):
             # recover intervals and root, and continue to init as normal:
             intervals = NoteList(notes).ascending_intervals()
             root = note_list[0]
+            if log.verbose:
+                import pdb; pdb.set_trace()
 
         # if name is a proper chord name like 'C' or 'Amaj' or 'D#sus2', separate it out into root and suffix components:
         self.root, suffix = self._parse_root(name, root)
+
+        self.assigned_name = suffix # the (root-less) name this chord was initialised by (or None, if not initialised by a name)
 
         assert self.root is not None
 
@@ -732,7 +741,7 @@ class Chord(AbstractChord):
 
         # recover factor offsets, intervals from root, and inversion position from input args:
         self.factors, self.root_intervals, inversion = self._parse_input(suffix, factors, intervals, inversion, inversion_degree, qualifiers, _allow_note_name=True)
-        # note that while self.inversion in AbstractChord comes out as strictly int or None
+        # note that while 'inversion' in AbstractChord comes out as strictly int or None
         # here we allow it to be a string denoting the bass note, which we'll correct in a minute
 
         # mapping of chord factors to intervals from tonic:
@@ -789,14 +798,16 @@ class Chord(AbstractChord):
 
     @staticmethod
     def _parse_root(name, root):
-        """takes the class's name and root args, and determines which has been given.
+        """takes the class init method's name and root args, and determines which has been given.
         returns root as a Note object, and chord suffix as string or None"""
         if name is not None:
+            # assume no root given
             root_name, suffix = parsing.note_split(name)
             root = Note.from_cache(root_name)
         elif root is not None:
+            # assume no name given
             root = Note.from_cache(root)
-            suffix = name
+            suffix = None # name # i.e. None
         else:
             raise Exception('neither name nor root provided to Chord init, we need one or the other!')
         return root, suffix
