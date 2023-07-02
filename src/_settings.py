@@ -1,3 +1,15 @@
+
+############# tuning settings:
+
+### TUNING_MODE controls which system of tuning is used to
+### calculate note/interval pitches. must be one of 'JUST' or 'EQUAL':
+TUNING_MODE = 'JUST'
+
+# under JUST-intonation tuning, intervals are built from clean integer ratios.
+# (in this case, restricted to ratios allowed by 5-limit tuning, i.e. powers of 2*3*5 )
+# under EQUAL-temperament tuning, semitones are spaced equally on a log scale.
+
+
 ############# preference settings:
 
 ### DEFAULT_SHARPS controls whether accidental ('black') notes are spelled
@@ -19,7 +31,7 @@ MARKERS = { 'Note': '♩',
              'Key': '𝄞 ',
             }
 
-# BRACKETS are used similarly to markers, but placed around the objects they contain:
+### BRACKETS are used similarly to markers, but placed around the objects they contain:
 BRACKETS = { 'Interval': ['‹', '›'],
          'IntervalList': ['𝄁', ' 𝄁'],
              'NoteList': ['𝄃', ' 𝄂'],
@@ -41,8 +53,8 @@ BRACKETS = { 'Interval': ['‹', '›'],
 ### but feels a little nicer for interactive use.
 PRE_CACHE_CHORDS = True   # applies to both Chords and AbstractChords
 PRE_CACHE_SCALES = True   # applies to both Scales and Keys
-### Notes and Intervals are always pre-cached, since there are so few, they are
-### cheap to init, and they get initialised often inside other class internals.
+# Notes and Intervals are always pre-cached, since there are so few, they are
+# cheap to init, and they get initialised often inside other class internals.
 
 # DYNAMIC_CACHING determines if Intervals/Chords/Scales etc. continue to be
 # actively cached after import, whenever an un-cached object is initialised.

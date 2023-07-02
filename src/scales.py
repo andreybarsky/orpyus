@@ -7,50 +7,95 @@ from .parsing import num_suffixes, numerals_roman
 from . import notes, _settings
 
 
-# standard keys are: natural/melodic/harmonic majors and minors
-
-# dict mapping 'standard' key intervals to all accepted aliases for scale qualities
-# 'proper' name is listed last, short suffix is listed first:
+# 'standard' scales are: natural/melodic/harmonic majors and minors.
+standard_scale_names = {'natural major', 'natural minor', 'harmonic major', 'harmonic minor', 'melodic major', 'melodic minor'}
+base_scale_names = {'natural major', 'melodic minor', 'harmonic minor', 'harmonic major'}
+natural_scale_names = {'natural major', 'natural minor'}
+# this dict maps scale intervals (in canonical, stripped form) to all accepted aliases
+# at first just for the standard scales, but it gets filled out later
 interval_scale_names = {
-    IntervalList(Maj2, Maj3, Per4, Per5, Maj6, Maj7): ['', 'maj', 'M', 'major', 'natural major' ],
-    IntervalList(Maj2, Min3, Per4, Per5, Min6, Min7): ['m', 'min', 'minor', 'natural minor' ],
+    IntervalList(M2, M3, P4, P5, M6, M7): ['', 'maj', 'M', 'major', 'natural major' ],
+    IntervalList(M2, m3, P4, P5, m6, m7): ['m', 'min', 'minor', 'natural minor' ],
 
-    IntervalList(Maj2, Maj3, Per4, Per5, Min6, Maj7): ['harmonic major', 'M harmonic', 'major harmonic', 'maj harmonic', 'harmonic major'],
-    IntervalList(Maj2, Min3, Per4, Per5, Min6, Maj7): ['harmonic minor', 'm harmonic', 'minor harmonic', 'min harmonic', 'harmonic minor'],
-    IntervalList(Maj2, Maj3, Per4, Per5, Min6, Min7): ['melodic major', 'M melodic', 'major melodic', 'melodic major', 'maj melodic', 'melodic major'],
-    IntervalList(Maj2, Min3, Per4, Per5, Maj6, Maj7): ['melodic minor', 'm melodic', 'minor melodic', 'min melodic', 'jazz minor', 'melodic minor ascending','melodic minor'], # note: ascending only
+    IntervalList(M2, M3, P4, P5, m6, M7): ['harmonic major', 'M harmonic', 'major harmonic', 'maj harmonic', 'harmonic major'],
+    IntervalList(M2, m3, P4, P5, m6, M7): ['harmonic minor', 'm harmonic', 'minor harmonic', 'min harmonic', 'harmonic minor'],
+    IntervalList(M2, M3, P4, P5, m6, m7): ['melodic major', 'M melodic', 'major melodic', 'melodic major', 'maj melodic', 'melodic major'],
+    IntervalList(M2, m3, P4, P5, M6, M7): ['melodic minor', 'm melodic', 'minor melodic', 'min melodic', 'jazz minor', 'melodic minor ascending','melodic minor'], # note: ascending only
     # "melodic minor" can refer to using the the natural minor scale when descending, but that is TBI
     }
 scale_name_intervals = unpack_and_reverse_dict(interval_scale_names)
-standard_scale_names = list([names[-1] for names in interval_scale_names.values()])
-standard_scale_suffixes = list([names[0] for names in interval_scale_names.values()])
+# standard_scale_suffixes = list([names[0] for names in interval_standard_scale_names.values()])
 
-#### here we define the 'base scales': natural major, melodic minor, harmonic minor/major
-# which are those scales that are not modes of other scales
-# and the names their modes are known by
-base_scale_names = {'natural major', 'melodic minor', 'harmonic minor', 'harmonic major'} # note that melodic major modes are just rotations of melodic minor modes
-# this is technically true in the reverse as well, but 'melodic minor' is more common / well-known than mel. major
-natural_scale_names = {'natural major', 'natural minor'}
-# parallels = {'natural major': 'natural minor', 'natural minor': 'natural major',
-#              'harmonic major': 'harmonic minor', 'harmonic minor': 'harmonic major'}
 
 # this dict maps base scale names to dicts that map scale degrees to the modes of that base scale
 mode_idx_names = {
   'natural major': {1: ['ionian'], 2: ['dorian'], 3: ['phrygian'], 4: ['lydian'],
                     5: ['mixolydian'], 6: ['aeolian'], 7: ['locrian']},
-  'melodic minor': {1: ['athenian', 'melodic minor ascending', 'jazz minor'], 2: ['phrygian ♯6', 'cappadocian', 'dorian ♭2'],
-                    3: ['lydian augmented', 'asgardian'], 4: ['lydian dominant', 'pontikonisian'],
-                    5: ['aeolian dominant', 'olympian', 'mixolydian ♭6'],
-                    6: ['half-diminished', 'sisyphean', 'aeolocrian'], 7: ['altered dominant', 'palamidian']},
+  'melodic minor': {1: ['athenian', 'melodic minor ascending', 'jazz minor'], 2: ['cappadocian', 'phrygian ♯6', 'dorian ♭2'],
+                    3: ['asgardian', 'lydian augmented'], 4: ['pontikonisian', 'lydian dominant'],
+                    5: ['olympian', 'aeolian dominant', 'mixolydian ♭6'],
+                    6: ['sisyphean', 'aeolocrian', 'half-diminished'], 7: ['palamidian', 'altered dominant']},
  'harmonic minor': {1: ['harmonic minor'], 2: ['locrian ♯6'], 3: ['ionian ♯5'], 4: ['ukrainian dorian'],
                     5: ['phrygian dominant'], 6: ['lydian ♯2'], 7: ['altered diminished']},
- 'harmonic major': {1: ['harmonic major'], 2: ['blues', 'dorian ♭5', 'locrian ♯2♯6'], 3: ['phrygian ♭4', 'altered dominant ♯5'],
+ 'harmonic major': {1: ['harmonic major'], 2: ['blues heptatonic', 'dorian ♭5', 'locrian ♯2♯6'], 3: ['phrygian ♭4', 'altered dominant ♯5'],
                     4: ['lydian minor', 'lydian ♭3', 'melodic minor ♯4'], 5: ['mixolydian ♭2'],
                     6: ['lydian augmented ♯2'], 7: ['locrian ♭♭7']}
                  }
 
 ################################################################################
-### Scale, Subscale, and ScaleDegree classes
+
+class ScaleDegree(int):
+    subscript_numerals = '₀₁₂₃₄₅₆₇₈₉'
+    """class representing the degrees of a scale with associated mod-operations"""
+    def __new__(cls, degree, num_degrees=7):
+        extended_degree = degree
+        if (degree > num_degrees) or (degree < 1):
+            degree = ((degree -1 ) % num_degrees) + 1
+        x = int.__new__(cls, degree)
+        x.degree = degree
+        x.num_degrees = num_degrees # i.e. scale size
+        x.extended_degree = extended_degree
+        return x
+
+    # mathematical operations on scale degrees preserve extended degree and scale size:
+    def __add__(self, other):
+        assert not isinstance(other, Interval), "ScaleDegrees cannot be added to intervals"
+        return ScaleDegree(self.extended_degree + int(other), num_degrees=self.num_degrees)
+    def __sub__(self, other):
+        assert not isinstance(other, Interval), "ScaleDegrees cannot be added to intervals"
+        return ScaleDegree(self.extended_degree - int(other), num_degrees=self.num_degrees)
+
+    def __str__(self):
+        # integer combined with caret above:
+        num_char = f'{int(self)}\u0311'
+        if self.num_degrees != 7:
+            # show that this is a degree of a non-heptatonic scale with a subscript marker:
+            if self.num_degrees < 10:
+                # single unicode integer
+                addendum = self.subscript_numerals[self.num_degrees]
+            else:
+                # combine multiple unicode integers:
+                addendum = ''.join([self.subscript_numerals[int(n)] for n in str(self.num_degrees)])
+            return num_char + addendum
+        else:
+            return num_char
+
+    def __repr__(self):
+        return str(self)
+
+    #
+    # def __add__(self, other):
+    #     return ScaleDegree(self + other)
+    #
+    # def __sub__(self, other):
+    #     return ScaleDegree(self - other)
+
+
+# ScaleFactors work exactly as ChordFactors, so this is just a wrapper:
+class ScaleFactors(ChordFactors):
+    pass
+
+### Scale class that spans diatonic scales, subscales, blues scales, octatonic scales and all the rest:
 
 
 
@@ -434,7 +479,7 @@ class Scale:
         """returns the hexatonic blues subscale of the natural major or minor scales.
         will probably not function at all for other scales."""
         if self.quality.major and self.is_natural:
-            hex_scale = self.subscale(degrees=[1,2,3,5,6], chromatic_intervals=[Min3])
+            hex_scale = self.subscale(degrees=[1,2,3,5,6], chromatic_intervals=[m3])
         elif self.quality.minor and self.is_natural:
             hex_scale = self.subscale(degrees=[1,3,4,5,7], chromatic_intervals=[Dim5])
         else:
@@ -1200,7 +1245,7 @@ def get_modes(scale_name):
 
 def rotate_mode_intervals(scale_intervals_from_tonic, degree):
     """given a list of 6 intervals from tonic that describe a key/scale,
-    e.g.: (maj2, maj3, per4, per5, maj6, maj7),
+    e.g.: (M2, M3, P4, P5, M6, M7),
     and an integer degree between 1 and 7 (inclusive),
     return the mode of that scale corresponding to that degree"""
     assert len(scale_intervals_from_tonic) == 6, """list of intervals passed to rotate_mode_intervals must exclude tonics (degrees 1 and 8), and so should be exactly 6 intervals long"""
