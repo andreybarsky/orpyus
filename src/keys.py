@@ -1,9 +1,8 @@
+from . import notes, parsing, _settings
 from .intervals import Interval, IntervalList
 from .notes import Note, NoteList
-from . import notes
 from .scales import Scale, Subscale, NaturalMajor, NaturalMinor, interval_mode_names, parallel_scales
 from .chords import Chord, AbstractChord
-from . import parsing
 from .util import check_all, precision_recall, reverse_dict, log
 
 from collections import Counter
@@ -180,34 +179,6 @@ class Key(Scale):
     def scale(self):
         """returns the abstract Scale associated with this key"""
         return Scale(self.scale_name)
-
-    @property
-    def name(self):
-        suffix = Scale.get_suffix(self)
-        # leave a space between tonic and scale name if the scale name is a suffix:
-        if suffix != self.scale_name:
-            gap = ''
-        else:
-            gap = ' '
-        return f'{self.tonic.name}{gap}{suffix}'
-
-    @property
-    def _marker(self):
-        return '𝄞'
-
-    def __str__(self):
-        return f'{self._marker} Key of {self.name}'
-
-    def __repr__(self):
-        lb, rb = self.notes._brackets
-        if self.chromatic_notes is None:
-            note_names = [str(n) for n in self.notes]
-        else:
-            # show diatonic notes as in normal note list, and chromatic notes in square brackets
-            note_names = [f'[{n}]' if n in self.chromatic_notes  else str(n)  for n in self.notes]
-        notes_str = ', '.join(note_names)
-        return f'{str(self)}  {lb}{notes_str}{rb}'
-
 
     def chord(self, degree, order=3, sub_degree=False):
         """overwrites Scale.chord, returns a Chord object instead of an AbstractChord"""
@@ -390,6 +361,32 @@ class Key(Scale):
         #     degrees = degrees[0]
         from .progressions import Progression
         return Progression(*degrees, scale=self.scale, order=order).on_tonic(self.tonic)
+
+    @property
+    def name(self):
+        suffix = Scale.get_suffix(self)
+        # leave a space between tonic and scale name if the scale name is a suffix:
+        if suffix != self.scale_name:
+            gap = ''
+        else:
+            gap = ' '
+        return f'{self.tonic.name}{gap}{suffix}'
+
+    def __str__(self):
+        return f'{self._marker} Key of {self.name}'
+
+    def __repr__(self):
+        lb, rb = self.notes._brackets
+        if self.chromatic_notes is None:
+            note_names = [str(n) for n in self.notes]
+        else:
+            # show diatonic notes as in normal note list, and chromatic notes in square brackets
+            note_names = [f'[{n}]' if n in self.chromatic_notes  else str(n)  for n in self.notes]
+        notes_str = ', '.join(note_names)
+        return f'{str(self)}  {lb}{notes_str}{rb}'
+
+    # Key object unicode identifier:
+    _marker = _settings.MARKERS['Key']
 
 
 class Subkey(Key, Subscale):

@@ -17,6 +17,11 @@ def unit_test():
 
     # test magic methods: transposition:
     compare(Chord('Caug7') + Interval(4), Chord('Eaug7'))
+    # arithmetic with notes:
+    compare(Chord('C') + 'B', Chord('Cmaj7'))
+    compare(Chord('C7') - 'Bb', Chord('C'))
+    # recursive addition with list:
+    compare(Chord('C') + ['B', 2], Chord('Dmaj7'))
 
     # parallels and relatives:
     compare(Chord('C').parallel, Chord('Cm'))
@@ -24,8 +29,8 @@ def unit_test():
     compare(~Chord('Caug'), Chord('Adim'))
 
     # test chord membership:
-    compare(4 in AbstractChord('sus4'), True)
-    compare(Interval(4) in AbstractChord('sus4'), False)
+    compare(4 in AbstractChord('sus4'), True) # by factor
+    compare(Interval(4) in AbstractChord('sus4'), False) # by interval
     compare('C' in Chord('Am'), True)
 
     # test chord matching by notes:
@@ -42,8 +47,8 @@ def unit_test():
 
     # test recursive init for non-existent bass note inversions:
     ### WARNING: this test temporarily commented out while awaiting chord init refactor (and re_parse_slash_chord function)
-    # compare(Chord('D/C#'), Chord('Dmaj7/C#'))
-    # compare(Chord('Amaj7/B'), Chord('B13sus4'))
+    compare(Chord('D/C#'), Chord('Dmaj7/C#'))
+    compare(Chord('Amaj7/B'), Chord('Amaj9/B'))
 
     # test arg re-parsing
     compare(Chord('CEA'), Chord(notes='CEA'))
@@ -58,4 +63,5 @@ def unit_test():
     # chord init by re-casting:
     compare(Chord(Chord('Cdim9/Eb')), Chord('Cdim9/Eb'))
 
-    compare(most_likely_chord('CEAB'), Chord('Amadd9/C'))
+    compare(most_likely_chord('CEAB', invert=True), Chord('Amadd9/C'))
+    compare(most_likely_chord('CEAB', invert=False), Chord('Amadd9'))

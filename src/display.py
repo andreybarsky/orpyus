@@ -261,3 +261,57 @@ class Fretboard:
             final_rows.append(final_fret_row)
         # print the final result:
         print('\n'.join(final_rows))
+
+
+class DataFrame:
+    def __init__(self, colnames):
+        self.column_names = colnames
+        self.num_columns = len(colnames)
+        self.column_data = {i:[] for i in range(self.num_columns)}
+
+        self.row_data = []
+        self.num_rows = 0
+
+    def append(self, data_lst):
+        """add a row of data to this dataframe, which we store as objects"""
+        assert len(data_lst) == self.num_columns, f"tried to append row of length {len(data_lst)} but dataframe has {self.num_columns} columns"
+        row = data_lst
+        self.row_data.append(row)
+        self.num_rows += 1
+
+        for i, item in enumerate(row):
+            self.column_data[i].append(item)
+
+    def __len__(self):
+        """DataFrame length is the number of rows"""
+        return self.num_rows
+
+    def column_widths(self, up_to_row=None):
+        """return the max str size in each column, up to a specified row"""
+        widths = []
+
+
+        for col_num, col in self.column_data.items():
+            col_strs = [str(c) for c in col[:up_to_row]]
+            str_lens = [len(s) for s in col_strs] + [len(self.column_names[col_num])]
+            widths.append(max(str_lens))
+        return widths
+
+    def show(self, margin=' ', header_border=True, max_rows=None):
+        margin_size = len(margin)
+        printed_rows = []
+        widths = self.column_widths(up_to_row=max_rows)
+        combi_chars = {"\u0324", "\u0323", "\u0307", "\u0308"} # a kludge: we have to count combining characters separately for chord notelist formatting
+        # make header:
+        header_row = [f'{self.column_names[i]:{widths[i]}}' for i in range(self.num_columns)]
+        printed_rows.append(margin.join(header_row))
+        if header_border:
+            total_width = sum(widths) + (self.num_columns-1)*margin_size
+            printed_rows.append('='*total_width)
+        # make rows:
+        for row in self.row_data[:max_rows]:
+            combi_chars_per_cell = [sum([char in combi_chars for char in cell]) if type(cell)==str else 0  for cell in row]
+            this_row = [f'{str(row[i]):{widths[i] + combi_chars_per_cell[i]}}' for i in range(self.num_columns)]
+            printed_rows.append(margin.join(this_row))
+        # finally, print result:
+        print('\n'.join(printed_rows))

@@ -116,6 +116,32 @@ class Note:
             name = preferred_name(position, prefer_sharps=prefer_sharps)
         return name, position, prefer_sharps
 
+    @staticmethod
+    def from_cache(name=None, position=None, prefer_sharps=None):
+        # efficient note init by cache of names to note objects
+        if name is not None:
+            if isinstance(name, Note): # recast note object input to string
+                name = name.chroma
+            if (name, prefer_sharps) in cached_notes:
+                return cached_notes[(name, prefer_sharps)]
+            else:
+                note_obj = Note(name, prefer_sharps=prefer_sharps)
+                if _settings.DYNAMIC_CACHING:
+                    log(f'Registering note with name {name} and prefer_sharps={prefer_sharps} to cache')
+                    cached_notes[(name, prefer_sharps)] = note_obj
+                return note_obj
+        elif position is not None:
+            if (position, prefer_sharps) in cached_notes:
+                return cached_notes[(position, prefer_sharps)]
+            else:
+                note_obj = Note(position=position, prefer_sharps=prefer_sharps)
+                if _settings.DYNAMIC_CACHING:
+                    log(f'Registering note with position {position} and prefer_sharps={prefer_sharps} to cache')
+                    cached_notes[(position, prefer_sharps)] = note_obj
+                return note_obj
+        else:
+            raise Exception(f'Note init from cache must include one of "name" or "position"')
+
     ## private utility functions:
     def _set_sharp_preference(self, prefer_sharps):
         """modify sharp preference in place"""
@@ -206,18 +232,6 @@ class Note:
         else:
             raise Exception('< operation for Notes only defined over other Notes')
 
-    @property
-    def _marker(self):
-        """unicode marker for this class"""
-        return '♩'
-
-    def __str__(self):
-        # e.g. is of form: '♩C#'
-        return f'{self._marker}{self.name}'
-
-    def __repr__(self):
-        return str(self)
-
     #### useful public methods:
     @property
     def properties(self):
@@ -234,32 +248,6 @@ class Note:
     def summary(self):
         """Prints all the properties of this Note object"""
         print(self.properties)
-
-    @staticmethod
-    def from_cache(name=None, position=None, prefer_sharps=None):
-        # efficient note init by cache of names to note objects
-        if name is not None:
-            if isinstance(name, Note): # recast note object input to string
-                name = name.chroma
-            if (name, prefer_sharps) in cached_notes:
-                return cached_notes[(name, prefer_sharps)]
-            else:
-                note_obj = Note(name, prefer_sharps=prefer_sharps)
-                if _settings.DYNAMIC_CACHING:
-                    log(f'Registering note with name {name} and prefer_sharps={prefer_sharps} to cache')
-                    cached_notes[(name, prefer_sharps)] = note_obj
-                return note_obj
-        elif position is not None:
-            if (position, prefer_sharps) in cached_notes:
-                return cached_notes[(position, prefer_sharps)]
-            else:
-                note_obj = Note(position=position, prefer_sharps=prefer_sharps)
-                if _settings.DYNAMIC_CACHING:
-                    log(f'Registering note with position {position} and prefer_sharps={prefer_sharps} to cache')
-                    cached_notes[(position, prefer_sharps)] = note_obj
-                return note_obj
-        else:
-            raise Exception(f'Note init from cache must include one of "name" or "position"')
 
     ## chord constructors:
     def chord(self, arg='major'):
@@ -289,6 +277,15 @@ class Note:
         # wave = self._wave(duration=duration, falloff=falloff)
         # play_wave(wave)
 
+    def __str__(self):
+        # e.g. is of form: '♩C#'
+        return f'{self._marker}{self.name}'
+
+    def __repr__(self):
+        return str(self)
+
+    # Note object unicode identifier:
+    _marker = _settings.MARKERS['Note']
 
 
 
@@ -427,19 +424,6 @@ class OctaveNote(Note):
         """note and octavenote hash-equivalence is based on position alone, not value"""
         return hash(f'Note:{self.position}')
 
-    @property
-    def _marker(self):
-        """unicode marker associated with this class"""
-        return '♪'
-
-    def __str__(self):
-        """Returns a pretty version of this OctaveNote's name,
-        which includes its chroma as well as its octave."""
-        return f'{self._marker}{self.name}'
-
-    def __repr__(self):
-        return str(self)
-
     #### useful public methods:
 
     ## Note parent class constructor
@@ -560,7 +544,21 @@ class OctaveNote(Note):
         wave = self._wave(duration=duration, falloff=falloff)
         play_wave(wave, block=block)
 
+    @property
+    def _marker(self):
+        """unicode marker associated with this class"""
+        return '♪'
 
+    def __str__(self):
+        """Returns a pretty version of this OctaveNote's name,
+        which includes its chroma as well as its octave."""
+        return f'{self._marker}{self.name}'
+
+    def __repr__(self):
+        return str(self)
+
+    # OctaveNote object unicode identifier:
+    _marker = _settings.MARKERS['OctaveNote']
 
 
 class NoteList(list):
@@ -616,18 +614,6 @@ class NoteList(list):
             elif isinstance(item, Note):
                 note_items.append(self._recast(item))
         return note_items
-
-    @property
-    def _brackets(self):
-        return '𝄃', ' 𝄂'
-
-    def __str__(self):
-        lb, rb = self._brackets
-        return f'{lb}{", ".join([str(n) for n in self])}{rb}'
-
-    def __repr__(self):
-        # return f'𝄃{super().__repr__()}𝄂'
-        return str(self)
 
     def append(self, other):
         """Cast any appendands to Notes"""
@@ -804,6 +790,23 @@ class NoteList(list):
         else:
             wave = self._chord_wave(duration=duration, octave=octave, type=type, falloff=falloff, **kwargs)
         play_wave(wave, block=block)
+
+    def join(self, s, markers=False):
+        """returns a string of the notes in this notelist joined by the specified char/s"""
+        if markers:
+            return s.join([str(n) for n in self])
+        else:
+            return s.join([n.name for n in self])
+
+    def __str__(self):
+        lb, rb = self._brackets
+        return f'{lb}{self.join(", ")}{rb}'
+
+    def __repr__(self):
+        # return f'𝄃{super().__repr__()}𝄂'
+        return str(self)
+
+    _brackets = _settings.BRACKETS['NoteList']
 
 # quality-of-life alias:
 Notes = NoteList

@@ -84,7 +84,7 @@ scale_function_names = {0: "tonic", # 1st
 
 modifier_marks = { 'dim':  '°',
                    'hdim': 'ø',
-                   'aug':  '+',
+                   'aug':  '⁺',
                    'maj7': 'Δ⁷',
                    '5':    '⁵',
                    '7':    '⁷',
@@ -95,7 +95,9 @@ modifier_marks = { 'dim':  '°',
                    'm11':  '¹¹',
                    '13':   '¹³',
                    'm13':  '¹³',
-                   'sus':  's'}
+
+                   'sus':  's',
+                   '(altered)': 'ᵃ', } # '⁽ᵃ⁾'}
 
 roman_degree_chords = {}
 # render as an alias dict linking numerals to major/minor qualities:
@@ -457,9 +459,9 @@ class ChordList(list):
         for d,c in degree_chords:
             # use the quality of the chord if it is not indeterminate, otherwise use the quality of the key:
             chord_mod = c.quality if not c.quality.perfect else key.quality
-            if chord_qual.major_ish:
+            if chord_mod.major_ish:
                 numerals.append(numerals_roman[d])
-            elif chord_qual.minor_ish:
+            elif chord_mod.minor_ish:
                 numerals.append(numerals_roman[d].lower())
             else:
                 raise Exception(f'Could not figure out whether to make numeral upper or lowercase: {d}:{c} in {key} (should never happen)')
@@ -791,9 +793,9 @@ class Progression:
         for d,c in self.degree_chords:
             # use the quality of the chord if it is not indeterminate, otherwise use the quality of the key:
             chord_mod = c.quality if not c.quality.perfect else self.scale.quality
-            if chord_qual.major_ish:
+            if chord_mod.major_ish:
                 numerals.append(numerals_roman[d])
-            elif chord_qual.minor_ish:
+            elif chord_mod.minor_ish:
                 numerals.append(numerals_roman[d].lower())
             else:
                 raise Exception(f'Could not figure out whether to make numeral upper or lowercase: {d}:{c} in {key} (should never happen)')
@@ -892,7 +894,7 @@ class Progression:
         if 'natural' in scale_name:
             scale_name = scale_name.replace('natural ', '')
         lb, rb = self._brackets
-        return f'Progression:  {lb} {self._as_numerals(check_scale=True)} {rb}  (in {scale_name})'
+        return f'Progression:  {lb}{self._as_numerals(check_scale=True)}{rb}  (in {scale_name})'
 
     def __repr__(self):
         return str(self)

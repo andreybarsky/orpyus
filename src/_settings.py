@@ -8,6 +8,31 @@
 ### in the simple case of "Note('C') + 1", this setting determines the result.
 DEFAULT_SHARPS = False
 
+# orpyus musical objects use little unicode MARKERS in their string methods
+# to identify them at a glance. the default markers are defined here, so you
+# can change them if you don't like them:
+MARKERS = { 'Note': '♩',
+      'OctaveNote': '♪',
+   'AbstractChord': '♫ ',
+           'Chord': '♬ ',
+           'Scale': '𝄢 ',
+             'Key': '𝄞 ',
+            }
+
+# BRACKETS are used similarly to markers, but placed around the objects they contain:
+BRACKETS = { 'Interval': ['‹', '›'],
+         'IntervalList': ['𝄁', ' 𝄁'],
+             'NoteList': ['𝄃', ' 𝄂'],
+              'Quality': ['~', '~'],
+       'ChordModifier' : ['≈', '≈'],
+         'ChordFactors': ['¦ ', ' ¦'],
+          'Progression': ['𝄆 ', ' 𝄇'],    #['𝄃 ', ' 𝄂'],
+     'ChordProgression': ['𝄆 ', ' 𝄇'],    # ['╟', '╢'],
+               'Guitar': ['〚', ' 〛'],
+
+
+}
+
 ############# performance settings:
 
 ### PRE_CACHE determines whether common Chords/Scales are pre-initialised
@@ -23,5 +48,5 @@ PRE_CACHE_SCALES = True   # applies to both Scales and Keys
 # actively cached after import, whenever an un-cached object is initialised.
 # the difference should be imperceptible for interactive use, but setting to True
 # is strongly recommended for any kind of high-throughput musical number crunching,
-# and should significantly improve both run-speed and memory efficiency. 
+# and should significantly improve both run-speed and memory efficiency.
 DYNAMIC_CACHING = True

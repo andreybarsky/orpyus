@@ -24,19 +24,20 @@ if PROFILE_INIT:
 util.log.verbose = False
 
 PROFILE_EACH = False
+DECIMAL_PRECISION = 4
 
 modules_to_test = [
                   test_util,
                   test_parsing,
                   test_qualities,
-                  # test_display,
-                  # test_guitar,
-                  # test_intervals,
-                  # test_notes,
+                  test_display,
+                  test_guitar,
+                  test_intervals,
+                  test_notes,
                   test_chords,
-                  # test_scales,
-                  # test_keys,
-                  # test_progressions,
+                  test_scales,
+                  test_keys,
+                  test_progressions,
                   ]
 
 def run_all_tests(profile_each_test = True):
@@ -44,12 +45,12 @@ def run_all_tests(profile_each_test = True):
 
         @profile
         def module_test():
-            print(f'Testing {module}')
+            print(f'Testing {module.__name__}')
             module.unit_test()
-            print(f'{module} test passed')
+            print(f' + {module.__name__} test passed + ')
 
         module_test()
-    print(f'All tests passed')
+    print(f'+++ All tests passed +++')
 
 def profile(func):
     def wrapper():
@@ -59,7 +60,7 @@ def profile(func):
             func()
             profiler.disable()
             stats = pstats.Stats(profiler).sort_stats('cumtime')
-            stats.print_stats(20)
+            stats.print_stats(6)
             # ipdb.set_trace()
         else:
             func()
@@ -79,7 +80,7 @@ def profile(func):
 
 # cProfile kludge to show higher time precision:
 def precise_time(x):
-    return "%14.6f" % x
+    return f"%14.{DECIMAL_PRECISION}f" % x
 pstats.f8 = precise_time
 
 if PROFILE_EACH:
@@ -93,4 +94,5 @@ else:
 
     profiler.disable()
     stats = pstats.Stats(profiler).sort_stats('tottime')
-    stats.print_stats(30)
+    print('='*20 + '\nPROFILING:\n' + '='*20)
+    stats.print_stats(10)

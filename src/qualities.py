@@ -1,7 +1,7 @@
 # OOP representation of major/minor quality that is invertible and has a null (indeterminate) value
 from .util import reverse_dict, unpack_and_reverse_dict, reduce_aliases, log
 from .parsing import degree_names, is_valid_note_name, parse_alteration, accidental_offsets, offset_accidentals
-
+from . import _settings
 
 # TBI: double dim/aug qualities?
 
@@ -81,6 +81,47 @@ class Quality:
         else:
             raise Exception(f'Quality object initialised using name arg, expected string (or Quality object) but got type: {type(name)}')
 
+    @staticmethod
+    def from_offset_wrt_major(offset):
+        # return Quality(major_offsets[offset])
+        ### use pre-initialised Quality instance:
+        return major_offset_qualities[offset]
+
+    @staticmethod
+    def from_offset_wrt_perfect(offset):
+        # return Quality(perfect_offsets[offset])
+        ### use pre-initialised Quality instance:
+        return perfect_offset_qualities[offset]
+
+    @staticmethod
+    def from_value(value):
+        return value_qualities[value]
+
+    def __invert__(self):
+        """invert major to minor, aug to dim, or vice versa"""
+        return value_qualities[self.value * -1]
+
+    def __eq__(self, other):
+        """qualities are emod to other qualities with the same name/value"""
+        return self.value == other.value
+
+    def __hash__(self):
+        return hash(str(self))
+
+
+    # interval offsets with respect to major or perfect qualities:
+    @property
+    def offset_wrt_major(self):
+        """offsets relative to a major interval are 0 for major, -1 for minor, +1 for augmented etc."""
+        assert self.value != 0, f"{self.full_name} quality should not have its offset compared to a major interval"
+        return offsets_wrt_major[self.full_name]
+
+    @property
+    def offset_wrt_perfect(self):
+        """offsets relative to a perfect interval are -1 if diminished and +1 if augmented"""
+        assert self.value not in [-1, 1], f"{self.full_name} quality should not have its offset compared to a perfect interval"
+        return offsets_wrt_perfect[self.full_name]
+
     @property
     def name(self):
         if self.major_ish:
@@ -98,52 +139,13 @@ class Quality:
             return self.full_name[0]
 
     def __str__(self):
-        return f'~{self.full_name}~'
+        lb, rb = self._brackets
+        return f'{lb}{self.full_name}{rb}'
 
     def __repr__(self):
         return str(self)
 
-    def __invert__(self):
-        """invert major to minor, aug to dim, or vice versa"""
-        return value_qualities[self.value * -1]
-
-    def __eq__(self, other):
-        """qualities are emod to other qualities with the same name/value"""
-        return self.value == other.value
-
-    def __hash__(self):
-        return hash(str(self))
-
-
-
-    # interval offsets with respect to major or perfect qualities:
-    @property
-    def offset_wrt_major(self):
-        """offsets relative to a major interval are 0 for major, -1 for minor, +1 for augmented etc."""
-        assert self.value != 0, f"{self.full_name} quality should not have its offset compared to a major interval"
-        return offsets_wrt_major[self.full_name]
-
-    @property
-    def offset_wrt_perfect(self):
-        """offsets relative to a perfect interval are -1 if diminished and +1 if augmented"""
-        assert self.value not in [-1, 1], f"{self.full_name} quality should not have its offset compared to a perfect interval"
-        return offsets_wrt_perfect[self.full_name]
-
-    @staticmethod
-    def from_offset_wrt_major(offset):
-        # return Quality(major_offsets[offset])
-        ### use pre-initialised Quality instance:
-        return major_offset_qualities[offset]
-
-    @staticmethod
-    def from_offset_wrt_perfect(offset):
-        # return Quality(perfect_offsets[offset])
-        ### use pre-initialised Quality instance:
-        return perfect_offset_qualities[offset]
-
-    @staticmethod
-    def from_value(value):
-        return value_qualities[value]
+    _brackets = _settings.BRACKETS['Quality']
 
 
 # interval semitone distances from major or perfect interval degrees:
@@ -187,8 +189,6 @@ DoublyDiminished = DDim = dd = Quality('doubly diminished')
 
 class ChordModifier:
     """a class representing the ways in which a Chord can be different from a major triad"""
-
-
 
     def __init__(self, alias=None, remove=None, add=None, make=None, modify=None, verify=None):
         """each Modifier can be instantiated by an alias, which searches the aliases of existing Modifiers,
@@ -392,7 +392,7 @@ class ChordModifier:
     @property
     def name(self):
         """lookup whether this modifier exists in the definition dicts, otherwise call it unnamed"""
-        for lookup in [chord_types, chord_modifiers]: #, chord_alterations]:
+        for lookup in [chord_types, chord_tweaks, chord_alterations]: #, chord_alterations]:
             rev_lookup = reverse_dict(lookup)
             if self in rev_lookup:
                 mod_name = rev_lookup[self]
@@ -427,12 +427,6 @@ class ChordModifier:
         order += len(added_degrees)
         return order
 
-    def __str__(self):
-        return f'≈ {self.name} ≈'
-
-    def __repr__(self):
-        return str(self)
-
     def __hash__(self):
         tuples = [tuple(x) for x in [self.removals, self.additions.keys(), self.additions.values(), self.makes.keys(), self.makes.values(),
                   self.modifications.keys(), self.modifications.values(), self.verifications.keys(), self.verifications.values()]]
@@ -440,6 +434,16 @@ class ChordModifier:
 
     def __eq__(self, other):
         return hash(self) == hash(other)
+
+    def __str__(self):
+        lb, rb = self._brackets
+        return f'{lb}{self.name}{rb}'
+
+    def __repr__(self):
+        return str(self)
+
+    # IntervalList object unicode identifier:
+    _brackets = _settings.BRACKETS['ChordModifier']
 
 
 # chord 'types' are those used to characterise a chord in its completeness:
@@ -452,7 +456,7 @@ chord_types =  {'m': ChordModifier(make={3:-1}),
 
                 '7': ChordModifier(add={7:-1}), # dominant 7th
                 'dim7': ChordModifier(make={3:-1, 5:-1}, add={7:-2}),
-                '7b5': ChordModifier(add={7: -1}, modify={5:-1}),
+                # '7b5': ChordModifier(add={7: -1}, modify={5:-1}),
 
                 # note: m7, m9 etc. are implicit concatenations of 'm' and '7', '9' etc.
                 # and mmaj7 is an implicit concatenation of 'm' and 'maj7'
@@ -480,9 +484,9 @@ chord_types =  {'m': ChordModifier(make={3:-1}),
                 }
 
 
-# chord 'modifiers' are those that could conceivably modify an existing chord type:
+# chord 'tweaks' are those that could conceivably tweak an existing chord type:
 # note that this dict order matters, since it affects the order in which chords get named: (e.g. add9sus4 instead of sus4add9)
-chord_modifiers = { 'sus4': ChordModifier(remove=3, add=4, verify={2:False}),
+chord_tweaks = {    'sus4': ChordModifier(remove=3, add=4, verify={2:False}),
                     'sus2': ChordModifier(remove=3, add=2, verify={4:False}),
 
                     'add4': ChordModifier(add=4, verify={9: False, 11:False}), # are these real? or just add11s
@@ -502,7 +506,7 @@ for acc in ['b', '#']:
        chord_alterations[f'{acc}{deg}'] = ChordModifier(make={deg:acc_val})
 
 # union of them all:
-chord_aliases = {**chord_types, **chord_modifiers, **chord_alterations}
+chord_aliases = {**chord_types, **chord_tweaks, **chord_alterations}
 
 # string replacements for chord searching:
 modifier_aliases = {'maj': ['major', 'M', 'Δ', ],
