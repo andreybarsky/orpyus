@@ -13,8 +13,6 @@ from itertools import permutations
 from pdb import set_trace
 
 
-
-
 class ChordFactors(dict):
     """a class representing the factors of an AbstractChord, as a dict which has:
         keys: chord degrees (1 representing the root, 5 representing the fifth, etc.)
@@ -32,7 +30,7 @@ class ChordFactors(dict):
         also treats init by None (i.e. no args) as a major triad by default."""
 
         # accept re-casting by dict comp:
-        if isinstance(arg, ChordFactors):
+        if isinstance(arg, self.__class__):
             arg = {k:v for k,v in arg.items()}
 
         ### allow initialisation by string or list of chord degrees:
@@ -87,7 +85,7 @@ class ChordFactors(dict):
             return {d:Interval.from_degree(d, offset=o) for d, o in self.items()}
 
     def copy(self):
-        return ChordFactors({k:v for k,v in self.items()}, modifiers=self.modifiers)
+        return self.__class__({k:v for k,v in self.items()}, modifiers=self.modifiers)
 
     def __add__(self, other):
         """modifies these factors by the alterations in a ChordModifier,
@@ -109,12 +107,12 @@ class ChordFactors(dict):
             raise TypeError(f'Cannot add ChordFactors object to type: {type(other)}')
         sorted_keys = sorted(list(output_factors.keys()))
         # return output_factors
-        return ChordFactors({k: output_factors[k] for k in sorted_keys}, modifiers = output_factors.modifiers)
+        return self.__class__({k: output_factors[k] for k in sorted_keys}, modifiers = output_factors.modifiers)
 
     def distance(self, other):
         # distance from other ChordFactors objects, to detect altered chords from their factors
         # as modifier: what must be done to RIGHT (other) to make it LEFT (self)
-        assert isinstance(self, ChordFactors) and isinstance(other, ChordFactors)
+        assert isinstance(other, self.__class__)
         add, modify, remove  = {}, {}, []
         for degree, offset in self.items():
             if degree not in other:
@@ -132,6 +130,9 @@ class ChordFactors(dict):
 
     def __sub__(self, other):
         """the - operator calculates (symmetric) distance between ChordFactors"""
+        if isinstance(other, AbstractChord):
+            other = other.factors
+        assert isinstance(other, self.__class__)
         return self.distance(other)
 
     def __hash__(self):
@@ -621,7 +622,7 @@ class AbstractChord:
             return Chord(notes=new_notes)
 
         elif isinstance(other, Chord):
-            return self.chord_distance(other) # Not Yet Implemented
+            return self.chord_distance(other)
 
         elif isinstance(other, (int, Interval)):
             new_root = self.root - int(other)
@@ -629,6 +630,10 @@ class AbstractChord:
 
         else:
             raise TypeError(f'Chord.__sub__ not defined for type: {type(other)}')
+
+    def chord_distance(self, other):
+        assert isinstance(other, Chord)
+        return self.factors - other.factors
 
     def __contains__(self, item):
         """AbstractChords can contain degrees (as integers), or intervals (as Intervals)"""
@@ -1424,22 +1429,26 @@ if _settings.PRE_CACHE_CHORDS: # initialise common chord objects in cache for fa
 def matching_chords(notes, display=True, return_scores=False,
                     invert=False,
                     search_no5s=True,
-                    min_recall=0.9, min_precision=0.85,
-                    min_likelihood=0.5,
+                    # min_recall=0.9, min_precision=0.85,
+                    min_likelihood=0.5, size_cutoff=5,
                     max_results=10, **kwargs):
     # re-cast input:
     if not isinstance(notes, NoteList):
         notes = NoteList(notes)
 
-    # for chords with 5 notes or less, we can efficiently search all their permutations:
-    if len(notes) <= 5:
+    # for chords with 5(?) notes or less, we can efficiently search all their permutations:
+    if len(notes) <= size_cutoff:
         note_permutations = [NoteList(ns) for ns in permutations(notes)]
         interval_permutations = [nl.ascending_intervals() for nl in note_permutations]
     else:
-        # otherwise we'll search only the inversions instead of all permutations
-        #  which is faster but less complete:
-        note_permutations = [notes.rotate(i) for i in range(len(notes))]
-        interval_permutations = {notes[i]: note_permutations[i].ascending_intervals() for i in range(len(notes))}
+        # # otherwise we'll search only the inversions instead of all permutations
+        # #  which is faster but less complete:
+        # note_permutations = [notes.rotate(i) for i in range(len(notes))]
+        # interval_permutations = {notes[i]: note_permutations[i].ascending_intervals() for i in range(len(notes))}
+        log(f'{len(notes)} is too many for exact permutation searching')
+        log(f'So falling back on fuzzy matching')
+        return fuzzy_matching_chords(notes, display=display, invert=invert, assume_root=invert, require_root=invert,
+                                     min_likelihood=min_likelihood, max_results=max_results, **kwargs)
 
 
     candidate_names = []
@@ -1484,7 +1493,7 @@ def matching_chords(notes, display=True, return_scores=False,
         title = ' '.join(title)
         print(title)
 
-        df = DataFrame(['Chord', '', 'Notes', '', 'Likl.', 'Cons.'])
+        df = DataFrame(['Chord', '', 'Notes', '', 'Rec.', 'Prec.', 'Likl.', 'Cons.'])
         for cand in sorted_cands:
             # scores = candidate_chords[cand]
             lik, cons = cand.likelihood, cand.consonance
@@ -1492,7 +1501,7 @@ def matching_chords(notes, display=True, return_scores=False,
             lb, rb = cand.notes._brackets
             # use chord.__repr__ method to preserve dots over notes: (and strip out note markers)
             notes_str = (f'{cand.__repr__()}'.split(rb)[0]).split(lb)[-1].replace(Note._marker, '')
-            df.append([f'{cand._marker} {cand.name}', lb, notes_str, rb, f'{lik:.2f}', f'{cons:.3f}'])
+            df.append([f'{cand._marker} {cand.name}', lb, notes_str, rb, 1.0, 1.0, f'{lik:.2f}', f'{cons:.3f}'])
         df.show(max_rows=max_results, margin=' ', **kwargs)
 
     if return_scores:

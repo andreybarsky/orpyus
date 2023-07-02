@@ -622,7 +622,7 @@ class IntervalList(list):
 
     def __str__(self):
         lb, rb = self._brackets
-        return f'{rb}{", ".join([i.short_name for i in self])}{rb}'
+        return f'{lb}{", ".join([i.short_name for i in self])}{rb}'
 
     # # alternative str method:
     # def as_factors(self):

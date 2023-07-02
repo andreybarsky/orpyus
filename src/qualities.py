@@ -405,9 +405,9 @@ class ChordModifier:
             if val: # i.e. not 0 (add) or False (remove)
                 name_str.append(f'{offset_accidentals[val][0]}{deg}')
             elif val is False:
-                name_str.append(f'no{val}')
+                name_str.append(f'no{deg}')
             elif val == 0:
-                name_str.append(f'add{val}')
+                name_str.append(f'add{deg}')
         return ' '.join(name_str)
 
 
