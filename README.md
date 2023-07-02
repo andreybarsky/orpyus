@@ -210,8 +210,8 @@ Key('D').progression(1,6,4,5)
 # this is handy for composing cohesive-sounding progressions in unusual keys:
 Key('F lydian').progression(1,6,4,5, order=4)      # gives:  Fmaj7 Dm7 Bhdim7 Cmaj7
 
-# just as with Chords and Keys, any ChordProgression can be sounded out using the .play() method: (experimental)
-Progression(1,6,4,5, scale='lydian', order=4).on_tonic('F').play()
+# and just as with Chords and Keys, any ChordProgression can be sounded out using the .play() method: (experimental)
+Key('F lydian').progression(1,6,4,5, order=4).play()
 ```
 
 ### Guitar integration
