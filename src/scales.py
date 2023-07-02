@@ -83,19 +83,16 @@ class ScaleDegree(int):
     def __repr__(self):
         return str(self)
 
-    #
-    # def __add__(self, other):
-    #     return ScaleDegree(self + other)
-    #
-    # def __sub__(self, other):
-    #     return ScaleDegree(self - other)
-
 
 # ScaleFactors work exactly as ChordFactors, so this is just a wrapper:
 class ScaleFactors(ChordFactors):
     pass
 
 ### Scale class that spans diatonic scales, subscales, blues scales, octatonic scales and all the rest:
+
+class Scale:
+    def __init__(self, name=None, intervals=None, base_scale_name=None, mode=1, chromatic_intervals):
+        
 
 
 
