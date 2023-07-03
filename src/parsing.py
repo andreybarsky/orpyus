@@ -38,7 +38,7 @@ def is_accidental(char):
     if len(char) == 0:
         raise ValueError("'' is technically not an accidental but this is an edge case")
     return (char in accidental_offsets.keys())
-def parse_accidental(acc, max_len=1):
+def cast_accidental(acc, max_len=1):
     """reads what might be unicode accidentals and casts to ascii '#' or 'b' if required"""
     assert isinstance(acc, str) and len(acc) <= max_len, f'Invalid input to parse_accidental: {acc} (where max_len={max_len})'
     if acc in accidentals_to_ascii:
@@ -318,9 +318,46 @@ def parse_octavenote_name(name, case_sensitive=True):
     #         raise ValueError(f'Provided note name is too long: {name}')
     # return note_name, octave
 
+def is_alteration(string):
+    """returns True if a string is a valid chord/scale alteration, like #5 or b11,
+    and False otherwise"""
+    return (is_accidental(string[0])) and (string[1:].isnumeric())
+
+def parse_out_alterations(string):
+    """given a string that contains arbitrary characters along with alterations,
+    split across a list with each alteration as its own element"""
+    out_list = []
+    current_item = []
+    currently_alteration = False
+    assert isinstance(string, str), "Can only parse alterations out of strings"
+    for i, char in enumerate(string):
+        if currently_alteration and char.isnumeric():
+            # add to an existing alteration
+            current_item.append(char)
+        elif (not is_accidental(char)) or (is_accidental(char) and i<len(string) and not string[i+1].isnumeric()):
+            if not currently_alteration:
+                # normal string, save to current item
+                current_item.append(char)
+            else:
+                # normal string, must be the END of an alteration, so end the current item:
+                out_list.append(''.join(current_item))
+                currently_alteration = False
+                current_item = [char]
+
+        else:
+            # detected an accidental followed by a numeral, indicating the start of an alteration
+            # end the current item:
+            if len(current_item) > 0:
+                out_list.append(''.join(current_item))
+            # start a new one that is an alteration:
+            current_item = [char]
+            currently_alteration = True
+    out_list.append(''.join(current_item))
+    return out_list
+
 
 def parse_alteration(alteration):
-    """accepts an alteration string like 'b5' or '#11' or '7' and parses it into a dict
+    """accepts a string of a single alteration like 'b5' or '#11' or '♮7' and parses it into a dict
     that keys degree to offset, such as: {5:-1} or {11:1} or {7:0}"""
     degree_chars = [c for c in alteration if c.isnumeric()]
     degree = int(''.join(degree_chars))
