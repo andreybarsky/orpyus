@@ -7,7 +7,7 @@ from .scales import Scale, Subscale, scale_name_intervals, NaturalMajor, Natural
 from .keys import Key, Subkey, matching_keys, most_likely_key
 from .util import reduce_aliases, auto_split, check_all, reverse_dict, log
 from .parsing import roman_numerals, numerals_roman
-from . import parsing
+from . import parsing, _settings
 
 from collections import Counter
 
@@ -590,11 +590,11 @@ class ChordList(list):
         assert isinstance(key, Key)
         return key
 
-    def play(self, delay=1, duration=2.5, octave=None, falloff=True, block=False, type='fast', **kwargs):
+    def play(self, chord_delay=1, note_delay=0.1, duration=2.5, octave=None, falloff=True, block=False, type='fast', **kwargs):
         """play this chordlist as audio"""
-        chord_waves = [c._melody_wave(duration=duration, delay=0, octave=octave, type=type, **kwargs) for c in self]
+        chord_waves = [c._melody_wave(duration=duration, delay=note_delay, octave=octave, type=type, **kwargs) for c in self]
         from .audio import arrange_melody, play_wave, play_melody
-        play_melody(chord_waves, delay=delay, falloff=falloff, block=block)
+        play_melody(chord_waves, delay=chord_delay, falloff=falloff, block=block)
         # prog_wave = arrange_melody(chord_waves, delay=delay, **kwargs)
         # play_wave(prog_wave, block=block)
 
@@ -880,12 +880,6 @@ class Progression:
         from .guitar import standard # lazy import
         standard.show(self)
 
-    # outer brackets for this container class:
-    @property
-    def _brackets(self):
-        # return '╟', '╢'
-        return '𝄆', '𝄇'
-
     def __len__(self):
         return len(self.root_degrees)
 
@@ -931,6 +925,8 @@ class Progression:
             return self + tonic_char
         else:
             return self
+
+    _brackets = _settings.BRACKETS['Progression']
 
 def most_grammatical_progression(progressions, add_resolution=True, verbose=False):
     """given an iterable of Progression objects, compare their cadences and return the one that seems most likely/grammatical"""
@@ -1082,11 +1078,6 @@ class ChordProgression(Progression, ChordList):
         else:
             raise TypeError(f'__eq__ only defined between Progressions, not between Progression and: {type(other)}')
 
-    def __str__(self):
-        # numerals = self.as_numerals()
-        # chord_names = ' '.join([c.short_name for c in self.chords])
-        lb, rb = self._brackets
-        return f'{self.chords}  or  {lb} {self._as_numerals(check_scale=True)} {rb}  (in {self.key.name})'
 
     def abstract(self):
         """returns the abstract Progression object corresponding to this ChordProgression"""
@@ -1148,11 +1139,19 @@ class ChordProgression(Progression, ChordList):
         # just a wrapper around this progression's ChordList's method:
         self.chords.play(*args, **kwargs)
 
+    _brackets = _settings.BRACKETS['ChordProgression']
+
     # def __str__(self):
     #     # chord_set_str = '-'.join(['♬ ' + c.name for c in self.chords])
     #     chords_str = '-'.join([c.name for c in self.chords])
     #     return f'ChordProgression: {chords_str} \n or Progression:  𝄆 {self.as_numerals()} 𝄇  (in {self.key.name})'
-    #
+
+    def __str__(self):
+        # numerals = self.as_numerals()
+        # chord_names = ' '.join([c.short_name for c in self.chords])
+        lb, rb = self._brackets
+        return f'{self.chords}  or  {lb}{self._as_numerals(check_scale=True)}{rb}  (in {self.key.name})'
+
     # def __repr__(self):
     #     return str(self)
 
