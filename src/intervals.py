@@ -615,10 +615,13 @@ class IntervalList(list):
             interval_unstack.append(self[i] - self[i-1])
         return IntervalList(interval_unstack)
 
-    @property
-    def as_factors(self):
+    def to_factors(self):
         # alternate string method, reports raised/lowered factor integers instead of major/minor/perfect degrees
         return [iv.factor_name for iv in self]
+
+    @property
+    def as_factors(self):
+        return self.to_factors()
 
     def __str__(self):
         lb, rb = self._brackets
