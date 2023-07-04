@@ -437,7 +437,7 @@ class Interval:
 
     _brackets = _settings.BRACKETS['Interval']
 
-    perfect_degrees = {1,4,5} # true for diatonic intervals, but maybe not for irregular intervals
+    perfect_degrees = {1,4,5,8} # true for diatonic intervals, but maybe not for irregular intervals?
 
 
 class IrregularInterval(Interval):
@@ -460,7 +460,7 @@ class IrregularInterval(Interval):
                 span_size = 12
             else:
                 # otherwise pick a sensible default
-                span_size = default_degree_intervals(max_degree)
+                span_size = default_degree_intervals[max_degree]
         self.span_size = span_size
 
         self.subscript = numeral_subscript(self.max_degree+1) # clarifying marker for printing
@@ -652,27 +652,31 @@ class IntervalList(list):
             new_intervals = list(set(new_intervals))
         return IntervalList(sorted(new_intervals))
 
-    def rotate(self, num_places, unstack=False):
+    def rotate(self, num_places, unstack=False, preserve_degrees=False):
         """returns the rotated IntervalList that begins num_steps up
         from the beginning of this one. used for inversions.
         if unstack=True, first unstacks, then rotates, then stacks again (used for modes)"""
         if not unstack:
             return IntervalList(rotate_list(self, num_places))
         else:
+            original_degrees = [iv.extended_degree for iv in self]
             # preserve original padding:
             padded_left = (self[0] == 0)
             padded_right = (self[-1].mod == 0)
             # unstack, rotate, stack again:
             unstacked_intervals = self.strip().pad(left=False, right=True).unstack()
             rotated_intervals = IntervalList(rotate_list(unstacked_intervals, num_places))
-            stacked_intervals = rotated_intervals.stack().strip()
+            stacked_intervals = rotated_intervals.stack().strip().pad(left=padded_left, right=padded_right)
+            if preserve_degrees:
+                # restore the degrees of the original intervals:
+                stacked_intervals = IntervalList([iv.re_cache(iv.value, original_degrees[i]) for i, iv in enumerate(stacked_intervals)])
             # pad to the original padding:
-            return stacked_intervals.pad(left=padded_left, right=padded_right)
+            return stacked_intervals
 
     def mode(self, n):
         """if this IntervalList is structured as the intervals of a scale,
         return the scale that is the Nth mode of that scale"""
-        return self.rotate(n-1, unstack=True)
+        return self.rotate(n-1, unstack=True, preserve_degrees=True)
 
     def invert(self, position):
         """used for calculating inversions: rotates, then subtracts
