@@ -1,6 +1,6 @@
 from .qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
-from .parsing import degree_names, num_suffixes, offset_accidentals
-from .util import rotate_list, least_common_multiple, euclidean_gcd
+from .parsing import degree_names, span_names, num_suffixes, offset_accidentals
+from .util import rotate_list, least_common_multiple, euclidean_gcd, numeral_subscript
 from .conversion import value_to_pitch
 from . import _settings
 import math
@@ -14,6 +14,11 @@ class Interval:
     but degree can be specified explicitly to infer an
     augmented or diminished interval etc."""
 
+    # this class specifically covers 'diatonic' Intervals intended for use with
+    # scales where the 8th and 1st degrees are unisons.
+    # it is overwritten by the IrregularInterval class where that is not the case.
+    max_degree = 7
+    span_size = 12 # i.e. semitones per 'octave'
     def __init__(self, value, degree=None):
         value, degree = self._re_parse_args(value, degree)
         self.value = value
@@ -38,8 +43,8 @@ class Interval:
         # value is directional, but width is absolute:
         self.width = abs(self.value)
         # whole-octave width, and interval width-within-octave (both strictly positive)
-        self.octave_span, self.mod = divmod(self.width, 12)
-        # unison intervals are those that are some multiple of 12:
+        self.octave_span, self.mod = divmod(self.width, self.span_size)
+        # unison intervals are those that are some multiple of 12: (or other span size)
         self.unison = (self.mod == 0)
 
 
@@ -51,28 +56,31 @@ class Interval:
             # self.extended_degree is >=8 if this is a ninth or eleventh etc,
             # but self.degree is always mod-7,
             # and both are strictly positive
-            self.extended_degree = (self.degree + (7*self.octave_span))
+            self.extended_degree = (self.degree + (self.max_degree*self.octave_span))
 
         else:
             assert degree > 0, "Interval degree must be non-negative"
 
+            if degree == 1:
+                assert self.value == 0, f"Degree 1 must always have semitone value of 0, but got: {self.value}"
+
             # degree has been provided; we validate it here
-            default_degree = (default_interval_degrees[self.mod] + (7*self.octave_span)) #* self.sign
             self.extended_degree = degree # * self.sign
-            self.degree = (self.extended_degree - (7*self.octave_span)) #  * self.sign
+            self.degree = (self.extended_degree - (self.max_degree*self.octave_span)) #  * self.sign
             if self.unison:
-                assert self.degree == 1, f'Degree of a unison (mod12) interval ought to be 1, but was: {self.degree}'
-                assert ((self.extended_degree -1) % 7) == 0, f'Extended degree of a unison (mod12) interval must (-1) mod to 0, but was: {self.extended_degree}'
-            assert 0 < self.degree < 8
+                assert self.degree == 1, f'Degree of a unison (mod{self.span_size}) interval ought to be 1, but was: {self.degree}'
+                assert ((self.extended_degree -1) % self.max_degree) == 0, f'Extended degree of a unison (mod{self.span_size}) interval must (-1) mod to 0, but was: {self.extended_degree}'
+            assert 0 < self.degree <= self.max_degree
             # should not be more than 1 away from the default:
+            default_degree = (default_interval_degrees[self.mod] + (self.max_degree*self.octave_span)) #* self.sign
             degree_distance_from_default = abs(degree - default_degree)
 
-            if degree_distance_from_default <= 2:
+            if degree_distance_from_default <= 3:
                 # all good - interval fits to the desired degree
                 pass
                 # self.extended_degree = abs(degree) * self.sign
                 # self.degree = (abs(self.extended_degree) - (7*self.octave_span)) * self.sign
-            elif degree_distance_from_default in {8,9,10}:
+            elif degree_distance_from_default in {self.max_degree+1,self.max_degree+2,self.max_degree+3}:
                 # interval has been asked to correspond to a degree one octave higher or lower than default
                 # maybe this is fine fine: we can quietly re-init?
                 raise ValueError(f'Interval init specified that interval of semitone distance {self.value}' +
@@ -92,18 +100,18 @@ class Interval:
         self.ascending = (self.sign == 1)
         self.descending = (self.sign == -1)
         # compound intervals span more than an octave:
-        self.compound = (self.width >= 12)
+        self.compound = (self.width >= self.span_size)
 
     def _set_quality(self):
         """uses mod-value and mod-degree to determine the quality of this interval"""
         # recovering the quality of cached intervals where available is slightly more efficient:
-        if (self.value, self.extended_degree) in cached_intervals:
+        if (self.value, self.extended_degree) in cached_intervals and self.max_degree == 7:
             self.quality = cached_intervals[(self.value, self.extended_degree)].quality
         else:
             default_value = default_degree_intervals[self.degree]
             offset = (self.mod - default_value)
 
-            if self.degree in perfect_degrees:
+            if self.degree in self.perfect_degrees:
                 self.quality = Quality.from_offset_wrt_perfect(offset)
             else: # non-perfect degree, major by default
                 self.quality = Quality.from_offset_wrt_major(offset)
@@ -140,7 +148,7 @@ class Interval:
 
 
     @staticmethod
-    def from_degree(degree, quality=None, offset=None):
+    def from_degree(degree, quality=None, offset=None, max_degree=7):
         """alternative init method: given a degree (and an optional quality)
         initialise the appropriate Interval object.
         degree is assumed to be appropriately major/perfect if not specified"""
@@ -149,8 +157,8 @@ class Interval:
             return cached_intervals_by_degree[(degree, quality, offset)]
         else:
             extended_degree = degree
-            if degree >= 8:
-                octave_span, degree = divmod(degree - 1, 7)
+            if degree > max_degree:
+                octave_span, degree = divmod(degree - 1, max_degree)
                 degree += 1
             else:
                 octave_span = 0
@@ -159,7 +167,7 @@ class Interval:
                 assert offset is None, f'Interval.from_degree received mutually exclusive quality and offset args'
                 # cast to quality object if it is not one:
                 quality = Quality(quality)
-                if degree in perfect_degrees:
+                if degree in self.perfect_degrees:
                     offset = quality.offset_wrt_perfect
                 else:
                     offset = quality.offset_wrt_major
@@ -171,7 +179,7 @@ class Interval:
 
             default_value = default_degree_intervals[degree] + (12*octave_span)
             interval_value = default_value + offset
-            interval_obj = Interval.from_cache(interval_value, degree=extended_degree)
+            interval_obj = Interval.from_cache(interval_value, extended_degree, max_degree)
             if _settings.DYNAMIC_CACHING:
                 cached_intervals_by_degree[(degree, quality, offset)] = interval_obj
             return interval_obj
@@ -179,7 +187,7 @@ class Interval:
     @property
     def offset_from_default(self):
         """how many semitones this interval is from its default/canonical (perfect/major) degree"""
-        perfect_degree = self.degree in {1,4,5}
+        perfect_degree = self.degree in self.perfect_degrees
         offset = self.quality.offset_wrt_perfect if perfect_degree else self.quality.offset_wrt_major
         return offset
         # return self.offset_from_default_degree(self.degree)
@@ -187,9 +195,9 @@ class Interval:
     def offset_from_degree(self, degree):
         """how many semitones this interval is from some chosen (perfect/major) degree"""
         assert degree > 0
-        deg_oct, mod_degree = (divmod(degree-1, 7))
+        deg_oct, mod_degree = (divmod(degree-1, self.max_degree))
         mod_degree += 1
-        default_value = default_degree_intervals[mod_degree] + (12*deg_oct)
+        default_value = default_degree_intervals[mod_degree] + (self.span_size*deg_oct)
         offset = self.width - default_value
         return offset
 
@@ -211,23 +219,23 @@ class Interval:
         # (except if there's been a sign change)
         if (self.mod == 0):
             # (but don't worry about it for addition/subtraction of unisons themselves)
-            return Interval.from_cache(new_value)
-        elif int(other) % 12 == 0:
-            octave_of_addition = int(other) // 12
+            return self.re_cache(new_value)
+        elif int(other) % self.span_size == 0:
+            octave_of_addition = int(other) // self.span_size
             # new_degree = ((((self.sign * self.extended_degree) + octave_of_addition) - 1) % 7) + 1
             new_sign = -1 if new_value < 0 else 1
             # invert the degree if there's been a sign change
-            new_degree = self.degree if (new_sign == self.sign) else (9-self.degree)
-            new_ext_degree = new_degree + (7*(abs(new_value) // 12))
+            new_degree = self.degree if (new_sign == self.sign) else ((self.max_degree+2)-self.degree)
+            new_ext_degree = new_degree + (self.max_degree*(abs(new_value) // self.span_size))
             #
             # # new degree is an octave less if there's been a sign change:
             # new_sign = -1 if new_value < 0 else 1
             # if new_sign != self.sign:
             #     new_degree -= 7
 
-            result = Interval.from_cache(new_value, new_ext_degree)
+            result = self.re_cache(new_value, new_ext_degree)
         else:
-            result = Interval.from_cache(new_value, None)
+            result = self.re_cache(new_value)
         return result
         # elif isinstance(other, int):
         #     # cast to interval and call again recursively:
@@ -253,33 +261,33 @@ class Interval:
 
     def __mod__(self, m):
         """performs modulo on self.value and returns resulting interval"""
-        return Interval.from_cache(self.value % m)
+        return self.re_cache(self.value % m)
 
     def __neg__(self):
         if self.value == 0:
             return self
         else:
-            return Interval.from_cache(-self.value, self.extended_degree)
+            return self.re_cache(-self.value, self.extended_degree)
 
     def __invert__(self):
         """returns the inverted interval, which is distinct from the negative interval.
         negative of Interval(7) (perfect fifth) is Interval(-7) (perfect fifth descending),
         but the inverse, ~Interval(7) is equal to Interval(-5) (perfect fourth descending)"""
-        new_mod = (-(12-self.mod)) * self.sign
+        new_mod = (-(self.span_size-self.mod)) * self.sign
         # stretch to higher octave if necessary:
-        new_value = new_mod + (12 * self.octave_span)* -(self.sign)
-        new_degree = (9-self.degree) + (7*self.octave_span) # * self.sign
+        new_value = new_mod + (self.span_size * self.octave_span)* -(self.sign)
+        new_degree = ((self.max_degree+2)-self.degree) + (self.max_degree*self.octave_span) # * self.sign
         # new_degree = new_degree + (7 * self.octave_span) # * -(self.sign)
         # new_degree =
 
 
-        return Interval.from_cache(new_value, new_degree)
+        return self.re_cache(new_value, new_degree)
 
     def __abs__(self):
         if self.value > 0:
             return self
         else:
-            return Interval.from_cache(-self.value)
+            return self.re_cache(-self.value)
 
     def flatten(self):
         """returns Interval object corresponding to this interval's mod-value and mod-degree"""
@@ -287,7 +295,7 @@ class Interval:
             # invert before flattening:
             return (~self).flatten()
         else:
-            return Interval.from_cache(self.mod, degree=self.degree)
+            return self.re_cache(self.mod, self.degree)
 
     def __eq__(self, other):
         """Value equivalence comparison for intervals - returns True if both have
@@ -306,7 +314,7 @@ class Interval:
         if isinstance(other, Interval):
             return self.mod == other.mod
         elif isinstance(other, int):
-            return self.mod == (other % 12)
+            return self.mod == (other % self.span_size)
         else:
             raise TypeError('Intervals can only be compared to integers or other Intervals')
 
@@ -344,13 +352,25 @@ class Interval:
 
     @property
     def name(self):
-        if self.extended_degree in degree_names:
+        if self.mod == 0 and self.value > 0:
+            # this is a 'span', like an octave
+            degree_name = span_names[self.max_degree+1].capitalize()
+            call_compound = False
+            if self.octave_span > 1:
+                # it spans more than ONE octave, so we call it double/triple etc:
+                if self.octave_span in multiple_names:
+                    degree_name = f'{multiple_names[self.octave_span].capitalize()} {degree_name}'
+                else:
+                    # no name for this multiple, so just call it a "5x Octave" etc.
+                    degree_name = f'{octave_span}x {degree_name}'
+
+        elif self.extended_degree in degree_names:
             # interval degree is at most a thirteenth:
-            degree_name = degree_names[self.extended_degree]
+            degree_name = degree_names[self.extended_degree].capitalize()
             call_compound = False
         else:
             # greater than a thirteenth, so we just call it an extended whatever:
-            degree_name = degree_names[self.degree]
+            degree_name = degree_names[self.degree].capitalize()
             call_compound = True
 
         qualifiers = []
@@ -365,7 +385,7 @@ class Interval:
         else:
             qualifier_string = ''
 
-        return f'{self.quality.full_name.capitalize()} {degree_name.capitalize()}{qualifier_string}'
+        return f'{self.quality.full_name.capitalize()} {degree_name}{qualifier_string}'
 
     @property
     def short_name(self):
@@ -386,10 +406,6 @@ class Interval:
         sign_str = '' if self.sign == 1 else '-'
         return f'{sign_str}{acc}{self.extended_degree}'
 
-    @property
-    def _brackets(self):
-        return '‹', '›'
-
     def __str__(self):
         lb, rb = self._brackets
         return f'{lb}{self.value}:{self.name}{rb}'
@@ -398,10 +414,13 @@ class Interval:
         return str(self)
 
     @staticmethod
-    def from_cache(value, degree=None):
-        # return a cached Interval object with this value if it exists,
-        # otherwise initialise a new one
-        if (value, degree) in cached_intervals:
+    def from_cache(value, degree=None, max_degree=7, span_size=12):
+        """return a cached Interval object with this value if it exists,
+        otherwise initialise a new one"""
+        if max_degree != 7 or span_size != 12:
+            # irregular intervals are not cached, just initialise one instead:
+            return IrregularInterval(value, degree, max_degree, span_size)
+        elif (value, degree) in cached_intervals:
             return cached_intervals[(value, degree)]
         elif _settings.DYNAMIC_CACHING:
             new_interval = Interval(value, degree)
@@ -410,6 +429,77 @@ class Interval:
         else:
             # no cache, so we must actually init
             return Interval(value, degree)
+
+    def re_cache(self, value, degree=None):
+        """Instantiate a new Interval object from cache, using the max_degree
+        and span_size parameters of the current Interval object in case this Interval is Irregular"""
+        return Interval.from_cache(value, degree, self.max_degree, self.span_size)
+
+    _brackets = _settings.BRACKETS['Interval']
+
+    perfect_degrees = {1,4,5} # true for diatonic intervals, but maybe not for irregular intervals
+
+
+class IrregularInterval(Interval):
+    """Intervals that do not correspond to diatonic scales,
+    allowing for Octave intervals of degrees other than 8"""
+
+    # this allows for exotic interval types can have something other than 12 semitones in an octave,
+    # or other than 8 notes in a 'span' (octave, nonave, etc.)
+
+    # in practice even for Pentatonic scales it is more useful to use regular Intervals,
+    # and the use of IrregularIntervals is reserved for exotic things like Bebop scales
+
+    def __init__(self, value, degree, max_degree, span_size=None):
+        if max_degree == 7:
+            raise Exception('IrregularInterval initialised with max_degree=7; this should be a normal Interval instead')
+        self.max_degree = max_degree
+        if span_size is None:
+            if max_degree > 7:
+                # if more than 7 degrees, keep the 12 semitone span:
+                span_size = 12
+            else:
+                # otherwise pick a sensible default
+                span_size = default_degree_intervals(max_degree)
+        self.span_size = span_size
+
+        self.subscript = numeral_subscript(self.max_degree+1) # clarifying marker for printing
+
+        # initialise the rest as Interval class does:
+        self.value = value
+        self._set_values()
+        self._set_degree(degree)
+        self._set_flags()
+        self._set_quality()
+
+    def __hash__(self):
+        # IrregularIntervals hash separately to normal intervals:
+        return hash((self.max_degree, self.span_size, self.value))
+
+    @property
+    def short_name(self):
+        lb, rb = self._brackets
+        if self.value == 0:
+            return f'{lb}Rt{self.subscript}{rb}'
+        else:
+            sign_str = '-' if self.sign == -1 else ''
+            short_deg = f'{self.extended_degree}'
+            return f'{lb}{sign_str}{self.quality.short_name}{short_deg}{self.subscript}{rb}'
+
+    # alternate str method:
+    @property
+    def factor_name(self):
+        # display this interval as an accidental and a degree:
+        acc = offset_accidentals[self.offset_from_default][0]
+        sign_str = '' if self.sign == 1 else '-'
+        return f'{sign_str}{acc}{self.extended_degree}'
+
+
+    def __str__(self):
+        lb, rb = self._brackets
+        return f'{lb}{self.value}:{self.name}{self.subscript}{rb}'
+
+
 
 class IntervalList(list):
     """List subclass that is instantianted with an iterable of Interval-like objects and forces them all to Interval type".
@@ -428,7 +518,7 @@ class IntervalList(list):
         interval_items = []
         for item in items:
             if isinstance(item, Interval):
-                # add note
+                # add interval (preserving IrregularIntervals if present)
                 interval_items.append(item)
             elif isinstance(item, int):
                 # cast int to interval (using cache if it exists)
@@ -545,13 +635,13 @@ class IntervalList(list):
         """if this list does NOT start and/or end with unisons, add them where appropriate"""
         assert self == self.sorted(), f'non-sorted IntervalLists should NOT be padded'
         if (self[0].mod != 0) and left:
-            new_intervals = [Interval.from_cache(0)] + self[:]
+            new_intervals = [Interval.from_cache(0, None, self[0].max_degree)] + self[:]
         else:
             new_intervals = self[:]
         if (self[-1].mod != 0) and right:
             # add unison/octave above the last interval:
             octave_span = self[-1].octave_span + 1
-            new_intervals = new_intervals + [Interval.from_cache(12*(octave_span))]
+            new_intervals = new_intervals + [Interval.from_cache(self[0].span_size*(octave_span), None, self[0].max_degree)]
         return IntervalList(new_intervals)
 
     def flatten(self, duplicates=False):
@@ -571,7 +661,7 @@ class IntervalList(list):
         else:
             # preserve original padding:
             padded_left = (self[0] == 0)
-            padded_right = (self[-1] % 12 == 0)
+            padded_right = (self[-1].mod == 0)
             # unstack, rotate, stack again:
             unstacked_intervals = self.strip().pad(left=False, right=True).unstack()
             rotated_intervals = IntervalList(rotate_list(unstacked_intervals, num_places))
@@ -660,12 +750,12 @@ Intervals = IntervalList
 #     return tonic_intervals
 
 # which intervals are considered perfect/major:
-perfect_intervals = {0, 5, 7}
-major_intervals = {2, 4, 9, 11}
+# perfect_intervals = {0, 5, 7}
+# major_intervals = {2, 4, 9, 11}
 # minor_intervals = [1, 3, 8, 10]
 
 # which degrees are considered perfect:
-perfect_degrees = {1, 4, 5}
+# perfect_degrees = {1, 4, 5}
 
 # how many whole tones does each semitone interval correspond to (by default):
 default_interval_degrees = {
@@ -690,9 +780,9 @@ default_degree_intervals = {
                 7: 11, # maj7
                 # 8: 12, # octave
                 }
-
-
-
+# defaults of degrees in higher octaves, just in case:
+higher_defaults = {k+(7*o):v+(12*o) for k,v in default_degree_intervals.items() for o in range(1,3)}
+default_degree_intervals.update(higher_defaults)
 
 
 # interval aliases:
@@ -762,44 +852,8 @@ cached_intervals.update({(iv.value, None):iv for iv in common_intervals})
 cached_intervals_by_degree = {(iv.extended_degree, None, iv.offset_from_default):iv for iv in common_intervals}
 cached_intervals_by_degree.update({(iv.extended_degree, iv.quality, None):iv for iv in common_intervals})
 
-# interval whole-number ratios according to five-limit tuning just intonation:
+# interval whole-number ratios according to five-limit just-intonation:
 interval_ratios = {0: (1,1),  1: (16,15),  2: (9,8),    3: (6,5),
                    4: (5,4),  5: (4,3),    6: (25,18),  7: (3,2),
                    8: (8,5),  9: (5,3),   10: (16,9),  11: (15,8),
                    12: (2,1)}
-
-
-
-# # calculate ratios of extended intervals:
-# higher_ratios = {}
-# for higher_octave in range(1,4):
-#     for i, (l,r) in interval_ratios.items():
-#         # raise the left side of the ratio by an octave:
-#         hi, hl = i+(12*higher_octave), l*(2*higher_octave)
-#         # reduce to least common factors:
-#         for factor in range(10,1,-1):
-#             if (hl % factor == 0) and (r % factor == 0):
-#                 higher_ratios[hi] = (hl // factor), (r // factor)
-#                 print(f'above {i}:{l,r}, {hi}:{hl,r} is divisible by factor {factor}, produces {higher_ratios[hi]}')
-#                 break
-#         if hi not in higher_ratios:
-#             print(f'above {i}:{l,r}, {hi}:{hl,r} not divisible by any factors')
-#             higher_ratios[hi] = (hl, r)
-
-# interval_ratios.update(higher_ratios)
-
-
-
-
-
-# def consonance(i):
-#     """consonance of an interval, defined as
-#     the base2 log of the least common multiple of
-#     the sides of that interval's ratio"""
-#     l, r = self.ratio
-#     # reduce ratio:
-#     # gcd = euclidean_gcd(l,r)
-#     # l, r = l // gcd, r // gcd
-#     # calculate least common multiple of simple form:
-#     lcm = least_common_multiple(l,r)
-#     return math.log(lcm, 2)
