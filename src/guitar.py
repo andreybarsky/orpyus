@@ -416,14 +416,17 @@ class Guitar: ### TBI: allow ukelele tunings?
         """wrapper around the show_note, show_chord, show_key etc. methods.
         accepts an arbitrary object and calls the relevant method to show it"""
 
-        classes = [ChordProgression, Progression, Subkey, Key,
-                   Subscale, Scale, Chord, AbstractChord,
-                   OctaveNote, Note]
-        funcs = [self.show_chord_progression, self.show_progression, self.show_key, self.show_key,
-                self.show_scale, self.show_scale, self.show_chord, self.show_abstract_chord,
-                self.show_octavenote, self.show_note]
-        names = ['Progression', 'Progression', 'Key', 'Key',
-                 'Scale', 'Scale', 'Chord', 'Chord',
+        classes = [ Chord, AbstractChord,
+                    Key, Scale,
+                    ChordProgression, Progression,
+                    Note, OctaveNote]
+        funcs = [self.show_chord, self.show_abstract_chord,
+                 self.show_key, self.show_scale,
+                 self.show_chord_progression, self.show_progression,
+                 self.show_note, self.show_octavenote]
+        names = ['Chord', 'Chord',
+                 'Key', 'Scale',
+                 'Progression', 'Progression',
                  'Note', 'Note']
 
         found_type = False
@@ -432,20 +435,34 @@ class Guitar: ### TBI: allow ukelele tunings?
                 if isinstance(obj, cls):
                     func(obj, *args, **kwargs)
                     break
-        else: # for strings, we brute force it by Try block:
-            succeeded = False
-            obj_name = obj
-            for name, cls, func in zip(names, classes, funcs):
-                try:
-                    obj = cls(obj_name)
-                    func(obj)
-                    # print(f'Showing {obj}')
-                    succeeded = True
-                    break
-                except:
-                    continue
-            if not succeeded:
-                raise TypeError(f"Could not understand string input to Guitar.show: {obj}")
+        else: # for strings,
+            if 'chord' in obj.lower():
+                # could be something like 'Em chord' or 'Chord of F', so do a bunch of reps:
+                for rep in ['chord', 'Chord', 'of']:
+                    obj = obj.replace(rep, '')
+                obj = obj.strip()
+                self.show_chord(obj)
+            elif 'key' in obj.lower():
+                # similar, we account for 'Key of Em', or ''
+                for rep in ['key', 'Key', 'of']:
+                    obj = obj.replace(rep, '')
+                obj = obj.strip()
+                self.show_key(obj)
+            else:
+                # otherwise, we brute force it by Try block:
+                succeeded = False
+                obj_name = obj
+                for name, cls, func in zip(names, classes, funcs):
+                    try:
+                        obj = cls(obj_name)
+                        func(obj)
+                        # print(f'Showing {obj}')
+                        succeeded = True
+                        break
+                    except:
+                        continue
+                if not succeeded:
+                    raise TypeError(f"Could not understand string input to Guitar.show: {obj}")
 
     @property
     def name(self):
