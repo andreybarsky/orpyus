@@ -141,16 +141,20 @@ common_note_names = set(preferred_note_names['b'] + preferred_note_names['#'])
 
 num_suffixes = defaultdict(lambda: 'th', {1: 'st', 2: 'nd', 3: 'rd', 4: 'th', 5: 'th', 6: 'th', 7: 'th'})
 
-numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII'}
+numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII'}
 roman_numerals = reverse_dict(numerals_roman)
 
-
-
 degree_names = {1: 'unison',  2: 'second', 3: 'third',
-                4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh', 8: 'octave',
-                9: 'ninth', 10: 'tenth',
-                11: 'eleventh', 12: 'twelfth', 13: 'thirteenth',  15: 'double-octave'}
+                4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh', 8: 'eighth',
+                9: 'ninth', 10: 'tenth', 11: 'eleventh',
+                12: 'twelfth', 13: 'thirteenth'} #, 14: 'fourteenth', 15: 'fifteenth', 16: 'sixteenth'}
 
+multiple_names = {2: 'Double', 3: 'Triple', 4: 'Quadruple'}
+
+# very niche use: 'Octave' is not appropriate for e.g. eight-note scales,
+# so we define what else these non-Octave 'spans' might be called:
+span_names = {5: 'pentave', 6: 'sexave', 7: 'septave', 8: 'octave',
+              9: 'nonave', 10: 'decave', 11: 'undecave', 12: 'duodecave'}
 
 
 

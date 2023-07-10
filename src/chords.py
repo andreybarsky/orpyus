@@ -2,7 +2,7 @@
 
 # import notes
 from .notes import Note, NoteList, chromatic_scale
-from .intervals import Interval, IntervalList, P5
+from .intervals import Interval, IntervalList, P5, default_degree_intervals
 from .util import log, precision_recall, rotate_list, check_all, auto_split, reverse_dict, unpack_and_reverse_dict
 from .qualities import Quality, ChordModifier, parse_chord_modifiers
 from . import notes, parsing, qualities, _settings
@@ -13,8 +13,8 @@ from itertools import permutations
 from pdb import set_trace
 
 
-class ChordFactors(dict):
-    """a class representing the factors of an AbstractChord, as a dict which has:
+class Factors(dict):
+    """a class representing the factors of an AbstractChord or Scale, as a dict which has:
         keys: chord degrees (1 representing the root, 5 representing the fifth, etc.)
         values: semitone offsets from default degree intervals.
             e.g. the fifth degree is 7 semitones by default, so {5: -1} implies
@@ -23,11 +23,15 @@ class ChordFactors(dict):
             note these are not modifiers that *should* be applied, but a history for this object.
             applying modifiers must be done using the __add__ method, or the modifier's .apply method"""
 
-    def __init__(self, arg=None, modifiers=None):
+    # this class also gets inherited by ChordFactors and ScaleFactors later on,
+    # which is why we see a bunch of self.__class__ and self.__name__ in these methods
+
+    def __init__(self, arg=None, modifiers=None, strip_octave=False, auto_increment_clashes=False):
         """accepts any arg that would initialise a dict,
           and also allows a string of degree alterations (e.g. "1-♭3-♭♭5")
           or a list of such alterations (e.g. ["1", "♭3", "♭♭5"])
         also treats init by None (i.e. no args) as a major triad by default."""
+
 
         # accept re-casting by dict comp:
         if isinstance(arg, self.__class__):
@@ -41,11 +45,40 @@ class ChordFactors(dict):
         if isinstance(arg, list) and type(arg[0]) != tuple:
             # parse a list of non-tuples (i.e. invalid list for dict input) as list of chord degrees
             dict_arg = {}
+            running_increment = 0 # used for resolving clashes in ScaleFactor construction
             for item in arg:
                 assert isinstance(item, str)
-                # this is an
+                # this is a string denoting a degree or degree alteration, like '2' or 'b3' or '#4'
                 mod_dict = parsing.parse_alteration(item)
+                degree, offset = list(mod_dict.keys())[0], list(mod_dict.values())[0]
+
+                if degree == 8 and offset == 0:
+                    if strip_octave:
+                        # default behaviour for ScaleFactors: ignore unaltered 8s since it's just the tonic again
+                        continue
+
+                if degree+running_increment in dict_arg:
+                    # there is a clash, we've been given the same degree twice
+                    if not auto_increment_clashes:
+                        # default behaviour for ChordFactors: raise error
+                        raise ValueError(f'Factor clash in {self.__class__.__name__} object: Tried to add {mod_dict} to factors but {degree} already exists as: {self[degree]}')
+                    else:
+                        # default behaviour for ScaleFactors: ignore numbering and add a new factor
+                        running_increment += 1
+
+                # in case we've been given two values of the same degree, we must adjust to compensate:
+                if running_increment > 0: # (only triggers if auto_increment_clashes is Tre)
+                    orig_default_interval = default_degree_intervals[degree]
+                    inc_default_interval = default_degree_intervals[degree+running_increment]
+                    inc_offset = inc_default_interval - orig_default_interval
+                    degree = int(degree) + running_increment
+                    offset = int(offset) - inc_offset
+
+                mod_dict = {degree:offset}
+
                 dict_arg.update(mod_dict)
+
+
             arg = dict_arg
             # then continue as normal
 
@@ -54,10 +87,11 @@ class ChordFactors(dict):
             arg = {1:0, 3:0, 5:0}
 
         super().__init__(arg)
-        # # sanity check:
-        # for k, v in self.items():
-        #     assert isinstance(k, int) and (k >= 1)
-        #     assert isinstance(v, int) and (-2 <= v <= 2)
+
+        assert self[1] == 0, f"Factors object must have a natural root degree, so expected self[1]==0, but got: self[1]=={self[1]}"
+
+        # modifiers is not a list of modifiers to apply; rather, it is a list of
+        # modifiers that HAVE been applied to this object, like a history
         if modifiers is None:
             self.modifiers = []
         else:
@@ -73,16 +107,21 @@ class ChordFactors(dict):
 
     @property
     def order(self):
-        """the number of notes in the chord that this object represents"""
+        """the number of notes in the chord/scale that this object represents"""
         return len(self)
 
     def to_intervals(self, as_dict=False):
-        """translates these ChordFactors into an IntervalList
+        """translates these Factors into an IntervalList
         or, if as_dict, into a factor_intervals dict mapping degrees to intervals"""
         if not as_dict:
             return IntervalList([Interval.from_degree(d, offset=o) for d, o in self.items()]).sorted()
         elif as_dict:
             return {d:Interval.from_degree(d, offset=o) for d, o in self.items()}
+
+    @property
+    # noun-wrapper for the verb-method 'to_intervals'
+    def as_intervals(self):
+        return self.to_intervals()
 
     def copy(self):
         return self.__class__({k:v for k,v in self.items()}, modifiers=self.modifiers)
@@ -104,13 +143,13 @@ class ChordFactors(dict):
                 # output_factors.modifiers.append(mod)
         # ensure that we keep ourselves sorted:
         else:
-            raise TypeError(f'Cannot add ChordFactors object to type: {type(other)}')
+            raise TypeError(f'Cannot add Factors object to type: {type(other)}')
         sorted_keys = sorted(list(output_factors.keys()))
         # return output_factors
         return self.__class__({k: output_factors[k] for k in sorted_keys}, modifiers = output_factors.modifiers)
 
     def distance(self, other):
-        # distance from other ChordFactors objects, to detect altered chords from their factors
+        # distance from other actors objects, to detect altered chords from their factors
         # as modifier: what must be done to RIGHT (other) to make it LEFT (self)
         assert isinstance(other, self.__class__)
         add, modify, remove  = {}, {}, []
@@ -129,9 +168,7 @@ class ChordFactors(dict):
         return dist_modifier
 
     def __sub__(self, other):
-        """the - operator calculates (symmetric) distance between ChordFactors"""
-        if isinstance(other, AbstractChord):
-            other = other.factors
+        """the - operator calculates (symmetric) distance between Factor objects"""
         assert isinstance(other, self.__class__)
         return self.distance(other)
 
@@ -140,13 +177,18 @@ class ChordFactors(dict):
 
     def __str__(self):
         factor_strs = [f'{parsing.offset_accidentals[v][0]}{d}' for d,v in self.items()]
-        return f'¦ {", ".join(factor_strs)} ¦'
+        lb, rb = self._brackets
+        return f'{lb}{", ".join(factor_strs)}{rb}'
 
     def __repr__(self):
-        return f'ChordFactors: {str(self)}'
+        return f'{self.__class__.__name__}: {str(self)}'
 
     # ChordFactors object unicode identifier:
     _brackets = _settings.BRACKETS['ChordFactors']
+
+# ChordFactors are the type of Factors that apply to Chords:
+class ChordFactors(Factors):
+    pass
 
 # a chord's factors look like this:
 _major_triad = ChordFactors({1:0, 3:0, 5:0})
@@ -342,7 +384,7 @@ class AbstractChord:
                 # allow -1 as a valid inversion degree, meaning final inversion:
                 if inversion == -1:
                     inversion = len(factors)-1
-                assert 0 < inversion <= (len(factors)-1), f'{inversion} is an invalid inversion number for chord with {len(factors)} factors'
+                assert 0 < inversion <= (len(intervals)-1), f'{inversion} is an invalid inversion number for chord with {len(intervals)} notes'
             elif isinstance(inversion, str):
                 if not _allow_note_name:
                     raise TypeError(f'inversion arg for AbstractChord must be an int, but got: {type(inversion)}')
@@ -485,7 +527,7 @@ class AbstractChord:
     @property
     def consonance(self):
         """the weighted mean of pairwise interval consonances"""
-
+        # just retrieve cached consonance if it has already been computed:
         if self.suffix in cached_consonances_by_suffix:
             return cached_consonances_by_suffix[self.suffix]
         else:
@@ -1606,47 +1648,6 @@ def fuzzy_matching_chords(note_list, display=True,
         df.show(max_rows=max_results, margin=' ', **kwargs)
         return
 
-        # # print result as nice dataframe instead of returning a dict
-        # title = [f"Chord matches for notes: {note_list}"]
-        # if assume_root:
-        #     title.append(f'(assumed root: {note_list[0].name})')
-        # if not invert:
-        #     title.append('(inversions disallowed)')
-        # else:
-        #     title.append('(inversions allowed)')
-        #
-        # title = ' '.join(title)
-        # print(title)
-        #
-        # # we'll figure out how long we need to make each 'column' by iterating through cands:
-        # chord_name_parts = []
-        # note_list_parts = []
-        # for cand in sorted_cands:
-        #     # break chord string up for nice viewing:
-        #     str_parts = str(cand).split(' ')
-        #     chord_name_parts.append(' '.join(str_parts[:2]))
-        #     note_list_parts.append(' '.join(str_parts[2:]))
-        # longest_name_len = max([len(str(s)) for s in (chord_name_parts + ['  chord name'])])+3
-        # longest_notes_len = max([len(str(s)) for s in (note_list_parts + ['    notes'])])+3
-        #
-        # left_header =f"{'  chord name':{longest_name_len}} {'    notes':{longest_notes_len}}"
-        # score_parts = ['recall', 'precision', 'lklihood', 'consonance']
-        # hspace = 8
-        # right_header = ' '.join([f'{h:{hspace}}' for h in score_parts])
-        # out_list = [left_header + right_header]
-        #
-        # combi_chars = {"\u0324", "\u0323", "\u0307", "\u0308"} # a kludge: we have to count combining characters separately for chord notelist formatting
-        #
-        # for i, cand in enumerate(sorted_cands):
-        #     scores = candidates[cand]
-        #     rec, prec, lik, cons = list(scores.values())
-        #     name_str, notes_str = chord_name_parts[i], note_list_parts[i]
-        #     num_combi_chars = len([c for c in notes_str if c in combi_chars])
-        #
-        #     descriptor = f'{name_str:{longest_name_len}} {notes_str:{longest_notes_len + num_combi_chars}}'
-        #     scores = f' {str(rec):{hspace}} {str(prec):{hspace}}  {str(lik):{hspace}}  {cons:.03f}'
-        #     out_list.append(descriptor + scores)
-        # print('\n'.join(out_list))
     else:
         return {c: candidates[c] for c in sorted_cands}
 

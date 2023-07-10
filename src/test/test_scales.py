@@ -5,6 +5,15 @@ from .testing_tools import compare
 
 def unit_test():
 
+
+    # test scale factor/degree distinction:
+    compare(Scale(ScaleFactors('1,2,3,5,6')).degree_intervals[4], P5) # the fourth degree of the maj pent scale is a P5
+    compare(Scale(ScaleFactors('1,2,3,5,6')).factor_intervals[5], P5) # which is also the 5th _factor_ of the maj pent scale
+
+    # test scale init by name:
+    compare(Scale('minor natural'), Scale('nat min'))
+    compare(Scale('maj pent'), Scale('pentatonic major'))
+
     # test mode retrieval by name:
     compare(mode_name_intervals['natural major'], get_modes('natural major')[1])
 

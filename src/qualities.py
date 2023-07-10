@@ -85,13 +85,20 @@ class Quality:
     def from_offset_wrt_major(offset):
         # return Quality(major_offsets[offset])
         ### use pre-initialised Quality instance:
-        return major_offset_qualities[offset]
+        if offset in major_offset_qualities:
+            return major_offset_qualities[offset]
+        else:
+            raise ValueError(f'Tried to initialise a Quality with offset_wrt_major={offset}, which is too far to be doubly augmented or diminished')
 
     @staticmethod
     def from_offset_wrt_perfect(offset):
         # return Quality(perfect_offsets[offset])
         ### use pre-initialised Quality instance:
-        return perfect_offset_qualities[offset]
+        if offset in perfect_offset_qualities:
+            return perfect_offset_qualities[offset]
+        else:
+            raise ValueError(f'Tried to initialise a Quality with offset_wrt_perfect={offset}, which is too far to be doubly augmented or diminished')
+
 
     @staticmethod
     def from_value(value):

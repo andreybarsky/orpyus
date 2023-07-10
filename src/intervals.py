@@ -1,5 +1,5 @@
 from .qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
-from .parsing import degree_names, span_names, num_suffixes, offset_accidentals
+from .parsing import degree_names, span_names, multiple_names, num_suffixes, offset_accidentals
 from .util import rotate_list, least_common_multiple, euclidean_gcd, numeral_subscript
 from .conversion import value_to_pitch
 from . import _settings
@@ -68,7 +68,7 @@ class Interval:
             self.extended_degree = degree # * self.sign
             self.degree = (self.extended_degree - (self.max_degree*self.octave_span)) #  * self.sign
             if self.unison:
-                assert self.degree == 1, f'Degree of a unison (mod{self.span_size}) interval ought to be 1, but was: {self.degree}'
+                assert self.degree == 1, f'Interval of value={self.value} and extended_degree={self.extended_degree} is unison (since {self.value} %{self.span_size}=0) and so ought to have degree=1, but got degree={self.degree}'
                 assert ((self.extended_degree -1) % self.max_degree) == 0, f'Extended degree of a unison (mod{self.span_size}) interval must (-1) mod to 0, but was: {self.extended_degree}'
             assert 0 < self.degree <= self.max_degree
             # should not be more than 1 away from the default:
@@ -153,7 +153,9 @@ class Interval:
         initialise the appropriate Interval object.
         degree is assumed to be appropriately major/perfect if not specified"""
 
-        if (degree, quality, offset) in cached_intervals_by_degree:
+        # retrieve a cached interval, unless what we're trying to produce is irregular
+        # (since irregular intervals are never cached)
+        if max_degree == 7 and (degree, quality, offset) in cached_intervals_by_degree:
             return cached_intervals_by_degree[(degree, quality, offset)]
         else:
             extended_degree = degree
@@ -180,7 +182,7 @@ class Interval:
             default_value = default_degree_intervals[degree] + (12*octave_span)
             interval_value = default_value + offset
             interval_obj = Interval.from_cache(interval_value, extended_degree, max_degree)
-            if _settings.DYNAMIC_CACHING:
+            if _settings.DYNAMIC_CACHING and max_degree==7:
                 cached_intervals_by_degree[(degree, quality, offset)] = interval_obj
             return interval_obj
 
@@ -463,7 +465,7 @@ class IrregularInterval(Interval):
                 span_size = default_degree_intervals[max_degree]
         self.span_size = span_size
 
-        self.subscript = numeral_subscript(self.max_degree+1) # clarifying marker for printing
+        self.subscript = numeral_subscript(self.max_degree) # clarifying marker for printing
 
         # initialise the rest as Interval class does:
         self.value = value

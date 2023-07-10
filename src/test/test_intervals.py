@@ -38,6 +38,10 @@ def unit_test():
     compare(IntervalList([M3, P5]), IntervalList([P1, M3, P5, P8]).strip())
     compare(IntervalList([M2, M3, P5]), IntervalList([M3, P5, M9]).flatten())
 
+    print('IrregularIntervals::')
+    compare(IrregularInterval(11,7,6,11).name, 'Perfect Septave') # incredibly cursed music theory
+    compare(IrregularInterval(7,5,8) + 5, IrregularInterval(12,9,8)) # 'Perfect Nonave'
+
     # test execution time for init by various methods:
     def repeat_init_by_value(n):
         print('Testing interval init by value:')

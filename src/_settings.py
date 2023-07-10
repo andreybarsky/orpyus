@@ -41,6 +41,7 @@ BRACKETS = { 'Interval': ['‹', '›'],
           'Progression': ['𝄆 ', ' 𝄇'],    #['𝄃 ', ' 𝄂'],
      'ChordProgression': ['𝄆 ', ' 𝄇'],    # ['╟', '╢'],
                'Guitar': ['〚', ' 〛'],
+  'chromatic_intervals': ['[', ']'],
 
 
 }

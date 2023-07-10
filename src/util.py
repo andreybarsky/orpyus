@@ -261,3 +261,11 @@ def euclidean_gcd(a,b):
 
 def least_common_multiple(a,b):
     return (a*b) // euclidean_gcd(a,b)
+
+subscript_digits = '₀₁₂₃₄₅₆₇₈₉'
+def numeral_subscript(numerals):
+    """accepts an int or string of ints,
+    and converts to string of subscripts"""
+    numerals = str(numerals)
+    subscripts = [subscript_digits[int(n)] for n in numerals]
+    return ''.join(subscripts)
