@@ -396,17 +396,22 @@ class ChordModifier:
         verifications = ','.join(verifications).capitalize()
         return '\n'.join([removals, additions, makes, modifications, verifications]).strip()
 
-    @property
-    def name(self):
+    def __len__(self):
+        """returns the total number of note alterations contained in this Modifier"""
+        return len(self.summary)
+
+    def get_name(self, check_chord_dicts=True):
         """lookup whether this modifier exists in the definition dicts, otherwise call it unnamed"""
-        for lookup in [chord_types, chord_tweaks, chord_alterations]: #, chord_alterations]:
-            rev_lookup = reverse_dict(lookup)
-            if self in rev_lookup:
-                mod_name = rev_lookup[self]
+        if check_chord_dicts:
+            for lookup in [chord_types, chord_tweaks, chord_alterations]: #, chord_alterations]:
+                rev_lookup = reverse_dict(lookup)
+                if self in rev_lookup:
+                    mod_name = rev_lookup[self]
 
-                return mod_name
+                    return mod_name
 
-        # no lookup exists: as a last resort, build up from self.summary instead:
+        # no lookup exists (or not asked to find one):
+        # so build up a name string from self.summary instead:
         name_str = []
         for deg, val in self.summary.items():
             if val: # i.e. not 0 (add) or False (remove)
@@ -416,7 +421,9 @@ class ChordModifier:
             elif val == 0:
                 name_str.append(f'add{deg}')
         return ' '.join(name_str)
-
+    @property
+    def name(self):
+        return self.get_name()
 
     @property
     def order(self):

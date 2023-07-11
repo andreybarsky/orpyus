@@ -140,7 +140,7 @@ def unpack_and_reverse_dict(dct, include_keys=False, force_list=False):
     return rev_dct
 
 def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True,
-                   include_keys=False, discard=False, verbose=False):
+                   include_keys=False, discard=False, chunk=False, verbose=False):
     """given an input string 'inp', and a dict 'aliases' that maps potential input substrings
     to replacements (which can be arbitrary objects), recursively replace the string
     starting from longest possibilities first, until we have reduced it to its canonical form.
@@ -154,7 +154,9 @@ def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True,
     if include_keys, we include the dict key in the replacements so they can map
         back onto themselves.
     if discard, we discard nonmatching characters instead of adding them to the
-        output list."""
+        output list.
+    if chunk, nonmatching characters are chunked into words instead of each
+        ending up as a separate list item."""
 
     if reverse:
         replacements = unpack_and_reverse_dict(aliases, force_list=force_list, include_keys=include_keys)
@@ -178,6 +180,7 @@ def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True,
 
     # pre-initialise new (output) list:
     output = []
+    cur_chunk = []
 
     # iterate starting from each character of the current string:
     cur_input_idx = 0
@@ -193,17 +196,29 @@ def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True,
             substring = inp[cur_input_idx : cur_input_idx + cur_rep_len]
             if substring in cur_len_replacements.keys():
                 # found a replacement:
+                if chunk and not discard: # append the current chunk first if we're building one
+                    if len(cur_chunk) > 0:
+                        output.append(''.join(cur_chunk).strip())
+                        cur_chunk = []
+
                 rep = cur_len_replacements[substring]
                 output.append(rep)
                 cur_input_idx += cur_rep_len
                 found_match = True
+
                 # log(f'Replacing {substring} with {rep} at original index={cur_input_idx-cur_rep_len}. New index is {cur_input_idx}, current replacement is: {output}')
                 break
         if not found_match:
             # no replacement at this character, advance forward by one character
             if not discard:
-                output.append(inp[cur_input_idx])
+                if chunk:
+                    cur_chunk.append(inp[cur_input_idx])
+                else:
+                    output.append(inp[cur_input_idx])
             cur_input_idx += 1
+    # finish off a chunk if needed:
+    if chunk and not discard and len(cur_chunk) > 0:
+        output.append(''.join(cur_chunk).strip())
 
     # finished, join output string and return:
     return output

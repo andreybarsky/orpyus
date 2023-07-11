@@ -325,7 +325,12 @@ def parse_octavenote_name(name, case_sensitive=True):
 def is_alteration(string):
     """returns True if a string is a valid chord/scale alteration, like #5 or b11,
     and False otherwise"""
-    return (is_accidental(string[0])) and (string[1:].isnumeric())
+    # first find double-char accidentals: ('##', 'bb' etc.)
+    if string[:2] in accidental_offsets.keys():
+        return string[2:].isnumeric()
+    # then regular (accidental),(numeral) pairs:
+    else:
+        return (is_accidental(string[0])) and (string[1:].isnumeric())
 
 def parse_out_alterations(string):
     """given a string that contains arbitrary characters along with alterations,

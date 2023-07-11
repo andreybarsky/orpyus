@@ -16,15 +16,15 @@ natural_scale_names = {'natural major', 'natural minor'}
 
 # this dict maps base scale names to dicts that map scale degrees to the modes of that base scale
 base_scale_mode_names = {
-  'natural major': {1: ['ionian'], 2: ['dorian'], 3: ['phrygian'], 4: ['lydian'],
-                    5: ['mixolydian'], 6: ['aeolian'], 7: ['locrian']},
+  'natural major': {1: ['ionian', 'major'], 2: ['dorian'], 3: ['phrygian'], 4: ['lydian'],
+                    5: ['mixolydian'], 6: ['natural minor', 'aeolian', 'minor'], 7: ['locrian']},
   'melodic minor': {1: ['athenian', 'melodic minor ascending', 'jazz minor'], 2: ['cappadocian', 'phrygian ♯6', 'dorian ♭2'],
                     3: ['asgardian', 'lydian augmented'], 4: ['pontikonisian', 'lydian dominant'],
-                    5: ['olympian', 'aeolian dominant', 'mixolydian ♭6'],
+                    5: ['melodic major', 'olympian', 'aeolian dominant', 'mixolydian ♭6'],
                     6: ['sisyphean', 'aeolocrian', 'half-diminished'], 7: ['palamidian', 'altered dominant']},
- 'harmonic minor': {1: ['harmonic minor'], 2: ['locrian ♯6'], 3: ['ionian ♯5'], 4: ['ukrainian dorian'],
+ 'harmonic minor': {1: [], 2: ['locrian ♯6'], 3: ['ionian ♯5'], 4: ['ukrainian dorian'],
                     5: ['phrygian dominant'], 6: ['lydian ♯2'], 7: ['altered diminished']},
- 'harmonic major': {1: ['harmonic major'], 2: ['blues heptatonic', 'dorian ♭5', 'locrian ♯2♯6'], 3: ['phrygian ♭4', 'altered dominant ♯5'],
+ 'harmonic major': {1: [], 2: ['blues heptatonic', 'dorian ♭5', 'locrian ♯2♯6'], 3: ['phrygian ♭4', 'altered dominant ♯5'],
                     4: ['lydian minor', 'lydian ♭3', 'melodic minor ♯4'], 5: ['mixolydian ♭2'],
                     6: ['lydian augmented ♯2'], 7: ['locrian 𝄫7']}
                  }
@@ -87,17 +87,25 @@ class ScaleFactors(Factors):
             new_factors = ScaleFactors({k:v for k,v in self.items() if k not in omit})
         return new_factors
 
+    def mode(self, N):
+        """returns the ScaleFactors corresponding to the Nth mode of this object"""
+        intervals = self.to_intervals()
+        mode_intervals = intervals.mode(N)
+        factors_str = ','.join(mode_intervals.to_factors())
+        return ScaleFactors(factors_str)
+
 # this dict maps scale intervals (in canonical, stripped form) to all accepted aliases
 # at first just for the standard scales, but it gets filled out later
 
-factor_scale_names = {
+factor_scale_names = { # standard scales are defined here, modes and subscales are added later:
                     ScaleFactors('1,  2,  3,  4,  5,  6,  7'): 'natural major',
-                    ScaleFactors('1,  2,  b3, 4,  5, b6, b7'): 'natural minor',
+                    ScaleFactors('1,  2, b3,  4,  5, b6, b7'): 'natural minor',
                     ScaleFactors('1,  2,  3,  4,  5, b6,  7'): 'harmonic major',
                     ScaleFactors('1,  2, b3,  4,  5, b6,  7'): 'harmonic minor',
                     ScaleFactors('1,  2,  3,  4,  5, b6, b7'): 'melodic major',
                     ScaleFactors('1,  2, b3,  4,  5,  6,  7'): 'melodic minor', # (ascending)
-                        # "melodic minor" can refer to using the the natural minor scale when descending, but that is complex to implement
+    # while it's true that "melodic minor" can refer to a special scale that uses
+    # the the natural minor scale when descending, but that out-of-scope for now
                     }
 scale_name_factors = reverse_dict(factor_scale_names)
 # we recognise scale names by breaking them down into words and checking if all words are present,
@@ -113,7 +121,6 @@ scale_name_replacements = {
                         'melodic': ['melo', 'mel', 'mic'],
                         'pentatonic': ['pent', '5tonic'],
                         'hexatonic': ['hex', '6tonic'],
-                        'natural': ['nat', 'N'],
                         'mixolydian': ['mixo', 'mix'],
                         'dorian': ['dori', 'dor'],
                         'phrygian': ['phrygi', 'phryg'],
@@ -125,22 +132,25 @@ scale_name_replacements = {
                           }
 replacement_scale_names = unpack_and_reverse_dict(scale_name_replacements, include_keys=True)
 
-# whole-scale-name aliases (once translated into standard form by replacement):
-scale_name_aliases = {}
-alias_scale_names = unpack_and_reverse_dict(scale_name_aliases, include_keys=True)
+# mapping whole-name replacements for scales: (gets filled later)
+alias_scale_names = {}
 
+# define modes and their substitutions:
+# for base_factors, base_name in factor_scale_names.items():
+#     if base_name in base_scale_names: # exclude non-base (standard) scales: natural minor, melodic major
+        # mode_dict = base_scale_mode_names[base_name]
 
-interval_scale_names = {
-    IntervalList(M2, M3, P4, P5, M6, M7): ['', 'maj', 'M', 'major', 'natural major' ],
-    IntervalList(M2, m3, P4, P5, m6, m7): ['m', 'min', 'minor', 'natural minor' ],
-
-    IntervalList(M2, M3, P4, P5, m6, M7): ['harmonic major', 'M harmonic', 'major harmonic', 'maj harmonic', 'harmonic major'],
-    IntervalList(M2, m3, P4, P5, m6, M7): ['harmonic minor', 'm harmonic', 'minor harmonic', 'min harmonic', 'harmonic minor'],
-    IntervalList(M2, M3, P4, P5, m6, m7): ['melodic major', 'M melodic', 'major melodic', 'melodic major', 'maj melodic', 'melodic major'],
-    IntervalList(M2, m3, P4, P5, M6, M7): ['melodic minor', 'm melodic', 'minor melodic', 'min melodic', 'jazz minor', 'melodic minor ascending','melodic minor'], # note: ascending only
-    # "melodic minor" can refer to using the the natural minor scale when descending, but that is TBI
-    }
-scale_name_intervals = unpack_and_reverse_dict(interval_scale_names)
+# interval_scale_names = {
+#     IntervalList(M2, M3, P4, P5, M6, M7): ['', 'maj', 'M', 'major', 'natural major' ],
+#     IntervalList(M2, m3, P4, P5, m6, m7): ['m', 'min', 'minor', 'natural minor' ],
+#
+#     IntervalList(M2, M3, P4, P5, m6, M7): ['harmonic major', 'M harmonic', 'major harmonic', 'maj harmonic', 'harmonic major'],
+#     IntervalList(M2, m3, P4, P5, m6, M7): ['harmonic minor', 'm harmonic', 'minor harmonic', 'min harmonic', 'harmonic minor'],
+#     IntervalList(M2, M3, P4, P5, m6, m7): ['melodic major', 'M melodic', 'major melodic', 'melodic major', 'maj melodic', 'melodic major'],
+#     IntervalList(M2, m3, P4, P5, M6, M7): ['melodic minor', 'm melodic', 'minor melodic', 'min melodic', 'jazz minor', 'melodic minor ascending','melodic minor'], # note: ascending only
+#     # "melodic minor" can refer to using the the natural minor scale when descending, but that is TBI
+#     }
+# scale_name_intervals = unpack_and_reverse_dict(interval_scale_names)
 # standard_scale_suffixes = list([names[0] for names in interval_standard_scale_names.values()])
 
 
@@ -228,6 +238,8 @@ class NewScale:
         # and .chromatic_intervals is a plain list of the chromatic (or 'passing') intervals, like blues notes
         self.factors, self.factor_intervals, self.chromatic_intervals = self._parse_input( name, intervals, factors, alterations, chromatic_intervals, mode)
 
+        assert self.chromatic_intervals is not None
+
         ### TBI: test NewScale init with odd factors:
         # NewScale('1,2,3,4,5,b6,bb7,b8,8').factor_intervals (seems to work)
 
@@ -235,15 +247,14 @@ class NewScale:
         self.num_degrees = len(self.factors)
         self.degrees = [ScaleDegree(d, num_degrees = self.num_degrees) for d in range(1, self.num_degrees+1)]
         self.degree_intervals = {d: self.factor_intervals[f] for d,f in zip(self.degrees, self.factors)}
+        self.interval_degrees = reverse_dict(self.degree_intervals)
+        self.interval_factors = reverse_dict(self.factor_intervals)
 
         # the .intervals attribute includes both factor ('diatonic') and chromatic ('passing') intervals:
         self.intervals = IntervalList(list(self.factor_intervals.values()) + self.chromatic_intervals).sorted()
 
-        # self.intervals = self.combine_intervals(self.factor_intervals, self.chromatic_intervals)
 
-
-        # next, rotate through modes if required, preserving the placement of any chromatic intervals:
-
+    ### internal init subroutines:
     def _reparse_args(self, name, intervals, factors):
         """detect if intervals or factors have been given as first arg instead of name,
         and return corrected (name, intervals, factors) tuple"""
@@ -334,34 +345,133 @@ class NewScale:
 
     def _parse_scale_name(self, scale_name):
         """takes a string denoting a scale name and returns its canonical form if it exists"""
+        # step 0: fast exact check, see if the provided name exists as a canonical name or alias:
+        if scale_name in scale_name_factors:
+            log(f'Fast name check found "{scale_name}" as an existing canonical name')
+            return scale_name, []
+        elif scale_name in alias_scale_names:
+            canonical_scale_name = alias_scale_names[scale_name]
+            log(f'Fast name check found "{scale_name}" as an existing alias for canonical name {canonical_scale_name}')
+            return canonical_scale_name, []
+
         # step 1: re-cast replacements (e.g. 'nat' into 'natural', 'min' into 'major')
-        reduced_name_words = reduce_aliases(scale_name, replacement_scale_names)
+        reduced_name_words = reduce_aliases(scale_name, replacement_scale_names, chunk=True)
+        log(f'Scale name "{scale_name}" recursively re-parsed as: {reduced_name_words}')
+
+        # join and split on whitespace in case no replacements were made but an alteration exists:
+        reduced_name_words = ' '.join(reduced_name_words).split(' ')
+
         # a scale name's 'wordbag' is the (frozen) set of the words in its name:
         # check for alterations:
         alterations = [word for word in reduced_name_words if is_alteration(word)]
         if len(alterations) > 0:
             # if there are any alterations, then the name becomes
             # all the words that AREN'T alterations:
-            reduced_name_words = [word for word in reduced_name_words if is_alteration(word)]
+            reduced_name_words = [word for word in reduced_name_words if not is_alteration(word)]
+            log(f'Parsed out explicit alterations: {alterations}')
+
+
+        # search for exact matches in aliases:
+        reduced_name = ' '.join(reduced_name_words)
+        if reduced_name in alias_scale_names:
+            canonical_scale_name = alias_scale_names[reduced_name]
+            log(f'Slow name check found reduced name "{reduced_name}" as an existing canonical name')
+            return canonical_scale_name, alterations
 
         wordbag = frozenset(reduced_name_words) # note: frozensets are hashable, unlike regular sets
         if wordbag in wordbag_scale_names:
             canonical_scale_name = wordbag_scale_names[wordbag]
+            log(f'Slow name check found reduced name "{reduced_name}" as a rearrangement of canonical name: "{canonical_scale_name}"')
             return canonical_scale_name, alterations
         else:
             raise ValueError(f'{scale_name} re-parsed as {reduced_name_words} but could not find a corresponding scale by that name')
 
+    ### scale production methods:
     def subscale(self, keep=None, omit=None):
         """Return a subscale derived from this scale's factors,
         specified as either a list of factors to keep or to discard"""
         return self.__class__(factors=self.factors.subscale(keep=keep, omit=omit))
+
+    def mode(self, N):
+        """Returns a new scale that is the Nth mode of this scale.
+        (where mode 1 is identical to the existing scale)"""
+        non_chromatic_intervals = IntervalList([iv for iv in self.intervals if iv not in self.chromatic_intervals])
+        new_intervals = non_chromatic_intervals.mode(mode)
+        # shift chromatic intervals as well:
+        num_places = mode-1
+        # the interval at the num_places index of the original intervals
+        # is how far leftward the chromatic intervals must be shifted:
+        left_shift = non_chromatic_intervals[num_places]
+        new_chromatic_intervals = (self.chromatic_intervals - left_shift).flatten()
+        return NewScale(intervals=new_intervals, chromatic_intervals = new_chromatic_intervals)
+
+
+
+    ### utility, arithmetic, and magic methods:
+    def __len__(self):
+        """A scale's length is the number of intervals it has before the octave,
+        so that all diatonic scales have length 7, and all pentatonic scales
+        have length 5, and chromatic passing notes add 1 to this count"""
+        return len(self.intervals)
+    @property
+    def len(self):
+        return len(self)
+    @property
+    def order(self):
+        """A scale's order is the number of factors/degrees it has, not counting
+        chromatic intervals. So the blues scale has order 5, even though it contains
+        a 6th passing note"""
+        return len(self.factors)
+
+    ### property flags:
+    def is_heptatonic(self):
+        """A scale is heptatonic if it has 7 notes (including chromatic/passing notes)"""
+        return len(self) == 7
+    def is_diatonic(self):
+        """A scale is diatonic if it is a mode of the natural major or minor scales"""
+        for mode in range(1,8):
+            major_mode_factors = scale_name_factors[base_scale_mode_names['natural major'][mode][0]]
+            if self.factors == major_mode_factors:
+                return True
+        return False
+
+    ### naming/display methods:
+    def _determine_exotic_scale_name(self):
+        """If this scale does not have a registered name, we try to call it an
+        alteration of some existing scale"""
+        # diatonic case:
+        if len(self) == 7:
+            # first, try natural major and minor comparisons:
+            first_wave = ['ionian', 'aeolian']
+            # second, try the other diatonic modes:
+            second_wave = [names[0] for mode_idx, names in base_scale_mode_names['natural major'].items() if mode_idx not in [1,6]]
+            # third, try the other standard scales:
+            third_wave = ['harmonic minor', 'melodic minor', 'harmonic major', 'melodic major']
+            for comp_name_list in [first_wave, second_wave, third_wave]:
+                for comp_name in comp_name_list:
+                    # comparison_scale = NewScale(comp_name)
+                    comparison_factors = scale_name_factors[comp_name]
+                    difference = self.factors - comparison_factors
+                    # difference is a ChordModifier object, which we use if it is exactly 1 alteration:
+                    if len(difference) == 1:
+                        mod_val = list(difference.summary.values())[0]
+                        if abs(mod_val) == 1:
+                            difference_str = difference.get_name(check_chord_dicts=False)
+                            return f'{comp_name} {difference_str}'
+                    elif len(difference) == 0:
+                        raise Exception(f"Exact match between exotic scale {self.factors} and comparison {comp_name}- this should never happen, why doesn't this exist as a registered scale name?")
+            # reached end of loop and did not find a name:
+            return 'Unknown'
+        # pentatonic case:
+        elif len(self) == 5:
+            raise Exception('TBI')
 
     @property
     def name(self):
         if self.factors in factor_scale_names:
             return factor_scale_names[self.factors]
         else:
-            return f'Unknown'
+            return self._determine_exotic_scale_name()
 
     def _factors_str(self):
         """returns a string corresponding to this scale's factors.
@@ -390,9 +500,65 @@ class NewScale:
     _marker = _settings.MARKERS['Scale']
     _chromatic_brackets = _settings.BRACKETS['chromatic_intervals']
 
-### TBI: should scales be able to be modified by ChordModifiers or something similar, like ChordFactors can?
+pentatonic_factor_scale_names = {
+
+}
 
 
+# build modes and scale alias mappings for flexible init-by-string:
+scale_name_aliases = {sn: [] for sn in standard_scale_names}
+for base_name, mode_dict in base_scale_mode_names.items():
+    # base_scale = NewScale(base_name)
+    base_factors = scale_name_factors[base_name]
+    for mode_num, name_list in mode_dict.items():
+        # figure out what to name this mode
+        # base names always take priority (i.e. 'natural major' over 'ionian'):
+        if mode_num == 1:
+            canonical_mode_name = base_name
+        else: #
+            # otherwise, use the first name listed in this mode's name list
+            canonical_mode_name = name_list[0]
+
+        # start empty list of aliases if one does not already exist:
+        if canonical_mode_name not in scale_name_aliases:
+            scale_name_aliases[canonical_mode_name] = []
+        # all names in each mode list are valid aliases:
+        for name in name_list:
+            scale_name_aliases[canonical_mode_name].append(name)
+
+        # mode_intervals = base_intervals.mode(mode_num)
+        if mode_num != 1:
+            mode_factors = base_factors.mode(mode_num)
+            if mode_factors in factor_scale_names:
+                # catch if this mode already exists in registered scale names
+                # (e.g. aeolian mode as natural minor)
+                print(f'Found a clash between mode {mode_num} of {base_name} and pre-registered scale {factor_scale_names[mode_factors]}')
+                existing_name = factor_scale_names[mode_factors]
+                scale_name_aliases[existing_name].extend(name_list)
+                print(f'Extended aliases to: {scale_name_aliases[existing_name]}')
+            else:
+                # add new entry to definitive factor-name mapping
+                factor_scale_names[mode_factors] = canonical_mode_name
+                print(f'Added entry to definitive factor-name mapping: {factor_scale_names[mode_factors]}')
+
+# build reverse mapping:
+alias_scale_names = unpack_and_reverse_dict(scale_name_aliases, include_keys=True)
+scale_name_factors = reverse_dict(factor_scale_names)
+# scale name factors should inclde all aliases as well:
+for alias, canonical_name in alias_scale_names.items():
+    assert canonical_name in scale_name_factors
+    scale_factors = scale_name_factors[canonical_name]
+    if alias == canonical_name:
+        print(f'Duplicated alias: {alias}')
+    else:
+        scale_name_factors[alias] = scale_factors
+
+
+
+
+exotic_scale_name_factors = {
+
+}
 ### bebop scale nonsense:
 raw_bebop_intervals = [P1, M2, M3, P4, P5, m6, M6, M7]
 bebop_degree_intervals = {d: IrregularInterval(raw_bebop_intervals[d-1].value, d, 8) for d in range(1,9)}
