@@ -627,17 +627,26 @@ class NoteList(list):
         # self.extend([self._recast(n) for n in other])
 
     def __add__(self, other):
+        """adds a scalar to each note in this list,
+        concatenates with another NoteList,
+        or accepts another iterable and performs point-wise addition."""
         if isinstance(other, (int, Interval)):
             return NoteList([n + other for n in self])
+        elif isinstance(other, NoteList):
+            # concatenation with another notelist: (as with regular list)
+            return NoteList(list(self) + list(other))
         elif isinstance(other, (list, tuple)):
-            assert len(self) == len(other), "Can only add NoteLists with scalars or with iterables of equal length"
-            assert not isinstance(other, NoteList), "NoteLists cannot be added to NoteLists"
+            assert len(self) == len(other), "Can only add NoteLists with scalars, other NoteLists, or other iterables of equal length"
             # return a NoteList, since nothing but Intervals can be added to Notes, and the result is always a new Note
             return NoteList([i + j for i,j in zip(self, other)])
         else:
             raise Exception(f"Can't add NoteList with {type(other)}")
 
     def __sub__(self, other):
+        """subtracts a scalar from each Note in this list (producing NoteList),
+        subtracts a single Note from each note in this list (producing IntervalList)
+        or performs point-wise subtraction with an iterable, (producing NoteList or
+            IntervalList depending on the resulting types)"""
         if isinstance(other, (int, Interval)):
             return NoteList([n - other for n in self])
         elif isinstance(other, Note):

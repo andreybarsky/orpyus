@@ -531,9 +531,13 @@ class IntervalList(list):
 
     def __add__(self, other):
         """adds a scalar to each interval in this list,
-        or accepts an iterable and performs point-wise addition."""
+        concatenates with another IntervalList,
+        or accepts another iterable and performs point-wise addition."""
         if isinstance(other, (int, Interval)):
             return IntervalList([i + other for i in self])
+        elif isinstance(other, IntervalList):
+            # concatenation with another IntervalList (as with normal list)
+            return IntervalList(list(self) + list(other))
         elif isinstance(other, (list, tuple)):
             assert len(other) == len(self), f'IntervalLists can only be added with scalars or with other iterables of the same length'
             return IntervalList([i + j for i,j in zip(self, other)])
