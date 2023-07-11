@@ -615,6 +615,20 @@ class IntervalList(list):
                  unique_intervals_set.add(i)
         return IntervalList(unique_intervals)
 
+    def repeated(self):
+        """Opposite of self.unique - returns a new IntervalList containing only the
+        intervals that are repeated more than once in this existing object"""
+        unique_intervals = []
+        repeated_intervals_set = set()
+        unique_intervals_set = set() # for efficiency
+        for i in self:
+             if i not in unique_intervals_set:
+                 unique_intervals_set.add(i)
+             else:
+                 repeated_intervals_set.add(i)
+
+        return IntervalList(list(repeated_intervals_set)).sorted()
+
     def sort(self):
         super().sort()
 
