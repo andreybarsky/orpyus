@@ -613,25 +613,24 @@ class IntervalList(list):
         """returns a new IntervalList, where repeated notes are dropped after the first"""
         unique_intervals = []
         unique_intervals_set = set() # for efficiency
-        for i in self:
-             if i not in unique_intervals_set:
-                 unique_intervals.append(i)
-                 unique_intervals_set.add(i)
+        for iv in self:
+             if iv not in unique_intervals_set:
+                 unique_intervals.append(iv)
+                 unique_intervals_set.add(iv)
         return IntervalList(unique_intervals)
 
     def repeated(self):
         """Opposite of self.unique - returns a new IntervalList containing only the
         intervals that are repeated more than once in this existing object"""
-        unique_intervals = []
         repeated_intervals_set = set()
         unique_intervals_set = set() # for efficiency
-        for i in self:
-             if i not in unique_intervals_set:
-                 unique_intervals_set.add(i)
+        for iv in self:
+             if iv not in unique_intervals_set:
+                 unique_intervals_set.add(iv)
              else:
-                 repeated_intervals_set.add(i)
-
-        return IntervalList(list(repeated_intervals_set)).sorted()
+                 repeated_intervals_set.add(iv)
+        # return in same order as original:
+        return IntervalList([iv for iv in self if iv in repeated_intervals_set])
 
     def sort(self):
         super().sort()
