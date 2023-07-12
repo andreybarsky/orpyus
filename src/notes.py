@@ -150,7 +150,9 @@ class Note:
 
     #### magic methods and note constructors:
     def __add__(self, other):
-        """returns a new Note based on shifting up or down by some number of semitones"""
+        """addition with Interval is simple transposition;
+        addition with Note produces a Chord object,
+        addition with an IntervalList adds each Interval to this Note in sequence to produce a NoteList"""
         # assert isinstance(interval, (int, Interval)), "Only an integer or Interval can be added to a Note"
         if isinstance(other, (int, Interval)):
             # note transposition by interval
@@ -167,6 +169,9 @@ class Note:
             from .chords import Chord # lazy import
             chord_notes = [self, other]
             return Chord(notes=chord_notes)
+        elif isinstance(other, IntervalList):
+            notes = [self + iv for iv in other]
+            return NoteList(notes)
         else:
             raise TypeError(f'Notes can only be added with Intervals or with other Notes')
 
@@ -679,6 +684,19 @@ class NoteList(list):
                  unique_notes.append(n)
                  unique_notes_set.add(n)
         return NoteList(unique_notes)
+
+    def repeated(self):
+        """Opposite of self.unique - returns a new NoteList containing only the
+        notes that are repeated more than once in this existing object"""
+        repeated_notes_set = set()
+        unique_notes_set = set() # for efficiency
+        for i in self:
+             if i not in unique_notes_set:
+                 unique_notes_set.add(i)
+             else:
+                 repeated_notes_set.add(i)
+        # return in same order as original:
+        return NoteList([n for n in self if n in repeated_notes_set])
 
     def __hash__(self):
         """NoteLists hash as tuples for the purposes of chord/key reidentification"""
