@@ -32,10 +32,9 @@ class ScaleFactors(Factors):
             else:
                 self.chromatic = None
 
-
-
+        # init from input args/dict as parent Factors class does:
         super().__init__(*args, strip_octave=True, auto_increment_clashes=True, **kwargs)
-        # one extra post-processing check over the default Factors init:
+        # but with an extra post-processing check over the default Factors init:
         # detect if the 8th factor has been defined as natural, in which case we
         #   strip and ignore it (because every diatonic scale has an implied 8th
         #                      degree that is enharmonic to the 1st),
@@ -43,7 +42,6 @@ class ScaleFactors(Factors):
         #   some kind of non-diatonic scale that will require IrregularIntervals
         if (8 in self) and self[8] == 0:
             del self[8]
-
 
         # now if there remain any 8th or higher factors, we sanity-check by ensuring
         # that there are enough degrees to fill out a scale of the appropriate size:
@@ -62,7 +60,8 @@ class ScaleFactors(Factors):
         """Given a single input string of the form: '1, b2, [b3], 3' etc.
         search that string for elements enclosed within square brackets, and
         separate them out into a new list"""
-        if '[' in inp_string and ']' in inp_string:
+        lb, rb, = _settings.BRACKETS['chromatic_intervals']
+        if lb in inp_string and rb in inp_string:
             bracket_matches_list = re.findall(r'\[([^]]+)\]', inp_string)
             output_string = re.sub(r'\[[^]]+\]', '', inp_string) # replace brackets and their contents with emptystring
             output_string = re.sub(r',\s*,', ',', output_string).strip()  # remove empty spaces and trailing whitespace
@@ -186,45 +185,84 @@ class ScaleFactors(Factors):
 class ScaleDegree(int):
     """class representing the degrees of a scale with associated mod-operations"""
     def __new__(cls, degree, num_degrees=7):
+
+        assert isinstance(degree, int)
+
         extended_degree = degree
-        # note about negative degrees: they are technically well-defined,
-        # but look odd due to the 1-indexing of positive degrees.
-        # e.g. the degree that is two notes below tonic has degree-value 6,
-        # but extended-degree-value -1
-        if (degree > num_degrees) or (degree < 1):
-            degree = ((degree -1 ) % num_degrees) + 1
+        # note about indexing:
+        # negative degrees are defined, but the degree 0 is not. (to avoid confusion!)
+        # therefore, the degree one step below 1 is the degree 7(-1)
+        if degree == 0:
+            raise ValueError('ScaleDegree of 0 is ill-defined')
+
+        sign = 1 if degree > 0 else -1
+        if abs(degree) > num_degrees:
+            # mod this degree to its base range, while preserving sign:
+            degree = (((abs(degree) -1 ) % num_degrees) + 1) * sign
+        if sign == -1:
+            # this degree is negative, so invert it (so that negative 1 is correctly 7)
+            degree = ((num_degrees+1) - abs(degree))
+
         obj = int.__new__(cls, degree) # int() on a degree returns the flat (non-compound) degree as int
         obj.degree = int(degree) # should always be identical to int(self)
         obj.num_degrees = num_degrees # i.e. scale size
         obj.extended_degree = extended_degree
-        obj.octave = ((obj.extended_degree - obj.degree)/obj.num_degrees)+1
+        obj.octave = int((obj.extended_degree - obj.degree)/obj.num_degrees)
+        obj.sign = 1 if obj.degree > 0 else -1
         obj.compound = (obj.degree != obj.extended_degree) # boolean flag
         return obj
 
     # mathematical operations on scale degrees preserve extended degree and scale size:
     def __add__(self, other):
-        assert not isinstance(other, Interval), "ScaleDegrees cannot be added to intervals"
-        return ScaleDegree(self.extended_degree + int(other), num_degrees=self.num_degrees)
+        # assert not isinstance(other, Interval), "ScaleDegrees cannot be added to intervals"
+        assert type(other) is int, "ScaleDegrees can only be added with ints"
+        new_degree = self.extended_degree + int(other)
+        new_sign = 1 if new_degree > 0 else -1
+        if new_degree == 0 or (new_sign != self.sign):
+            # this addition/subtraction has sent the resulting value to 0,
+            # which is illegal for a ScaleDegree,
+            # or has had a sign swap and passed over the (illegal) zero value,
+            # so we push it one degree more instead
+            new_degree = self.extended_degree + (int(other) - self.sign)
+        return ScaleDegree(new_degree, num_degrees=self.num_degrees)
+
     def __sub__(self, other):
-        assert not isinstance(other, Interval), "ScaleDegrees cannot be added to intervals"
-        return ScaleDegree(self.extended_degree - int(other), num_degrees=self.num_degrees)
+        # just add with the negation of other:
+        return self + (-other)
+
     def __abs__(self):
         """flatten compound degree into a simple one,
         i.e. abs(ScaleDegree(10)) == ScaleDegree(3)"""
         # similar behaviour to int(self), but returns a new ScaleDegree instead of an int
         return ScaleDegree(self.degree, num_degrees=self.num_degrees)
+
     def __pow__(self, octave):
         """octave transposition: a ScaleDegree multipled by x raises it into the xth octave
         i.e. ScaleDegree(3)**2 == ScaleDegree(10)"""
         assert type(octave) is int, "ScaleDegrees can only be multipled (octave transposition) by integers"
         if octave >= 1:
-            return ScaleDegree(self.extended_degree+(self.num_degrees*(octave-1)),  num_degrees=self.num_degrees)
+            return self + (self.num_degrees * octave)
         elif octave <= -1:
-            return ScaleDegree(self.extended_degree-(self.num_degrees*(octave-1)),  num_degrees=self.num_degrees)
-        elif octave == 0: # the tonic is the identity, so any degree ** 0 returns the tonic
-            return ScaleDegree(1, num_degrees=self.num_degrees)
-    # scale degrees hash as integers for lookup purposes:
+            return self - (self.num_degrees * abs(octave))
+            # return ScaleDegree(self.extended_degree-(self.num_degrees*(abs(octave))),  num_degrees=self.num_degrees)
+        elif octave == 0: # return the same ScaleDegree
+            return ScaleDegree(self.extended_degree, num_degrees=self.num_degrees)
+
+    def __mul__(self, other):
+        raise Exception('ScaleDegree.__mul__ not defined')
+    def __div__(self, other):
+        raise Exception('ScaleDegree.__div__ not defined')
+    def __mod__(self, other):
+        raise Exception('ScaleDegree.__mod__ not defined')
+
+    # def __int__(self):
+    #     # casting a degree to an int returns the (base, not extended) degree
+    #     return self.degree
+    def __eq__(self, other):
+        # degrees are equal to the integer of their (base, not extended) degree:
+        return int(self) == other
     def __hash__(self):
+        # and scale degrees hash as integers for lookup purposes:
         return hash(int(self))
 
     def __str__(self):
@@ -264,6 +302,7 @@ class NewScale:
             self.chromatic_intervals = IntervalList([])
 
         assert self.chromatic_intervals is not None
+
 
         ### TBI: test NewScale init with odd factors:
         # NewScale('1,2,3,4,5,b6,bb7,b8,8').factor_intervals (seems to work)
@@ -461,7 +500,8 @@ class NewScale:
     def __len__(self):
         """A scale's length is the number of intervals it has before the octave,
         so that all diatonic scales have length 7, and all pentatonic scales
-        have length 5, and chromatic passing notes add 1 to this count"""
+        have length 5, and chromatic passing notes add 1 to this count,
+        so that (for example) the blues scale has length 6"""
         return len(self.intervals)
     @property
     def len(self):
@@ -478,13 +518,26 @@ class NewScale:
         if i is higher than this scale's max degree, return an appropriate compound interval"""
         if not isinstance(i, ScaleDegree):
             i = ScaleDegree(i, num_degrees = self.order)
-
-        return self.degree_intervals[i]
+        iv = self.degree_intervals[i]
+        # now raise or lower the octave of that interval depending on the degree:
+        if i.compound:
+            # increase the interval's octave: (using the interval __pow__ method)
+            iv = iv ** i.octave
+        return iv
 
     # scales hash according to their factors and their chromatic intervals:
     def __hash__(self):
         # return hash(tuple(self.factors, self.chromatic_intervals))
         return hash(str(self))
+
+    def which_intervals_chromatic(self):
+        """returns a boolean list of the same length as self.intervals,
+        which is True where that interval is chromatic and False otherwise"""
+        if len(self.chromatic_intervals) == 0:
+            # if this scale has no chromatic intervals, just return false everywhere
+            return [False] * len(self.intervals)
+        else:
+            return [(iv in self.chromatic_intervals) for iv in self.intervals]
 
     ##### property flags:
     def is_diatonic(self):
@@ -621,7 +674,7 @@ class NewScale:
 # 'standard' scales are: natural/melodic/harmonic majors and minors, the most commonly used in pop music
 standard_scale_names = {'natural major', 'natural minor', 'harmonic major', 'harmonic minor', 'melodic major', 'melodic minor'}
 # 'base' scales are those not obtained by rotations of any other scales:
-base_scale_names = {'natural major', 'melodic minor', 'harmonic minor', 'harmonic major'}
+base_scale_names = {'natural major', 'melodic minor', 'harmonic minor', 'harmonic major', 'neapolitan major', 'neapolitan minor', 'double harmonic'}
 # 'natural' scales are just the natural major and minors:
 natural_scale_names = {'natural major', 'natural minor'}
 
@@ -639,6 +692,7 @@ heptatonic_scale_factor_names = { # standard scales are defined here, modes and 
     ScaleFactors('1, b2, b3,  4,  5,  6,  7'): ['neapolitan major', 'phrygian melodic minor'],
     ScaleFactors('1, b2, b3,  4,  5, b6,  7'): ['neapolitan minor', 'phrygian harmonic minor'],
     ScaleFactors('1, b2,  3,  4,  5, b6,  7'): ['double harmonic', 'double harmonic major'],
+    ScaleFactors('1, b2,bb3,  4,  5, b6,bb7'): ['miyako-bushi'],
 
 # while it's true that "melodic minor" can refer to a special scale that uses
 # the the natural minor scale when descending, but that out-of-scope for now
@@ -714,23 +768,24 @@ pentatonic_scale_name_factors = unpack_and_reverse_dict(pentatonic_scale_factor_
 chromatic_scale_factor_names = {
     ScaleFactors('1,  3,  4, [b5], 5,  7'): ['minor blues', 'minor blues hexatonic'],
     ScaleFactors('1,  2, [b3], 3,  5,  6'): ['major blues', 'major blues hexatonic'],
+    ScaleFactors('1, b2, [b3], 4,  5,  b6, [b7]'): ['sakura'],
     ScaleFactors('1, 2, 3, 4, 5, 6, [b7],7'): ['bebop dominant'],
     ScaleFactors('1, 2, 3, 4, 5,[b6], 6, 7'): ['bebop', 'bebop major', 'barry harris', 'major 6th diminished'],
     ScaleFactors('1, 2,b3, 4, 5,[b6], 6, 7'): ['bebop minor', 'bebop melodic minor', 'minor 6th diminished'],
-    # ScaleFactors('1, b2, [b3], 4, 5, b6, [b7]'): ['in', 'sakura'],
+
+    # natural-melodic-harmonic hybrids:
+    ScaleFactors('1,  2,  b3,  4,  5,  b6, [6], b7, [7]'): ['full minor'],
+    ScaleFactors('1,  2,   3,  4,  5,[b6],  6,[b7],  7'): ['full major'],
     }
 print(f'=== Reversing chromatic scale factors')
 chromatic_scale_name_factors = unpack_and_reverse_dict(chromatic_scale_factor_names)
 
 # unusual scales with that ought not to be searched:
 rare_scale_factor_names = {
-    # 'exotic' heptatonic scales:
-    ScaleFactors('1, b2,bb3,  4,  5, b6,bb7'): ['miyako-bushi'],
-    ScaleFactors('1, b2,  3, #4,  5, b6,  7'): ['raga purvi'],
-    ScaleFactors('1, b2,  3, #4,  5,  6,  7'): ['raga marva'],
-
     # hexatonic scales:
     ScaleFactors('1,  2,  3, #4, #5, #6'): ['whole tone', 'whole-tone'],
+    ScaleFactors('1,  2,  3, b5,  6, b7'): ['prometheus'],
+    ScaleFactors('1, b2, b3, #4,  5, b7'): ['tritone'],
 
     # octatonic scales:
     ScaleFactors('1,  2, b3,  4, b5, b6,  6,  7'): ['whole-half', 'diminished'],
@@ -739,9 +794,6 @@ rare_scale_factor_names = {
     ScaleFactors('1,  2,  3,  4,  5, #5,  6, 7'): ['bebop major octatonic', 'major 6th diminished octatonic', 'bebop octatonic', 'barry harris octatonic'],
     ScaleFactors('1,  2, b3,  4,  5, #5,  6, 7'): ['bebop minor octatonic', 'bebop melodic minor octatonic', 'minor 6th diminished octatonic'],
 
-    # natural-melodic-harmonic hybrids:
-    ScaleFactors('1, 2, b3,4, 5, b6, [6], b7, [7]'): ['full minor'],
-    ScaleFactors('1, 2, 3, 4, 5, [b6], 6, [b7], 7'): ['full major'],
     }
 
 rare_scale_name_factors = unpack_and_reverse_dict(rare_scale_factor_names)
@@ -797,12 +849,13 @@ for mapping in registered_scale_name_dicts:
 
 # check for clashing intervals/factors:
 canonical_scale_interval_names = {}
-for f,n in canonical_scale_factor_names.items():
-    fi = f.to_intervals(chromatic=True)
-    if fi not in canonical_scale_interval_names:
-        canonical_scale_interval_names[fi] = n
+for fac,name in canonical_scale_factor_names.items():
+    fiv = fac.to_intervals(chromatic=False)
+    civ = fac.chromatic.to_intervals() if fac.chromatic is not None else None
+    if (fiv,civ) not in canonical_scale_interval_names:
+        canonical_scale_interval_names[(fiv,civ)] = name
     else:
-        print(f'Clash between scale {n} with intervals {fi}, already registered to: {canonical_scale_interval_names[fi]}')
+        print(f'Clash between scale {name} with intervals {(fiv,civ)}, already registered to: {canonical_scale_interval_names[(fiv,civ)]}')
 
 # canonical_scale_interval_names = {f.as_intervals:n for f,n in
 canonical_scale_name_factors = reverse_dict(canonical_scale_factor_names)
