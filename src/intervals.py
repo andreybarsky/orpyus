@@ -1,6 +1,6 @@
 from .qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
 from .parsing import degree_names, span_names, multiple_names, num_suffixes, offset_accidentals
-from .util import rotate_list, least_common_multiple, euclidean_gcd, numeral_subscript
+from .util import rotate_list, least_common_multiple, euclidean_gcd, numeral_subscript, log
 from .conversion import value_to_pitch
 from . import _settings
 import math
@@ -183,7 +183,7 @@ class Interval:
             interval_value = default_value + offset
             interval_obj = Interval.from_cache(interval_value, extended_degree, max_degree)
             if _settings.DYNAMIC_CACHING and max_degree==7:
-                cached_intervals_by_degree[(degree, quality, offset)] = interval_obj
+                cached_intervals_by_degree[(extended_degree, quality, offset)] = interval_obj
             return interval_obj
 
     @property
@@ -220,7 +220,7 @@ class Interval:
         # catch special case: addition/subtraction by octaves preserves this interval's degree/quality,
         # (except if there's been a sign change)
         if (self.mod == 0):
-            # (but don't worry about it for addition/subtraction of unisons themselves)
+            # (but don't worry about it for addition/subtraction of two unisons themselves)
             return self.re_cache(new_value)
         elif int(other) % self.span_size == 0:
             octave_of_addition = int(other) // self.span_size
@@ -280,10 +280,17 @@ class Interval:
         new_value = new_mod + (self.span_size * self.octave_span)* -(self.sign)
         new_degree = ((self.max_degree+2)-self.degree) + (self.max_degree*self.octave_span) # * self.sign
         # new_degree = new_degree + (7 * self.octave_span) # * -(self.sign)
-        # new_degree =
-
-
         return self.re_cache(new_value, new_degree)
+
+    def __pow__(self, octave):
+        """An interval to the nth power is the interval raised by that many octaves,
+        where intervals in the starting octave (0-12) are in octave 0.
+        So that always: iv**0 == iv,
+        and iv**1 == iv+12, iv**2 == iv+24,
+        iv**-1 == iv-12, etc."""
+        # this interval's degree is preserved due to the logic in Interval.__add__
+        # pertaining to addition/subtraction of unison intervals
+        return self + ((octave)*self.span_size)
 
     def __abs__(self):
         if self.value > 0:
@@ -688,14 +695,17 @@ class IntervalList(list):
             stacked_intervals = rotated_intervals.stack().strip().pad(left=padded_left, right=padded_right)
             if preserve_degrees:
                 # restore the degrees of the original intervals:
-                stacked_intervals = IntervalList([iv.re_cache(iv.value, original_degrees[i]) for i, iv in enumerate(stacked_intervals)])
+                try:
+                    stacked_intervals = IntervalList([iv.re_cache(iv.value, original_degrees[i]) for i, iv in enumerate(stacked_intervals)])
+                except Exception as e:
+                    raise Exception(f'Error rotating IntervalList: {e}\n (try rotating with preserve_degrees=False instead)')
             # pad to the original padding:
             return stacked_intervals
 
-    def mode(self, n):
+    def mode(self, n, preserve_degrees=True):
         """if this IntervalList is structured as the intervals of a scale,
         return the scale that is the Nth mode of that scale"""
-        return self.rotate(n-1, unstack=True, preserve_degrees=True)
+        return self.rotate(n-1, unstack=True, preserve_degrees=preserve_degrees)
 
     def invert(self, position):
         """used for calculating inversions: rotates, then subtracts
@@ -727,6 +737,108 @@ class IntervalList(list):
         for i in range(1, len(self)):
             interval_unstack.append(self[i] - self[i-1])
         return IntervalList(interval_unstack)
+
+    def is_sanitised(self):
+        """returns True if no intervals in this list are double sharp or
+        double flat, and no two intervals fall on the same degree.
+        (intended to qualify an IntervalList for casting into a ScaleFactors object)"""
+        degrees = []
+        for iv in self:
+            if abs(iv.offset_from_default) >= 2:
+                return False
+            degrees.append(iv.degree)
+        if len(degrees) != len(set(degrees)):
+            return False
+        else:
+            return True
+
+    def _undouble_qualities(self):
+        """returns a new IntervalList with the same values but where no interval
+        is double sharp or double flat.
+        (this is one half of the sanitise_degrees routine)"""
+        new_ivs = []
+        for iv in self:
+            if abs(iv.offset_from_default) >= 2:
+                new_iv = iv.re_cache(value=iv.value)
+                new_ivs.append(new_iv)
+            else:
+                new_ivs.append(iv)
+        return IntervalList(new_ivs)
+
+    def _respace_degrees(self, backward=False):
+        """returns a new IntervalList with the same values but spacing out degrees if
+        any two intervals fall on the same one. This does not guarantee that the resulting
+        intervals all fall on separate degrees, but repeated iterations of this method
+        converge to that solution, provided there is enough empty space in the scale.
+        (this is the second half of the sanitise_degrees routine)"""
+        old_degrees = set([iv.degree for iv in self])
+        new_degrees = set()
+        new_ivs = []
+        # reverse order of operations if going backward:
+        iv_list = self if not backward else self[::-1]
+        descending_offsets = [+1, -1] if not backward else [-1, +1]
+        ascending_offsets = descending_offsets[::-1]
+
+        for i, iv in enumerate(iv_list):
+            if iv.degree not in new_degrees:
+                # a degree that hasn't been used yet in this pass
+                new_ivs.append(iv)
+                new_degrees.add(iv.degree)
+            else:
+                # this degree has already been used in this pass, so re-allocate to a new one
+                reallocated = False
+                for offset in descending_offsets:
+                    possible_new_degree = iv.degree + offset
+                    if possible_new_degree not in old_degrees:
+                        # a slot for a degree that won't be filled later
+                        new_iv = iv.re_cache(value=iv.value, degree=possible_new_degree)
+                        new_ivs.append(new_iv)
+                        new_degrees.add(new_iv.degree)
+                        reallocated = True
+                        break
+                if not reallocated:
+                    # no nearby degrees that won't be filled, so use one that
+                    # might be filled later anyway (to correct on a later iteration)
+                    for offset in ascending_offsets:
+                        possible_new_degree = iv.degree + offset
+                        if possible_new_degree not in new_degrees:
+                            new_iv = iv.re_cache(value=iv.value, degree=possible_new_degree)
+                            new_ivs.append(new_iv)
+                            new_degrees.add(new_iv.degree)
+                            reallocated = True
+                            break
+                if not reallocated:
+                    # failure case
+                    raise Exception(f'Terminal failure to respace degrees in interval list: {self}')
+        if backward:
+            new_ivs = new_ivs[::-1]
+        return IntervalList(new_ivs)
+
+
+    def sanitise_degrees(self):
+        """return a new IntervalList with the same values but with degrees altered
+        such that nothing is doubly augmented/diminished, and no two intervals fall on
+        the same degree"""
+        cur_list = IntervalList(self)
+        max_iter = 10 # just in case of infinite loop
+        iter_num = 0
+        backward = False
+        log(f'Sanitising interval degrees for: {cur_list}')
+        while not cur_list.is_sanitised():
+            # perform iterative sanitisation steps:
+            cur_list = cur_list._undouble_qualities()
+            log(f'Iteration {iter_num}a: undoubling: {cur_list}')
+            cur_list = cur_list._respace_degrees(backward=backward)
+            log(f'           {iter_num}b: respacing: {cur_list} {"(backward)" if backward else ""}')
+
+            # increment iteration num to catch infinite loop,
+            # and swap order of operations for degree respacing on each iteration:
+            backward = not backward
+            iter_num += 1
+            if iter_num >= max_iter:
+                raise Exception(f'Reached max number of iterations while trying to sanitise interval list: {self}')
+        log(f'\nFinished after {iter_num} iterations: {cur_list}')
+        return cur_list
 
     def to_factors(self):
         # alternate string method, reports raised/lowered factor integers instead of major/minor/perfect degrees
