@@ -16,3 +16,6 @@ from src.keys import *
 from src.guitar import *
 from src.progressions import *
 from src.audio import *
+
+# temp:
+from src.new_scales import *

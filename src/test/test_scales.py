@@ -20,8 +20,11 @@ def unit_test():
 
     compare(Scale('harmonic major b6'), Scale('major natural'))
 
-    # test mode retrieval by name:
-    compare(mode_name_intervals['natural major'], get_modes('natural major')[1])
+    # test modes of pentatonic scales:
+    compare(Scale('hirajoshi').mode(2).intervals, Scale('hirajoshi').intervals.mode(2))
+
+    # test utility methods on heptatonic/pentatonic/chromatic scales:
+    compare(Scale('mixo').nearest_natural_scale, Scale('major pent').nearest_natural_scale)
 
     print('Test scale init by intervals:')
     compare(Scale('major'), Scale(intervals=scale_name_intervals['natural major']))
@@ -37,8 +40,8 @@ def unit_test():
     compare(Scale('lydian b3').chord(1, order=7), AbstractChord('mmaj13'))
 
     print('Subscales:')
-    compare(Scale('major').pentatonic.intervals, [2, 4, 7, 9])
-    compare(Scale('minor').blues.intervals, [3, 5, 6, 7, 10])
+    compare(Scale('major').pentatonic.intervals, [0, 2, 4, 7, 9])
+    compare(Scale('minor').blues.intervals, [0, 3, 5, 6, 7, 10])
 
     compare(Subscale('pentatonic minor')[3], m3)
     compare(Subscale('blues minor').intervals[2], Scale('minor').blues.chromatic_intervals[0])
@@ -81,14 +84,10 @@ def unit_test():
 
 
     # display all scale consonances:
-    include_subscales = False
     all_consonances = {}
-    for ivs, scs in interval_mode_names.items():
-        sc = Scale(scs[0])
+    for name, factors in canonical_scale_name_factors.items():
+        sc = NewScale(name)
         all_consonances[sc] = sc.consonance
-    if include_subscales:
-        for subsc, als in subscales_to_aliases.items():
-            all_consonances[subsc] = subsc.consonance
 
     sorted_scales = sorted(all_consonances, key=lambda x: all_consonances[x], reverse=True)
     cons_names = [sc.name for sc in sorted_scales]

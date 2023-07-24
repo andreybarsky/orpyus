@@ -7,13 +7,13 @@ from .util import log, precision_recall, rotate_list, check_all, auto_split, rev
 from .qualities import Quality, ChordModifier, parse_chord_modifiers
 from . import notes, parsing, qualities, _settings
 
-from collections import defaultdict
+from collections import defaultdict, UserDict
 from itertools import permutations
 
 from pdb import set_trace
 
 
-class Factors(dict):
+class Factors(UserDict):
     """a class representing the factors of an AbstractChord or Scale, as a dict which has:
         keys: chord degrees (1 representing the root, 5 representing the fifth, etc.)
         values: semitone offsets from default degree intervals.
@@ -86,9 +86,8 @@ class Factors(dict):
             # default init with no input args is a major triad:
             arg = {1:0, 3:0, 5:0}
 
+        assert type(arg) is dict
         super().__init__(arg)
-
-        assert self[1] == 0, f"Factors object must have a natural root degree, so expected self[1]==0, but got: self[1]=={self[1]}"
 
         # modifiers is not a list of modifiers to apply; rather, it is a list of
         # modifiers that HAVE been applied to this object, like a history
@@ -96,6 +95,9 @@ class Factors(dict):
             self.modifiers = []
         else:
             self.modifiers = list(modifiers)
+    #
+    # def __setitem__(self, a, b):
+    #     raise Exception('Factors objects are immutable')
 
     @property
     def degrees(self):
@@ -123,30 +125,33 @@ class Factors(dict):
     def as_intervals(self):
         return self.to_intervals()
 
-    def copy(self):
-        return self.__class__({k:v for k,v in self.items()}, modifiers=self.modifiers)
+    # def copy(self):
+    #     return self.__class__({k:v for k,v in self.items()}, modifiers=self.modifiers)
 
     def __add__(self, other):
         """modifies these factors by the alterations in a ChordModifier,
         return new factors object."""
-        # output_factors = ChordFactors(self, modifiers=self.modifiers)
-
+        output_factors = dict(self)
+        output_modifiers = list(self.modifiers)
         if isinstance(other, ChordModifier):
             output_factors = other.apply(self)
+            output_modifiers.append(other)
             # output_factors.modifiers.append(other)
         elif isinstance(other, (list, tuple)):
             # apply a list of ChordModifiers instead:
-            output_factors = self.copy()
+            # output_factors = dict(self)
+            output_modifiers = list(self.modifiers)
             for mod in other:
                 assert isinstance(mod, ChordModifier), f"ChordFactor tried to be modified by an item in a list that was not a ChordModifier but was: {type(mod)}"
                 output_factors = mod.apply(output_factors)
+                output_modifiers.append(mod)
                 # output_factors.modifiers.append(mod)
         # ensure that we keep ourselves sorted:
         else:
             raise TypeError(f'Cannot add Factors object to type: {type(other)}')
         sorted_keys = sorted(list(output_factors.keys()))
         # return output_factors
-        return self.__class__({k: output_factors[k] for k in sorted_keys}, modifiers = output_factors.modifiers)
+        return self.__class__({k: output_factors[k] for k in sorted_keys}, modifiers = output_modifiers)
 
     def distance(self, other):
         # distance from other actors objects, to detect altered chords from their factors
@@ -172,8 +177,12 @@ class Factors(dict):
         assert isinstance(other, self.__class__)
         return self.distance(other)
 
+    def _hashkey(self):
+        """the input to the hash function that represents this object"""
+        return tuple([(k,v) for k,v in self.items()])
+
     def __hash__(self):
-        return hash(tuple(self))
+        return hash(self._hashkey())
 
     def __str__(self):
         factor_strs = [f'{parsing.offset_accidentals[v][0]}{d}' for d,v in self.items()]
@@ -717,7 +726,7 @@ class AbstractChord:
             # unique to AbstractChord: report major and dominant suffix
             return f'maj{inv}'
         elif suffix.isnumeric() and suffix not in {'5', '6'}: # dominant chords (which are not 5s or 6s)
-            return f'dom7{inv}'
+            return f'dom{suffix}{inv}'
         else:
             return f'{suffix}{inv}'
 
@@ -1343,9 +1352,9 @@ class Chord(AbstractChord):
 chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
                           1: ['m7', 'maj7', 'dim', 'sus4', 'sus2', 'add9'], # maj/min7s, dim triads, and common alterations like sus2/4 and add9
                           2: ['9', 'maj9', 'm9', 'aug', '6', 'm6'],
-                          3: ['dim7', 'hdim7', 'aug7', 'mmaj7', '7b5', '7#9', '7b9'],
+                          3: ['dim7', 'hdim7', 'aug7', 'mmaj7', '7b5', '7#9', '7b9', '(b5)'],
                           4: ['dim9', 'dmin9', 'mmaj9', 'hdmin9', 'dimM7', 'augM7', 'augM9'] + [f'{q}{d}' for q in ('', 'm', 'maj') for d in (11,13)],
-                          5: ['add11', 'add13'] + [f'{q}{d}' for q in ('dim', 'mmaj') for d in (11,13)],
+                          5: ['add11', 'add13', ] + [f'{q}{d}' for q in ('dim', 'mmaj') for d in (11,13)],
                           6: [], 7: [], 8: [], 9: []}
 
 # removed no5 - handled better by incomplete chord matching

@@ -59,6 +59,9 @@ class Quality:
         self.aug_ish = self.value >= 2
         self.dim_ish = self.value <= -2
 
+        # an interval is 'doubled' if it is doubly augmented or doubly diminished
+        self.doubled = (self.doubly_augmented or self.doubly_diminished)
+
     def _parse_input(self, inp):
         """accepts either a string denoting quality name, or an existing quality.
         sanitises input and returns the corresponding canonical name and quality value"""
@@ -131,19 +134,31 @@ class Quality:
 
     @property
     def name(self):
-        if self.major_ish:
-            return self.full_name[:3].capitalize()
-        elif self.perfect:
-            return 'Ind'
-        elif self.minor_ish:
-            return self.full_name[:3]
+        if not self.doubled:
+            if self.major_ish:
+                return self.full_name[:3].capitalize()
+            elif self.perfect:
+                return 'Ind'
+            elif self.minor_ish:
+                return self.full_name[:3]
+        else:
+            if self.doubly_augmented:
+                return 'AAug'
+            elif self.doubly_diminished:
+                return 'ddim'
 
     @property
     def short_name(self):
-        if self.major_ish or self.perfect:
-            return self.full_name[0].upper()
-        elif self.minor_ish:
-            return self.full_name[0]
+        if not self.doubled:
+            if self.major_ish or self.perfect:
+                return self.full_name[0].upper()
+            elif self.minor_ish:
+                return self.full_name[0]
+        else:
+            if self.doubly_augmented:
+                return 'AA'
+            elif self.doubly_diminished:
+                return 'dd'
 
     def __str__(self):
         lb, rb = self._brackets
@@ -279,10 +294,19 @@ class ChordModifier:
         self.summary = {k : self.summary[k] for k in sorted(self.summary.keys())}
 
     def apply(self, factors):
-        """modify a ChordFactors object with the alterations specified in this Modifier and return the result"""
-        assert isinstance(factors, dict), f"ChordModifiers can only be applied to ChordFactors or  dicts, but was attempted on: {type(factors)}"
+        """accepts a Factors object, modifies it with the alterations in this modifier,
+        and returns the result"""
+        # assert isinstance(factors, dict), f"ChordModifiers can only be applied to Factors or dicts, but was attempted on: {type(factors)}"
+
+        # original_class = factors.__class__
+        # factors = dict(factors)
+
+        # assert type(factors) is dict, "Can only apply ChordModifier to dict object"
         # in order: remove, add, modify
-        new_factors = factors.copy()
+
+        # initialise a new dict to apply alteraitons to
+        new_factors = dict(factors)
+        # which then gets cast as Factors object as modification, since Factors are immutable
 
         # verify that certain degrees are present, absent or modified:
         for d, v in self.verifications.items():
@@ -312,7 +336,8 @@ class ChordModifier:
             assert d in factors.keys(), f"ChordModifier {self.name} tried to modify missing degree={d} from factors={new_factors}"
             new_factors[d] += v
 
-        return new_factors
+
+        return factors.__class__(new_factors)
 
     def _parse_name(self, alias):
         """accepts the alias of a ChordModifier and returns appropriate parameters"""
@@ -322,9 +347,9 @@ class ChordModifier:
         elif isinstance(alias, str):
             if alias in alias_modifiers:
                 alias = alias_modifiers[alias]
-            if alias in chord_aliases:
+            if alias in chord_lookup:
                 # this is already the name of a modifier e.g. maj7
-                mod = chord_aliases[alias]
+                mod = chord_lookup[alias]
                 return mod.params
             elif alias[0] in accidental_offsets:
                 # this is an alteration, like b5 or #11:
@@ -487,14 +512,21 @@ chord_types =  {'m': ChordModifier(make={3:-1}),
                 '7b9': ['7', '♭9'],        # dominant minor 9th, (i.e. dm9?)
                 'dim9': ['dim7', '♮9'],    # diminished 9th
                 'dmin9': ['dim7', '♭9'],   # diminished minor 9th
+                'hdim9': ['hdim7', '♮9'],  # half diminished 9th
                 'hdmin9': ['hdim7', '♭9'],   # half diminished minor 9th
                 # '7#9': ['7', '♯9'],        # dominant 7 sharp 9, i.e. Hendrix chord
 
                 '11': ['9', '♮11'],        # dominant 11th
                 'maj11': ['maj9', '♮11'],  # major 11th
+                'dmin11': ['dmin9', '♮11'],  # diminished minor 11th
+                'hdim11': ['hdim9', '♮11'],  # half-diminished 11th
+                'hdmin11': ['hdmin9', '♮11'],  # half-diminished minor 11th
 
                 '13': ['11', '♮13'],               # dominant 13th
                 'maj13': ['maj11', '♯11', '♮13'],  # major 13th with a raised 11th
+                'dmin13': ['dmin11', '♮13'],  # diminished minor 11th
+                'hdim13': ['hdim11', '♮13'],  # half-diminished 11th
+                'hdmin13': ['hdmin11', '♮13'],  # half-diminished minor 11th
                 }
 
 
@@ -510,6 +542,7 @@ chord_tweaks = {    'sus4': ChordModifier(remove=3, add=4, verify={2:False}),
                     'add13': ChordModifier(add=13, verify={11: False, 6:False, 5:0}), # verify natural 5 is a kludge, see: Bbdim9add13/C
 
                     '(no5)': ChordModifier(remove=5), # , verify={3: True, 10:False}),    # we don't need verifiers on this because no5s are not registered anywhere, just treated as a valid input
+                    '(b5)': ChordModifier(make={5:-1}, verify={3:0}),
                     }
 
 # add degree alterations too:
@@ -520,7 +553,7 @@ for acc in ['b', '#']:
        chord_alterations[f'{acc}{deg}'] = ChordModifier(make={deg:acc_val})
 
 # union of them all:
-chord_aliases = {**chord_types, **chord_tweaks, **chord_alterations}
+chord_lookup = {**chord_types, **chord_tweaks, **chord_alterations}
 
 # string replacements for chord searching:
 modifier_aliases = {'maj': ['major', 'M', 'Δ', ],
@@ -528,7 +561,7 @@ modifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      'sus': ['s', 'suspended'],
                      'dim': ['o', '°', 'diminished'],
                      '+': ['aug','augmented'],
-                     # special case: all half-dim chords are 7ths, but 'hdim7' is clearer than 'hdim'
+                     # special case: the chord 'half-dim' is implicitly a 7th, but 'hdim7' is clearer than 'hdim'
                      'hdim7': ['ø', 'hdim', 'half diminished', 'half dim', 'half-diminished', 'half-dim', 'm7b5', 'm7♭5'],
                      'add': ['added'],
                      '(no5)': ['no5', '(omit5)'],
@@ -557,10 +590,18 @@ modifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      '12': ['twelve', '12th', 'twelfth', '¹²'],
                      '13': ['thirteen', '13th', 'thirteenth', '¹³'],
 
-                     # special case, otherwise 'dmin9' doesn't parse correctly:
+                      # special edge cases, otherwise 'dmin9' etc. doesn't parse correctly:
+                     'hdim9': ['hdim9', 'ø9'],
+                     'hdim11': ['hdim11', 'ø11'],
+                     'hdim13': ['hdim13', 'ø13'],
                      'hdmin9': ['hdmin9', 'hdimm9', 'hdimmin9'],
+                     'hdmin11': ['hdmin11', 'hdimm11', 'hdimmin11'],
+                     'hdmin13': ['hdmin13', 'hdimm13', 'hdimmin13'],
                      'dmin9': ['dmin9', 'dimm9', 'dimmin9'],
-                     # '7b9': ['dm9', 'domin9', 'domm9'],
+                     'dmin11': ['dmin11', 'dimm11', 'dimmin11'],
+                     'dmin13': ['dmin13', 'dimm13', 'dimmin13'],
+                     '7b9': ['dm9', 'domin9', 'domm9'],
+                     '7#9': ['hendrix', 'purple haze'],
 
                       '#': ['♯', 'sharp', 'sharpened', 'sharped', 'raised'],
                       'b': ['♭', 'flat', 'flattened', 'flatted', 'lowered'],
@@ -591,7 +632,7 @@ def parse_chord_modifiers(mod_str, verbose=False, allow_note_names=False):
 
     standard_form_modifier_string = ''.join(reduced_mods)
 
-    raw_mod_ops = reduce_aliases(standard_form_modifier_string, chord_aliases, discard=True)
+    raw_mod_ops = reduce_aliases(standard_form_modifier_string, chord_lookup, discard=True)
 
     # have we ended up with an empty list, even though we had something OTHER than just 'major' in the input?
     found_nothing = len(raw_mod_ops) == 0 and not major_in_front
@@ -619,8 +660,8 @@ def cast_modifiers(mod, verbose=False):
     elif isinstance(mod, str):
         # could be a string that exists in chord_types or chord_modifiers
         # so fetch it and convert to ChordModifier object(or list of such)
-        if mod in chord_aliases:
-            fetched_mod = chord_aliases[mod]
+        if mod in chord_lookup:
+            fetched_mod = chord_lookup[mod]
             if isinstance(fetched_mod, ChordModifier):
                 mod_list.append(fetched_mod)
             elif isinstance(fetched_mod, (list, tuple)):
@@ -628,7 +669,7 @@ def cast_modifiers(mod, verbose=False):
                     print(f'Recursively going down a level to parse: {fetched_mod} (which turns out to be a list)')
                 mod_list.extend(cast_modifiers(fetched_mod, verbose=verbose))
             elif isinstance(fetched_mod, str):
-                if fetched_mod in chord_aliases:
+                if fetched_mod in chord_lookup:
                     mod_list.extend(cast_modifiers(fetched_mod, verbose=verbose))
                 else:
                     raise ValueError(f'Invalid string provided to cast_modifiers: {mod} (parsed as {fetched_mod}) does not indicate a chord type')
