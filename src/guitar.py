@@ -228,6 +228,10 @@ class Guitar: ### TBI: allow ukelele tunings?
                 # add (s,0) or (s,capo) to the list:
                 if not (match_octave and (string.value != note.value)):
                     note_locs.append((s+1,self.capo))
+                # add (s,12) or (s,capo+12 to the list as well if it fits):
+                if max_fret >= 12:
+                    if not (match_octave and ((string.value + 12) != note.value)):
+                        note_locs.append((s+1, self.capo+12))
             else:
                 next_chosen_note = string.next(note.chroma)
                 distance_up = next_chosen_note - string # distance along the fretboard in intervals
