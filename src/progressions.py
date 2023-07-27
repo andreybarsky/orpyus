@@ -3,10 +3,10 @@
 from .intervals import Interval
 from .chords import Chord, AbstractChord
 from .qualities import Major, Minor, Perfect, Diminished, parse_chord_modifiers, ChordModifier
-from .scales import Scale, Subscale, scale_name_intervals, NaturalMajor, NaturalMinor, MelodicMinor, HarmonicMinor, MelodicMajor, HarmonicMajor
-from .keys import Key, Subkey, matching_keys, most_likely_key
-from .util import reduce_aliases, auto_split, check_all, reverse_dict, log
-from .parsing import roman_numerals, numerals_roman
+from .scales import Scale, NaturalMajor, NaturalMinor, MelodicMinor, HarmonicMinor, MelodicMajor, HarmonicMajor
+from .keys import Key, matching_keys, most_likely_key
+from .util import reduce_aliases, check_all, reverse_dict, log
+from .parsing import roman_numerals, numerals_roman, auto_split
 from . import parsing, _settings
 
 from collections import Counter

@@ -1,6 +1,7 @@
 #### string parsing functions
 from collections import defaultdict
 from .util import reverse_dict, unpack_and_reverse_dict, log
+import string
 
 ######################################## accidentals
 
@@ -267,11 +268,13 @@ def parse_out_integers(integers, expected_len=None):
         raise TypeError(f'Expected iterable or string for parse_out_integers input, but got {type(integers)}')
     return ints_list
 
-def note_split(name, graceful_fail=False):
+def note_split(name, graceful_fail=False, strip=True):
     """takes a string that contains a note in its first one or two characters
     (like the name of a chord, e.g. F#sus4)
     splits out the note name, and returns it along with the remaining substring
-    as a (note_name, remainder) tuple"""
+    as a (note_name, remainder) tuple.
+    if graceful_fail, returns False on failure to parse instead of raising error.
+    if strip, strips whitespace from the remainder string before returning."""
     note_idx = begins_with_valid_note_name(name)
     if note_idx is False:
         if graceful_fail:
@@ -279,6 +282,8 @@ def note_split(name, graceful_fail=False):
         else:
             raise ValueError(f'No valid note name found in first 3 characters of: {name}')
     note_name, remainder = name[:note_idx], name[note_idx:]
+    if strip:
+        remainder = remainder.strip()
     return note_name, remainder
 
 def parse_octavenote_name(name, case_sensitive=True):
@@ -373,3 +378,39 @@ def parse_alteration(alteration):
     offset_str = alteration[:-len(degree_chars)]
     offset = accidental_offsets[offset_str]
     return {degree: offset}
+
+
+### TBI: allow split by blacklist instead of whitelist??
+def auto_split(inp, allow='', allow_numerals=True, allow_letters=True, allow_accidentals=False):
+    """takes a string 'inp' and automatically separates it by the first character found that is
+        not in the whitelist 'allow'.
+    'allow' should be a string of characters that are NOT to be treated as separators.
+    if 'allow_numerals' is True, allow all the digit characters from 0 to 9.
+    if 'allow_letters' is True, allow all the upper and lowercase English alphabetical chars."""
+    allow = set(allow)
+    if allow_numerals:
+        allow.update(string.digits)
+    if allow_letters:
+        allow.update(string.ascii_letters)
+    if allow_accidentals:
+        allow.update('#♯𝄪b♭𝄫')
+    sep_char = None
+    for c in inp:
+        # specifically allow whitespace, to catch separators like ' - ', but look for whitespace as sep later
+        if c not in allow and c != ' ':
+            sep_char = c
+            break
+    if sep_char is None and ' ' in inp:
+        # if no separator found yet, use whitespace if it is in the string:
+            sep_char = ' '
+
+    if sep_char is None:
+        # if no separator found,
+        # return input as single list item
+        return [inp]
+    else:
+        # split along detected separator
+        splits = inp.split(sep_char)
+        # strip whitespace in addition: in case our sep is something like ', '
+        splits = [s.strip() for s in splits]
+        return splits

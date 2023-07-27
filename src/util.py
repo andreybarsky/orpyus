@@ -1,4 +1,3 @@
-import string
 import time
 import inspect
 
@@ -73,40 +72,6 @@ def precision_recall(target, candidate, weights=None):
         from ipdb import set_trace; set_trace(context=30)
 
     return precision, recall
-
-### TBI: allow split by blacklist instead of whitelist??
-def auto_split(inp, allow='', allow_numerals=True, allow_letters=True):
-    """takes a string 'inp' and automatically separates it by the first character found that is
-        not in the whitelist 'allow'.
-    'allow' should be a string of characters that are NOT to be treated as separators.
-    if 'allow_numerals' is True, allow all the digit characters from 0 to 9.
-    if 'allow_letters' is True, allow all the upper and lowercase English alphabetical chars."""
-    allow = set(allow)
-    if allow_numerals:
-        allow.update(string.digits)
-    if allow_letters:
-        allow.update(string.ascii_letters)
-    sep_char = None
-    for c in inp:
-        # specifically allow whitespace, to catch separators like ' - ', but look for whitespace as sep later
-        if c not in allow and c != ' ':
-            sep_char = c
-            break
-    if sep_char is None and ' ' in inp:
-        # if no separator found yet, use whitespace if it is in the string:
-            sep_char = ' '
-
-    if sep_char is None:
-        # if no separator found,
-        # return input as single list item
-        return [inp]
-    else:
-        # split along detected separator
-        splits = inp.split(sep_char)
-        # strip whitespace in addition: in case our sep is something like ', '
-        splits = [s.strip() for s in splits]
-        return splits
-
 
 def reverse_dict(dct):
     """accepts a dict whose values and keys are both unique,

@@ -1,11 +1,11 @@
 from . import notes as notes
 from .notes import Note, OctaveNote, NoteList
 from .chords import AbstractChord, Chord, most_likely_chord, matching_chords
-from .scales import Scale, Subscale
-from .keys import Key, Subkey, matching_keys
+from .scales import Scale
+from .keys import Key, matching_keys
 from .progressions import Progression, ChordProgression
 from . import parsing
-from .util import log, auto_split, reverse_dict
+from .util import log, reverse_dict
 from .display import Fretboard
 
 class String(OctaveNote):
@@ -220,13 +220,15 @@ class Guitar: ### TBI: allow ukelele tunings?
     def locate_note(self, note, match_octave=False, min_fret=0, max_fret=13):
         """accepts a Note object, (or, if match_octave, an OctaveNote object)
         and returns a list of tuple (string,fret) locations where that note appears"""
-        # keep a list of locations
+        # keep a list of locations:
         note_locs = []
+        assert isinstance(note, OctaveNote if match_octave else Note), "arg to locate_note must be a Note or OctaveNote object"
         for s, string in enumerate(self.open_strings):
             # if this open/capo'd string corresponds to that note:
             if string.chroma == note.chroma:
                 # add (s,0) or (s,capo) to the list:
                 if not (match_octave and (string.value != note.value)):
+                    # (i.e. if match_octave is true, only add this note if its value is exactly what is desired)
                     note_locs.append((s+1,self.capo))
                 # add (s,12) or (s,capo+12 to the list as well if it fits):
                 if max_fret >= 12:
@@ -326,10 +328,6 @@ class Guitar: ### TBI: allow ukelele tunings?
         """for a given Key object (or name that casts to key),
         show where the notes of that key fall on the fretboard, starting from open."""
         if isinstance(key, str):
-            if 'blues' in key or 'pent' in key:
-                # auto detect subkeys, as opposed to keys:
-                key = Subkey(key)
-            else:
                 key = Key(key)
 
         #### determine highlighted frets
@@ -338,8 +336,8 @@ class Guitar: ### TBI: allow ukelele tunings?
         if not highlight_pentatonic:
             # and, optionally, fifths:
             if highlight_fifths:
-                if (isinstance(key, Subkey) and 5 in key.base_degree_notes) or (type(key) == Key):
-                    highlights.extend(self.locate_note(key.base_degree_notes[5], max_fret=max_fret))
+                if (5 in key.factors):
+                    highlights.extend(self.locate_note(key.factor_notes[5], max_fret=max_fret))
         elif highlight_pentatonic and not key.is_subscale:
             # pick out the pentatonic notes to highlight
             this_pentatonic = key.pentatonic
@@ -380,12 +378,9 @@ class Guitar: ### TBI: allow ukelele tunings?
         show where the notes of that scale fall on the fretboard starting from an arbitrary fret"""
         if isinstance(scale, str):
             try:
-                scale = Subscale(scale)
-            except:
-                try:
-                    scale = Scale(scale)
-                except Exception as e:
-                    print(f'Could not cast string {scale} to Scale or Subscale object: {e}')
+                scale = Scale(scale)
+            except Exception as e:
+                print(f'Could not cast string {scale} to Scale object: {e}')
         a_scale = scale.on_tonic('A')
         self.show_key(a_scale, fret_labels=False, show_index=False, min_fret=3, max_fret=13, intervals_only=True, title=f'{scale} on tuning:{self.name}', **kwargs)
 
