@@ -3,7 +3,7 @@
 # import notes
 from .notes import Note, NoteList, chromatic_scale
 from .intervals import Interval, IntervalList, P5, default_degree_intervals
-from .util import log, precision_recall, rotate_list, check_all, auto_split, reverse_dict, unpack_and_reverse_dict
+from .util import log, precision_recall, rotate_list, check_all, reverse_dict, unpack_and_reverse_dict
 from .qualities import Quality, ChordModifier, parse_chord_modifiers
 from . import notes, parsing, qualities, _settings
 
@@ -39,8 +39,8 @@ class Factors(UserDict):
 
         ### allow initialisation by string or list of chord degrees:
         if isinstance(arg, str):
-            ### parse string into list of accidentals by auto splitting non-accidentals
-            arg = auto_split(arg, allow='#♯𝄪b♭𝄫/')
+            ### parse string into list of degrees/alterations by auto splitting non-accidentals
+            arg = parsing.auto_split(arg, allow_accidentals=True)
 
         if isinstance(arg, list) and type(arg[0]) != tuple:
             # parse a list of non-tuples (i.e. invalid list for dict input) as list of chord degrees

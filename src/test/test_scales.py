@@ -5,7 +5,7 @@ from .testing_tools import compare
 
 def unit_test():
 
-    ### NewScales:
+    ### new Scale class, after refactor:
 
     # test scale factor/degree distinction:
     compare(Scale(ScaleFactors('1,2,3,5,6')).degree_intervals[4], P5) # the fourth degree of the maj pent scale is a P5
@@ -43,8 +43,8 @@ def unit_test():
     compare(Scale('major').pentatonic.intervals, [0, 2, 4, 7, 9])
     compare(Scale('minor').blues.intervals, [0, 3, 5, 6, 7, 10])
 
-    compare(Subscale('pentatonic minor')[3], m3)
-    compare(Subscale('blues minor').intervals[2], Scale('minor').blues.chromatic_intervals[0])
+    compare(Scale('pentatonic minor')[3], m3)
+    compare(Scale('blues minor').intervals[2], Scale('minor').blues.chromatic_intervals[0])
 
     # test neighbours:
     major_neighbours = Scale('natural major').neighbouring_scales
@@ -53,16 +53,16 @@ def unit_test():
         print(f'with {a.name}: {sc}')
 
     # extreme test case: do we crash if computing neighbours for every possible scale?
-    for intvs, names in interval_mode_names.items():
+    for intvs, names in canonical_scale_interval_names.items():
         name = names[0]
         sc = Scale(name)
         neighbours = sc.neighbouring_scales
         # print(f'{name} scale has {len(neighbours)} neighbours')
 
     print('Valid chords from scale degrees:')
-    Scale('major').valid_chords(4, inversions=True)
+    Scale('major').valid_chords_on(4, inversions=True)
 
-    Scale('harmonic minor').valid_chords(4, 6)
+    Scale('harmonic minor').valid_chords_on(4, order=6)
 
     #### TBI: (bug?)
     Scale(intervals=[2,1,2,2,1,2], stacked=False) # returns error?

@@ -1,7 +1,7 @@
 from . import notes, parsing, _settings
 from .intervals import Interval, IntervalList
 from .notes import Note, NoteList
-from .scales import Scale, Subscale, NaturalMajor, NaturalMinor, interval_mode_names, parallel_scales
+from .scales import Scale, ScaleFactors, NaturalMajor, NaturalMinor, parallel_scales, canonical_scale_interval_names
 from .chords import Chord, AbstractChord
 from .util import check_all, precision_recall, reverse_dict, log
 
@@ -18,18 +18,25 @@ co5s_counterclockwise = {Note('C')-(7*i) : Note('C')-(7*(i+1)) for i in range(12
 
 class Key(Scale):
     """a Scale that is also rooted on a tonic, and therefore associated with a set of notes"""
-    def __init__(self, scale_name=None, intervals=None, tonic=None, notes=None, mode=1, chromatic_intervals=None, chromatic_notes=None, stacked=True, alias=None):
-        """Initialised in one of three ways:
+    # def __init__(self, scale_name=None, intervals=None, tonic=None, notes=None, mode=1, chromatic_intervals=None, chromatic_notes=None, stacked=True, alias=None):
+    """Initialised in one of three ways:
 
-        1. from 'notes' arg, as a list or string of Notes or Note-like objects,
-        in which case we parse the tonic and intervals from there
+    1. from 'notes' arg, as a list or string of Notes or Note-like objects,
+    in which case we parse the tonic and intervals from there
 
-        2. from 'scale_name' arg, when as a proper Key name (like "C#" or "Bb harmonic minor" or "Gbb lydian b5"),
-            in which case we extract the tonic note from the string and initialise the rest as with Scale class.
+    2. from 'name' arg, when as a proper Key name (like "C#" or "Bb harmonic minor" or "Gbb lydian b5"),
+        in which case we extract the tonic note from the string and initialise the rest as with Scale class.
 
-        3. from 'tonic' arg, as a Note or string that casts to Note,
-            in combination with any other args that would initialise a valid Scale object.
-            i.e. one of 'scale_name' or 'intervals'."""
+    3. from 'tonic' arg, as a Note or string that casts to Note,
+        in combination with any other args that would initialise a valid Scale object.
+        i.e. one of 'scale_name' or 'intervals'."""
+
+    def __init__(self, name=None, intervals=None, factors=None,
+                    alterations=None, chromatic_intervals=None,
+                    notes=None, chromatic_notes=None, tonic=None,
+                    mode=1):
+
+        name, intervals, factors, notes, tonic = self._reparse_args(name, intervals, factors, notes, tonic)
 
         # if notes have been provided, parse them into tonic and intervals:
         if notes is not None:
@@ -52,42 +59,107 @@ class Key(Scale):
             chromatic_intervals = [n - self.tonic for n in chromatic_notes]
 
         # initialise everything else as Scale class does:
-        super().__init__(scale_name, intervals, mode, chromatic_intervals, stacked, alias=alias)
-        # (this sets self.base_scale, .quality, .intervals, .diatonic_intervals, .chromatic_intervals, .rotation)
+        super().__init__(scale_name, intervals, factors, alterations, chromatic_intervals, mode)
+        # (this sets self.factors, self.degrees, self.intervals, self.chromatic_intervals, and their mappings
 
         # set Key-specific attributes: notes, degree_notes, etc.
         self.notes = NoteList([self.tonic] + [self.tonic + i for i in self.intervals])
+        self.chromatic_notes = [self.tonic + iv for iv in self.chromatic_intervals]
 
-        # used only for Keys with strange chromatic notes not built on integer degrees, like blues notes
-        if self.chromatic_intervals is not None:
-            self.chromatic_notes = NoteList([self.tonic + i for i in self.chromatic_intervals])
-            self.diatonic_notes = NoteList([self.tonic + i for i in self.diatonic_intervals.pad()])
-        else:
-            self.chromatic_notes = None
-            self.diatonic_notes = self.notes
+        self.degree_notes = {d: self.tonic + iv for d,iv in self.degree_intervals.items()}
+        self.factor_notes = {f: self.tonic + iv for f,iv in self.factor_intervals.items()}
 
-        # we don't store the unison interval in the Scale.interval attr, because of mode rotation
-        # so we pad them here:
-        padded_intervals = [Interval(0)] + self.diatonic_intervals
-        self.note_intervals = {self.notes[i]: padded_intervals[i] for i in range(7)}
-        self.interval_notes = reverse_dict(self.note_intervals)
-        # self.interval_notes = {padded_intervals[i]: self.notes[i] for i in range(7)}
-
-        self.degree_notes = {d: self.notes[d-1] for d in range(1,8)}
         self.note_degrees = reverse_dict(self.degree_notes)
-        # self.note_degrees = {self.notes[d-1]: d for d in range(1,8)}
+        self.note_factors = reverse_dict(self.factor_notes)
 
-        # these are the same for Key objects, but may differ for Subkeys:
-        self.base_degree_notes = self.degree_notes
-        self.note_base_degrees = self.note_degrees
+
+        # # used only for Keys with strange chromatic notes not built on integer degrees, like blues notes
+        # if self.chromatic_intervals is not None:
+        #     self.chromatic_notes = NoteList([self.tonic + i for i in self.chromatic_intervals])
+        #     self.diatonic_notes = NoteList([self.tonic + i for i in self.diatonic_intervals.pad()])
+        # else:
+        #     self.chromatic_notes = None
+        #     self.diatonic_notes = self.notes
+
+        # # we don't store the unison interval in the Scale.interval attr, because of mode rotation
+        # # so we pad them here:
+        # padded_intervals = [Interval(0)] + self.diatonic_intervals
+        # self.note_intervals = {self.notes[i]: padded_intervals[i] for i in range(7)}
+        # self.interval_notes = reverse_dict(self.note_intervals)
+        # # self.interval_notes = {padded_intervals[i]: self.notes[i] for i in range(7)}
+        #
+        # self.degree_notes = {d: self.notes[d-1] for d in range(1,8)}
+        # self.note_degrees = reverse_dict(self.degree_notes)
+        # # self.note_degrees = {self.notes[d-1]: d for d in range(1,8)}
+        #
+        # # these are the same for Key objects, but may differ for Subkeys:
+        # self.base_degree_notes = self.degree_notes
+        # self.note_base_degrees = self.note_degrees
 
         # update this Key's notes to prefer sharps/flats depending on its tonic:
         self._set_sharp_preference()
 
 
+    ####### internal init subroutines:
+    def _reparse_args(self, name, intervals, factors, notes, tonic):
+        """detect if notes or factors etc. have been given as first arg instead of name,
+        and return corrected (name, intervals, factors, notes, tonic) tuple."""
+        # this method overrides Scale._reparse_args and also looks for note and tonic args
+
+        # if first arg is an IntervalList or NoteList, treat them as such:
+        if isinstance(name, IntervalList):
+            intervals = name
+            name = None
+        elif isinstance(name, NoteList):
+            notes = name
+            name = None
+        elif isinstance(name, (list, tuple)):
+            # interpret a base list as needing to be cast to a NoteList by default
+            notes = NoteList(name)
+            name = None
+        elif (isinstance(name, str) and name[0].isnumeric()) or (isinstance(name, (ScaleFactors, dict))):
+            # initialised by ScaleFactors, either from string or direct dict:
+            if type(name) is not ScaleFactors:
+                name = ScaleFactors(name)
+            factors = name
+            name = None
+        elif type(name) is str:
+            # can only be notelist or key name
+            # first, either must begin with a note:
+            tonic_idx = parsing.begins_with_valid_note_name(name)
+            assert tonic_idx > 0, f"Key init by string must start with a valid note name, but got: {name}"
+            assert tonic is None, f"Key init by string parsed tonic {name[:tonic_idx]} but got conflicting tonic arg: {tonic}"
+            tonic, rest_name = parsing.note_split(name)
+
+            # then check if tonic is followed by more notes
+            rest_notes = parsing.parse_out_note_names(rest_name, graceful_fail=True)
+            if not rest_notes:
+                # failure to parse as note list, so treat as key name instead
+                name = name
+            else:
+                # parsed as a valid note list
+                notes = NoteList(name)
+                name = None
+        elif isinstance(name, Scale):
+            # accept re-casting from Scale or Key here too
+            # just strip the factors attr from a Scale or Key object:
+            factors = name.factors
+            if isinstance(name, Key):
+                tonic = name.tonic
+            else:
+                assert tonic is not None, "Key arg init by re-parsing Scale object requires a tonic arg"
+            name = None
+        elif name is not None:
+            raise TypeError(f'Key init did not expect first arg of type: {type(name)}')
+        else:
+            raise Exception('Should never happen')
+
+        return name, intervals, factors, notes, tonic
+
+
     @staticmethod
     def _parse_tonic(name, tonic):
-        """takes the class's name and root args, and determines which has been given.
+        """takes the class's name and tonic args, and determines which has been given.
         returns root as a Note object, and scale name as string or None"""
         if name is not None:
             if parsing.begins_with_valid_note_name(name):
@@ -171,40 +243,31 @@ class Key(Scale):
 
     @property
     def scale_name(self):
-        """a Key's scale_name is whatever name it would get as a Scale:
-        the last entry in interval_mode_names for its intervals"""
+        """a Key's scale_name is whatever name it would get as a Scale"""
         return Scale.get_name(self) # inherits from Scale
 
     @property
     def scale(self):
         """returns the abstract Scale associated with this key"""
-        return Scale(self.scale_name)
+        return Scale(factors=self.factors)
 
     def chord(self, degree, order=3, sub_degree=False):
         """overwrites Scale.chord, returns a Chord object instead of an AbstractChord"""
-        abstract_chord = super().chord(degree, order) # ignored for now, sub_degree=sub_degree)
-        if not sub_degree:
-            root = self.degree_notes[degree]
-        else:
-            root = self.sub_degree_notes[degree]
+        abstract_chord = Scale.chord(self, degree, order)
         chord_obj = abstract_chord.on_bass(root)
         # initialised chords inherit this key's sharp preference:
         chord_obj._set_sharp_preference(self.prefer_sharps)
         return chord_obj
 
-    def chords(self, order=3, sub_degrees=False, re_spell=False):
-        """returns the list of chords built on every degree of this Key"""
-        if sub_degrees:
-            degree_notes = self.sub_degree_notes
-        else:
-            degree_notes = self.base_degree_notes
-        chord_dict = {}
-        for d, note in degree_notes.items():
-            chord_dict[d] = self.chord(d, order=order, sub_degree=sub_degrees)
-            if re_spell:
-                # re-spell the Chord by initialising a new Chord object from the built one
-                chord_dict[d] = Chord(notes=chord_dict[d].notes)
-        return chord_dict
+    # def chords(self, order=3, sub_degrees=False, re_spell=False):
+    #     """returns the list of chords built on every degree of this Key"""
+    #     chord_dict = {}
+    #     for d, note in degree_notes.items():
+    #         chord_dict[d] = self.chord(d, order=order)
+    #         if re_spell:
+    #             # re-spell the Chord by initialising a new Chord object from the built one
+    #             chord_dict[d] = Chord(notes=chord_dict[d].notes)
+    #     return chord_dict
 
     def valid_abstract_chords(self, *args, **kwargs):
         """wrapper around Scale.get_valid_chords method"""
@@ -388,85 +451,85 @@ class Key(Scale):
     # Key object unicode identifier:
     _marker = _settings.MARKERS['Key']
 
-
-class Subkey(Key, Subscale):
-    """a Key that is built on a Subscale rather than a scale. Initialised as Subscale but also with a tonic."""
-    # def __init__(self, subscale_name=None, intervals=None, tonic=None, notes=None, mode=1, chromatic_intervals=None, stacked=True):
-    def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, intervals=None, chromatic_intervals=None, assigned_name=None, tonic=None):
-
-        # get correct tonic and scale name from (key_name, tonic) input args:
-        self.tonic, subscale_name = self._parse_tonic(subscale_name, tonic)
-
-
-
-        # as Subscale.init:
-        super(Key, self).__init__(subscale_name, parent_scale, degrees, omit, intervals, chromatic_intervals, assigned_name)
-        # (this sets self.base_scale_name, .quality, .intervals, .diatonic_intervals, .chromatic_intervals, .rotation)
-
-        self.base_degree_notes = {d:self.tonic + iv for d,iv in self.base_degree_intervals.items()}
-        self.note_base_degrees = reverse_dict(self.base_degree_notes)
-
-        # set Subkey-specific attributes: notes, degree_notes, etc.
-        # as in Key.init:
-        padded_diatonic_intervals = self.diatonic_intervals.pad()
-        self.diatonic_notes = NoteList([self.tonic + i for i in padded_diatonic_intervals])
-        self.diatonic_note_intervals = {self.diatonic_notes[i]: padded_diatonic_intervals[i] for i in range(len(self.diatonic_notes))}
-        self.diatonic_interval_notes = {padded_diatonic_intervals[i]: self.diatonic_notes[i] for i in range(len(self.diatonic_notes))}
-
-        self.sub_degree_notes = {d+1: self.diatonic_notes[d] for d in range(len(self.degree_intervals))}
-        self.note_sub_degrees = {self.diatonic_notes[d]: d+1 for d in range(len(self.degree_intervals))}
-
-        # as with Subscale, the default 'degree' of a Subkey is the base degree, not the sub degree
-        self.degree_notes = self.base_degree_notes
-        self.note_degrees = self.note_base_degrees
-
-        # TBI: this could use refactoring? no need to pad if we can just append/update dicts
-
-        padded_intervals = self.intervals.pad()
-        self.notes = NoteList([self.tonic + i for i in padded_intervals])
-        self.note_intervals = {self.notes[i]: padded_intervals[i] for i in range(len(self.notes))}
-        self.interval_notes = {padded_intervals[i]: self.notes[i] for i in range(len(self.notes))}
-
-        # used only for Keys with strange chromatic notes not built on integer degrees, like blues notes
-        if self.chromatic_intervals is not None:
-            self.chromatic_notes = NoteList([self.tonic + i for i in self.chromatic_intervals])
-            # self.diatonic_notes = NoteList([self.tonic + i for i in self.diatonic_intervals.pad()])
-        else:
-            self.chromatic_notes = None
-
-        # take the tonic out of assigned name if one has been given:
-        if assigned_name is not None:
-            _, assigned_name = self._parse_tonic(assigned_name, None)
-            self.assigned_name = assigned_name
-
-        # update this Subkey's notes to prefer sharps/flats depending on its tonic (and maj/min/null quality):
-        # self.is_natural = False
-        self._set_sharp_preference()
-        assert self.is_subscale
-
-    @property
-    def scale(self):
-        """returns the abstract Subscale associated with this key"""
-        return Subscale(self.scale_name)
-
-    @property
-    def name(self):
-        subscale_name = Subscale.get_name(self)
-        return f'{self.tonic.name} {subscale_name}'
-
-    @property
-    def _marker(self):
-        return '𝄲'
-
-    # def __str__(self):
-    #     return f' Key of {self.name}  {self.notes}'
-
-    def __repr__(self):
-        # explicitly inherit from Key class:
-        return Key.__repr__(self)
-
-# subscale init:
-    # def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, chromatic_intervals=None, assigned_name=None):
+#
+# class Subkey(Key, Subscale):
+#     """a Key that is built on a Subscale rather than a scale. Initialised as Subscale but also with a tonic."""
+#     # def __init__(self, subscale_name=None, intervals=None, tonic=None, notes=None, mode=1, chromatic_intervals=None, stacked=True):
+#     def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, intervals=None, chromatic_intervals=None, assigned_name=None, tonic=None):
+#
+#         # get correct tonic and scale name from (key_name, tonic) input args:
+#         self.tonic, subscale_name = self._parse_tonic(subscale_name, tonic)
+#
+#
+#
+#         # as Subscale.init:
+#         super(Key, self).__init__(subscale_name, parent_scale, degrees, omit, intervals, chromatic_intervals, assigned_name)
+#         # (this sets self.base_scale_name, .quality, .intervals, .diatonic_intervals, .chromatic_intervals, .rotation)
+#
+#         self.base_degree_notes = {d:self.tonic + iv for d,iv in self.base_degree_intervals.items()}
+#         self.note_base_degrees = reverse_dict(self.base_degree_notes)
+#
+#         # set Subkey-specific attributes: notes, degree_notes, etc.
+#         # as in Key.init:
+#         padded_diatonic_intervals = self.diatonic_intervals.pad()
+#         self.diatonic_notes = NoteList([self.tonic + i for i in padded_diatonic_intervals])
+#         self.diatonic_note_intervals = {self.diatonic_notes[i]: padded_diatonic_intervals[i] for i in range(len(self.diatonic_notes))}
+#         self.diatonic_interval_notes = {padded_diatonic_intervals[i]: self.diatonic_notes[i] for i in range(len(self.diatonic_notes))}
+#
+#         self.sub_degree_notes = {d+1: self.diatonic_notes[d] for d in range(len(self.degree_intervals))}
+#         self.note_sub_degrees = {self.diatonic_notes[d]: d+1 for d in range(len(self.degree_intervals))}
+#
+#         # as with Subscale, the default 'degree' of a Subkey is the base degree, not the sub degree
+#         self.degree_notes = self.base_degree_notes
+#         self.note_degrees = self.note_base_degrees
+#
+#         # TBI: this could use refactoring? no need to pad if we can just append/update dicts
+#
+#         padded_intervals = self.intervals.pad()
+#         self.notes = NoteList([self.tonic + i for i in padded_intervals])
+#         self.note_intervals = {self.notes[i]: padded_intervals[i] for i in range(len(self.notes))}
+#         self.interval_notes = {padded_intervals[i]: self.notes[i] for i in range(len(self.notes))}
+#
+#         # used only for Keys with strange chromatic notes not built on integer degrees, like blues notes
+#         if self.chromatic_intervals is not None:
+#             self.chromatic_notes = NoteList([self.tonic + i for i in self.chromatic_intervals])
+#             # self.diatonic_notes = NoteList([self.tonic + i for i in self.diatonic_intervals.pad()])
+#         else:
+#             self.chromatic_notes = None
+#
+#         # take the tonic out of assigned name if one has been given:
+#         if assigned_name is not None:
+#             _, assigned_name = self._parse_tonic(assigned_name, None)
+#             self.assigned_name = assigned_name
+#
+#         # update this Subkey's notes to prefer sharps/flats depending on its tonic (and maj/min/null quality):
+#         # self.is_natural = False
+#         self._set_sharp_preference()
+#         assert self.is_subscale
+#
+#     @property
+#     def scale(self):
+#         """returns the abstract Subscale associated with this key"""
+#         return Subscale(self.scale_name)
+#
+#     @property
+#     def name(self):
+#         subscale_name = Subscale.get_name(self)
+#         return f'{self.tonic.name} {subscale_name}'
+#
+#     @property
+#     def _marker(self):
+#         return '𝄲'
+#
+#     # def __str__(self):
+#     #     return f' Key of {self.name}  {self.notes}'
+#
+#     def __repr__(self):
+#         # explicitly inherit from Key class:
+#         return Key.__repr__(self)
+#
+# # subscale init:
+#     # def __init__(self, subscale_name=None, parent_scale=None, degrees=None, omit=None, chromatic_intervals=None, assigned_name=None):
 
 
 def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, require_roots=True,
@@ -549,7 +612,7 @@ def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, req
         shortlist_interval_scale_names = {NaturalMajor.intervals: 'natural major', NaturalMinor.intervals: 'natural minor'}
     else:
         # search all known scales and modes
-        shortlist_interval_scale_names = interval_mode_names
+        shortlist_interval_scale_names = canonical_scale_interval_names
 
     for t in candidate_tonics:
         for intervals, mode_names in shortlist_interval_scale_names.items():
