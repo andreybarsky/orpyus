@@ -188,26 +188,35 @@ def reduce_aliases(inp, aliases, strip=True, reverse=False, force_list=True,
     # finished, join output string and return:
     return output
 
-def check_all(iterable, check, type_assertion):
+def check_all(iterable, check, comparison):
     """accepts an iterable of objects, and a type that they are assumed to be,
     and individually checks that all items in iterable are of that type.
+    also allows direct (not type) comparison through the == argument.
 
-    'check' arg determines what function we use to check type. must be one of:
+    'check' arg determines what function we use to check against comparison. must be one of:
         'isinstance' / 'instance': use "isinstance(X, Y)""
-        '==' / 'eq' / 'equals':    use "type(X) == Y"
-        'is':                      use "X is Y"                             """
+        'type_is':                 use "type(X) is Y"
+        'is':                      use "X is Y"
+        '==' / 'eq' / 'equals':    use "X == Y"
+        'isin' / 'is_in', 'in':    use "X in Y"  """
     for item in iterable:
         if check in ('isinstance', 'instance'):
-            if not (isinstance(item, type_assertion)):
+            if not (isinstance(item, comparison)):
                 return False
-        elif check in ('==', 'eq', 'equals'):
-            if not (type(item) == type_assertion):
+        elif check in ('type_is'):
+            if not (type(item) is comparison):
                 return False
         elif check == 'is':
-            if not (item is type_assertion):
+            if not (item is comparison):
+                return False
+        elif check in ('==', 'eq', 'equals'):
+            if not (item == comparison):
+                return False
+        elif check in ('isin', 'is_in', 'in'):
+            if not (item in comparison):
                 return False
         else:
-            raise Exception(f"invalid check arg ({check}) to assert_all, must be one of: 'isinstance', '==, 'is'")
+            raise Exception(f"invalid check arg ({check}) to assert_all, must be one of: 'isinstance', '==, 'is', 'type_is', 'is_in'")
     return True
 
 def transpose_nested_list(nested_list):

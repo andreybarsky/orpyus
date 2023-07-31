@@ -294,18 +294,6 @@ class DegreeMovement:
             return '='
 
     @property
-    def _movement_marker(self):
-        return '⇾ ' # '>'
-
-    @property
-    def _up_arrow(self):
-        return '↿' #'↑' # '⇧'
-
-    @property
-    def _down_arrow(self):
-        return '⇃' # '↓' # '⇩'
-
-    @property
     def direction_str(self):
         if self.up == 0: # no direction
             return ' 0'
@@ -332,6 +320,10 @@ class DegreeMovement:
 
     def __repr__(self):
         return str(self)
+
+    _movement_marker = _settings.MARKERS['right']
+    _up_arrow = _settings.MARKERS['up']
+    _down_arrow = _settings.MARKERS['down']
 
 
 class ChordList(list):
@@ -366,11 +358,8 @@ class ChordList(list):
         super().__init__(valid_chords)
 
     # outer brackets for this container class:
-    @property
-    def _brackets(self):
-        return '𝄃 ', ' 𝄂'
-        # return '╟', '╢'
-        # return '𝄆', '𝄇'
+    _brackets = _settings.BRACKETS['ChordList']
+
 
     def __str__(self):
         # return f'𝄃{super().__repr__()}𝄂'
@@ -435,7 +424,7 @@ class ChordList(list):
     def abstract(self):
         """returns a new ChordList that is purely the AbstractChords within this existing ChordList"""
         abs_chords = [c.abstract() if (type(c) == Chord)  else c  for c in self]
-        assert check_all(abs_chords, 'eq', AbstractChord)
+        assert check_all(abs_chords, 'type_is', AbstractChord)
         return ChordList(abs_chords)
 
     # def matching_keys(self, *args, **kwargs):
@@ -597,6 +586,9 @@ class ChordList(list):
         play_melody(chord_waves, delay=chord_delay, falloff=falloff, block=block)
         # prog_wave = arrange_melody(chord_waves, delay=delay, **kwargs)
         # play_wave(prog_wave, block=block)
+
+
+
 
 # alias for easy access:
 Chords = ChordList

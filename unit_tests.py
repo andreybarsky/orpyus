@@ -8,8 +8,8 @@ if PROFILE_INIT:
 from src.intervals import Interval, IntervalList
 from src.notes import Note, OctaveNote, NoteList
 from src.chords import AbstractChord, Chord, matching_chords
-from src.scales import Scale, Subscale
-from src.keys import Key, Subkey, matching_keys
+from src.scales import Scale
+from src.keys import Key, matching_keys
 from src.progressions import ChordList, Progression, ChordProgression
 from src.guitar import Guitar, standard
 

@@ -617,6 +617,16 @@ class AbstractChord:
     def order(self):
         return len(self)
 
+    def is_tertian(self):
+        """returns True if each ascending (unstacked) interval is a third"""
+        steps = self.intervals.strip().unstack()
+        step_degs = [step.degree for step in steps]
+        if check_all(step_degs, '==', 3):
+            return True
+        else:
+            return False
+
+
     def __add__(self, other):
         """Chord + Chord results in a ChordList (which can further be analysed as a progression)
         Chord + Note adds the note to produce a new Chord
@@ -1347,8 +1357,6 @@ class Chord(AbstractChord):
 
 ################################################################################
 
-##### attempt no2 at chord types/rarities:
-
 chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
                           1: ['m7', 'maj7', 'dim', 'sus4', 'sus2', 'add9'], # maj/min7s, dim triads, and common alterations like sus2/4 and add9
                           2: ['9', 'maj9', 'm9', 'aug', '6', 'm6'],
@@ -1366,7 +1374,7 @@ tweak_names_by_rarity = {1: ['sus4', 'sus2'], 2: ['add9'], 3: ['add11'], 4: ['ad
 # these tweaks make a chord's quality indeterminate, so we don't apply them to chords that have had the minor modifier already applied
 ind_tweaks = {'sus4', 'sus2', '5'}
 # these chord names cannot be modified:
-unmodifiable_chords = {'', '5', '(no5)', 'add4', 'add9', 'add11', 'add13'}
+unmodifiable_chords = {'', '5', 'add4', 'add9', 'add11', 'add13'}
 # '' because most ordinary chord types imply modification from major, i.e. 'sus4' implies ['' + 'sus4']
 # '5' and '(no5)' because they both imply simple removals of triad degrees, and are best handled by fuzzy matching
 # and add4/add9/add11 chords because they are themselves tweaks; they combine oddly with sus2/sus4, and must be done strictly in sus/add order

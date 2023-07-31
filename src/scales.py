@@ -3,7 +3,7 @@ from .intervals import *
 from .util import rotate_list, reverse_dict, unpack_and_reverse_dict, numeral_subscript, reduce_aliases, check_all, log
 from .chords import Factors, AbstractChord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
 from .qualities import ChordModifier, Quality
-from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split
+from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental
 from . import notes, _settings
 from math import floor, ceil
 import re
@@ -117,15 +117,14 @@ class ScaleFactors(Factors):
         else:
             return False # not equal to objects of any other type
 
-    # def _hashkey(self):
-    #     """the input to the hash function that represents this object"""
-    #     factors_part = ','.join([f'{k}:{v}' for k,v in self.items()])
-    #     chromatic_part = ',' + ','.join([f'[{k}:{v}]' for k,v in self.chromatic.items()]) if self.chromatic is not None else '[]' # [(k,v) for k,v in self.chromatic.items()) if self.chromatic is not None else None]
-    #     return factors_part + chromatic_part
-
     def __hash__(self):
         return hash(str(self))
-        # return hash(self._hashkey())
+
+    @property
+    def size(self):
+        """the size of a ScaleFactors object is the length of its factors
+        plus the length of its chromatic factors object"""
+        return len(self) + (len(self.chromatic) if self.chromatic is not None else 0)
 
     def _sharp_preference(self):
         """simple decision function to pick whether we use flats or sharps
@@ -141,24 +140,37 @@ class ScaleFactors(Factors):
         if self.chromatic is None:
             return super().__str__()
         else:
-            temp_dct = {k:v for k,v in self.items()}
+            degree_intervals = [k + (v*0.2) for k,v in self.items()]
+            chromatic_intervals = [k + (v*0.2) for k,v in self.chromatic.items()]
+            # dict of shifted degrees that maps to True for chromatic intervals and degree for chromatics
+            temp_dct = {d: (d in chromatic_intervals) for d in degree_intervals+chromatic_intervals}
+            sorted_tmp_keys = sorted(temp_dct.keys())
+
+            # temp_dct = {k:v for k,v in self.items()}
             # add chromatic factors in the half-integer
-            temp_dct.update({k+(v*0.5) : 0 for k,v in self.chromatic.items()})
+            # temp_dct.update({k + 0.1 + (v*0.5) : 0 for k,v in self.chromatic.items()})
             prefer_sharps = self._sharp_preference()
             factor_strs = []
             clb, crb = _settings.BRACKETS['chromatic_intervals']
             # for f,v in temp_dct.items():
-            sorted_tmp_keys = sorted(temp_dct.keys())
-            for f in sorted_tmp_keys:
-                v = temp_dct[f]
-                if type(f) is int: # normal factor
-                    factor_str = f'{offset_accidentals[v][0]}{f}'
-                    factor_strs.append(factor_str)
-                else: # half degree, i.e. chromatic 'factor'
-                    # render as sharpened floor of float if prefer sharps, else as flattened ceil:
-                    f, v = (floor(f), 1) if prefer_sharps else (ceil(f), -1)
-                    factor_str = f'{clb}{offset_accidentals[v][0]}{f}{crb}'
-                    factor_strs.append(factor_str)
+            #
+            # if log.verbose:
+            #     import ipdb; ipdb.set_trace()
+            for d in sorted_tmp_keys:
+                is_chromatic = temp_dct[d]
+                integer_degree = int(round(d))
+                # -1 for flats, 1 for sharps, 0 for naturals:
+                acc_offset = int(round((d - integer_degree) * 5))
+                acc = offset_accidentals[acc_offset][0]
+                factor_str = f'{acc}{integer_degree}'
+                if is_chromatic:
+                    factor_str = f'{clb}{factor_str}{crb}'
+                factor_strs.append(factor_str)
+                # else: # half degree, i.e. chromatic 'factor'
+                #     # render as sharpened floor of float if prefer sharps, else as flattened ceil:
+                #     f, v = (floor(f), 1) if prefer_sharps else (ceil(f), -1)
+                #     factor_str = f'{clb}{offset_accidentals[v][0]}{f}{crb}'
+                #     factor_strs.append(factor_str)
         lb, rb = self._brackets
         return f'{lb}{", ".join(factor_strs)}{rb}'
 
@@ -325,6 +337,9 @@ class Scale:
         self.interval_degrees = reverse_dict(self.degree_intervals)
         self.interval_factors = reverse_dict(self.factor_intervals)
 
+        self.factor_degrees = {f:d for f,d in zip(self.factors, self.degrees)}
+        self.degree_factors = {d:f for f,d in zip(self.factors, self.degrees)}
+
         # the .intervals attribute includes both factor ('diatonic') and chromatic ('passing') intervals:
         self.intervals = IntervalList(list(self.factor_intervals.values()) + self.chromatic_intervals).sorted()
 
@@ -363,6 +378,9 @@ class Scale:
             assert factors is None
             if not isinstance(intervals, IntervalList):
                 intervals = IntervalList(intervals)
+            if not intervals._seems_stacked():
+                # stack intervals if they've been given as unstacked
+                intervals = intervals.stack()
             # sanitise intervals so that they start with a root but do not end with an octave:
             intervals = intervals.strip().pad()
             # detect if we need to re-cast to irregular intervals:
@@ -528,7 +546,7 @@ class Scale:
             possible_degrees_to_exclude = [d for d, iv in self.degree_intervals.items() if d != 1]
 
         if preserve_quality:
-            ... # preserve the (major or minor) third in this scale if it has one
+            ... # preserve the (major or minor) third in this scale if it has one?
 
         for deg1 in possible_degrees_to_exclude:
             other_degrees_to_exclude = [d for d in possible_degrees_to_exclude if d not in {1, deg1}]
@@ -599,6 +617,46 @@ class Scale:
                     return MajorScale # tiebreak in favour of major
                 else:
                     return None # both are valid
+
+    @property
+    def neighbouring_scale_names(self):
+        return self.get_neighbouring_scale_names()
+    def get_neighbouring_scale_names(self):
+        """return a list of registered Scale objects that differ from this one by only a semitone"""
+        neighbours = []
+        for f in self.factors:
+            # loop across each factor (but not the first)
+            if f != 1:
+                val = self.factors[f]
+                # try values for this factor that differ by one accidental
+                # (i.e sharpening or flattening a natural, or natural-ing a sharp/flat)
+                if val == 0:
+                    vals_to_try = [-1, 1]
+                else:
+                    vals_to_try = [0]
+                for v in vals_to_try:
+                    new_factor_dct = dict(self.factors)
+                    new_factor_dct[f] = v
+                    try:
+                        new_factors = ScaleFactors(new_factor_dct)
+                        if new_factors in canonical_scale_factor_names:
+                            neighbour_name = canonical_scale_factor_names[new_factors]
+                            neighbours.append(new_factors)
+                    except:
+                        # failure to initialise ScaleFactors object indicates factor incompatibility
+                        # e.g. augmented 3rd and perfect 4th.
+                        # that's fine, skip this attempt and continue as normal
+                        continue
+        return neighbours
+
+    @property
+    def neighbouring_scales(self):
+        return self.get_neighbouring_scales()
+    def get_neighbouring_scales(self):
+        """as get_neighbouring_scale_names, but initialises and returns Scale objects"""
+        neighbour_names = self.get_neighbouring_scale_names()
+        return [Scale(n) for n in neighbour_names]
+
 
     @property
     def character(self, verbose=False):
@@ -694,6 +752,11 @@ class Scale:
     def len(self):
         return len(self)
     @property
+    def size(self):
+        # Scale.size is eqivalent to Scale.factors.size
+        return len(self)
+
+    @property
     def order(self):
         """A scale's order is the number of factors/degrees it has, not counting
         chromatic intervals. So the blues scale has order 5, even though it contains
@@ -712,11 +775,14 @@ class Scale:
             iv = iv ** i.octave
         return iv
 
+    def __eq__(self, other):
+        assert type(other) is Scale, """Scales can only be compared to other Scales"""
+        return self.factors == other.factors
+
     def __getitem__(self, i):
         """Indexing a Scale with i returns the interval on degree i of that Scale,
         which can be a compound interval if i exceeds the scale's highest degree."""
         return self.get_interval_from_degree(i)
-
 
     def __call__(self, i, order=3):
         """Calling a Scale with a degree i produces the triad chord built on that degree.
@@ -724,7 +790,12 @@ class Scale:
         return self.get_chord(i, order=order)
 
     def get_chord(self, i, order=3):
-        """returns the AbstractChord built on degree i of this Scale"""
+        """returns the AbstractChord built on degree i of this Scale,
+            by selecting degree i, i+2, etc. (i.e. play-one skip-one construction)
+        this produces familiar tertian chords when used on diatonic scales, but
+            not necessarily for other scales like pentatonics.
+        to produce tertian chords specifically (or their nearest equivalents),
+            see Scale.get_tertian_chord """
         root_offsets = [i] + [i + (o*2) for o in range(1, order)]
         scale_intervals = [self[i] for i in root_offsets]
         # shift left to get chord that starts on root:
@@ -738,8 +809,67 @@ class Scale:
         'chord' is a noun, but Scale.chord is meaningless without a degree arg, so it hopefully remains intuitive)"""
         return self.get_chord(i, order)
 
+    def get_tertian_chord(self, i, order=3):
+        """returns an AbstractChord built on degree i of this Scale,
+        by attempting to construct a chord using this scale's degrees that is as
+        tertian as possible. may not always work, but will always try to return something."""
+        assert i in self.degrees, f'{self.name} does not have a degree {degree}'
+        root_degree = i
+        root_factor = self.degree_factors[i]
+        desired_chord_factors = range(1, (2*order), 2) # i.e. chord factors 1, 3, 5, etc.
+        desired_scale_factors = [(((root_factor+f-2)%7)+1) for f in desired_chord_factors]
+        all_factors_available = True
+        for f in desired_scale_factors:
+            if f not in self.factors:
+                all_factors_available = False
+                log(f'Factor {f} not available in this subscale, so we cannot build an ordinary triad')
+                break
+        if all_factors_available:
+            # simply build a triad chord since we have all the notes needed:
+            log(f'All desired factors {list(desired_scale_factors)} are available, so we can build an ordinary triad')
+            root_interval = self.degree_intervals[root_degree]
+            chord_intervals = IntervalList([self.factor_intervals[f] for f in desired_scale_factors])
+            log(f'With root interval: {root_interval} and chord intervals: {chord_intervals}, resulting in: {chord_intervals - root_interval}')
+            return AbstractChord(intervals=chord_intervals - root_interval)
+        else:
+            ### otherwise, fall back on valid_chords method:
+            valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0.7, min_consonance=0.5, min_order=order, max_order=order, no5s=False, inversions=False, display=False)
+            log(f'Instead choosing a consonant chord from the valid chords that can be built on this degree:\n {valid_chords_on_root}')
+
+            if len(valid_chords_on_root) == 0:
+                log(f'Did not find any with initial parameters, so expanding search parameters')
+                valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0.5, min_consonance=0.4, min_order=order, max_order=order, no5s=True, inversions=False, display=False)
+                if len(valid_chords_on_root) == 0:
+                    log(f'Did not find any with expanded parameters, so dropping all search constraints except subscale membership')
+                    valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0, min_consonance=0, min_order=order, max_order=order, no5s=True, inversions=False, display=False)
+                    assert len(valid_chords_on_root) > 0, f"Could somehow not make any chords at all of order={order} on degree {degree} of subscale: {self.name}"
+            # secondary filtering step:
+            shortlist = []
+            for c in valid_chords_on_root:
+                if c.is_tertian():
+                    # is tertian
+                    shortlist.append(c)
+                    continue
+                    # otherwise, prefer chords with 3rds and 5th if possible:
+                elif (3 in c) and (5 in c):
+                    print(f'Failed tertian check Found a potential chord that contains a 3rd and a 5th: {c}')
+                    shortlist.append(c) # (since valid_chords is already sorted, shortlist is sorted by extension)
+                    continue
+            if len(shortlist) >= 1:
+                # return the most likely/consonant
+                return shortlist[0]
+            else:
+                # just return the most likely/consonant valid one
+                print(f'Degree {i}: Did not find any chords that contain a 3rd and 5th, so just taking the first match')
+                return valid_chords_on_root[0]
+
+    def tertian_chord(self, i, order=3):
+        """convenience wrapper around Scale.get_tertian_chord;
+        see the documentation for that method."""
+        return self.get_tertian_chord(i, order)
+
     def get_chords(self, order=3):
-        """returns an ordered dict of the AbstratChords built on every degree
+        """returns an ordered dict of the AbstractChords built on every degree
         of this Scale"""
         scale_chords = {}
         for d in self.degrees:
@@ -749,8 +879,20 @@ class Scale:
     def chords(self, order=3):
         return self.get_chords(order=order)
 
+    def get_tertian_chords(self, order=3):
+        """returns an ordered dict of the (tertian) AbstractChords built on
+       every degree of this Scale"""
+        scale_chords = {}
+        for d in self.degrees:
+            scale_chords[d] = self.get_tertian_chord(d, order=order)
+        return scale_chords
+    @property
+    def tertian_chords(self, order=3):
+        return self.get_tertian_chords(order=order)
 
-    def valid_chords_on(self, degree, order=None, min_order=2, max_order=4, min_likelihood=0.7, min_consonance=0, max_results=None, sort_by='likelihood', inversions=False, display=True, _root_note=None, no5s=False):
+    def valid_chords_on(self, degree, order=None, min_order=3, max_order=4,
+        min_likelihood=0.6, min_consonance=0, max_results=None, sort_by='likelihood',
+        inversions=False, display=True, _root_note=None, no5s=False, **kwargs):
         """For a specified degree, returns all the chords that can be built on that degree
         that fit perfectly into this scale."""
 
@@ -761,8 +903,8 @@ class Scale:
         degree = int(degree)
         root_interval = self[degree]
         degrees_above_this_degree = [d for d in range(degree, degree+14) ]  # no chords span more than 14 degrees
-        intervals_from_this_degree = IntervalList([self.get_interval_from_degree(d) for d in degrees_above_this_degree])
-        intervals_set = set(intervals_from_this_degree) # for faster lookup
+        intervals_from_this_degree = IntervalList([self.get_interval_from_degree(d) for d in degrees_above_this_degree]) - root_interval
+        # intervals_set = set(intervals_from_this_degree) # for faster lookup
         # intervals_from_this_degree = IntervalList([self.get_higher_interval(d) - root_interval for d in degrees_above_this_degree])
 
         if len(self.chromatic_intervals) > 0:
@@ -790,7 +932,7 @@ class Scale:
                 for inversion, candidate_intervals in candidate_intervals_by_inversion.items():
                     is_match = True
                     for interval in candidate_intervals[1:]: # skip the root
-                        if interval not in intervals_set:
+                        if interval not in intervals_from_this_degree:
                             is_match = False
                             break
                     if is_match:
@@ -813,8 +955,8 @@ class Scale:
         if no5s:
             non_no5_intervals = set()
 
-        print(f'Made shortlist of length: {len(shortlist)}')
-        import ipdb; ipdb.set_trace()
+        if len(shortlist) == 0:
+            import ipdb; ipdb.set_trace()
 
         for candidate in shortlist:
             if candidate.order <= max_order and candidate.order >= min_order:
@@ -840,17 +982,55 @@ class Scale:
             pruned_candidates = {c:v for c,v in candidate_stats.items() if (5 in c) or (c.intervals not in non_no5_intervals)}
             candidate_stats = pruned_candidates
 
-        # sort result: (always by chord size first)
+        # sort result: (always by chord size first and tertian second)
         if sort_by=='likelihood':
-            sort_key = lambda c: (-candidate_stats[c]['order'], candidate_stats[c]['likelihood'], candidate_stats[c]['consonance'])
+            sort_key = lambda c: (-len(c), c.is_tertian(), -candidate_stats[c]['order'], candidate_stats[c]['likelihood'], candidate_stats[c]['consonance'])
         elif sort_by=='consonance':
-            sort_key = lambda c: (-candidate_stats[c]['order'], candidate_stats[c]['consonance'], candidate_stats[c]['likelihood'])
+            sort_key = lambda c: (-len(c), c.is_tertian(), -candidate_stats[c]['order'], candidate_stats[c]['consonance'], candidate_stats[c]['likelihood'])
         else:
             raise ValueError(f"valid_chords sort_by arg must be one of: 'likelihood', 'consonance', not: {sort_by}")
 
         sorted_cands = sorted(candidate_stats, key=sort_key, reverse=True)[:max_results]
 
-        return sorted_cands
+        if display:
+            from src.display import DataFrame
+            # print result as nice dataframe instead of returning a dict
+            title = f"Valid chords built on degree {degree} of {self}"
+            print(title)
+
+            df = DataFrame(['Chord',
+                            '', 'Intervals', '',
+                            # '', 'Factors', '',
+                            'ScaleDegrees',
+                            'Tert.', 'Likl.', 'Cons.'])
+            for cand in sorted_cands:
+                # scores = candidate_chords[cand]
+                tert, lik, cons = cand.is_tertian(), cand.likelihood, cand.consonance
+                tert_str = 'Y' if tert else 'n'
+                # take right bracket off the notelist and add it as its own column:
+                ilb, irb = cand.intervals._brackets
+                dlb, drb = ScaleFactors._brackets
+                clb, crb = _settings.BRACKETS['chromatic_intervals']
+                intervals_str = str(cand.intervals)[1:-1]
+
+                scale_intervals = [(iv + root_interval).flatten() for iv in cand.intervals]
+                scale_degs = [str(int(self.interval_degrees[iv]))  if iv in self.intervals else '?' for iv in scale_intervals]
+                scale_degs_str = ', '.join(scale_degs)
+
+                factors = [iv.factor_name if iv in self.intervals else f'{clb}{iv.factor_name}{crb}' for iv in scale_intervals]
+                factors_str = ', '.join(factors)
+
+                # # use chord.__repr__ method to preserve dots over notes: (and strip out note markers)
+                # notes_str = (f'{cand.__repr__()}'.split(rb)[0]).split(lb)[-1].replace(Note._marker, '')
+                df.append([f'{cand._marker} {cand.name}',
+                           ilb, intervals_str, irb[-1],
+                           # dlb, factors_str, drb[-1],
+                           scale_degs_str,
+                           tert_str, f'{lik:.2f}', f'{cons:.3f}'])
+            df.show(max_rows=max_results, margin=' ', **kwargs)
+
+        else:
+            return sorted_cands
 
     def __contains__(self, item):
         """if item is an Interval, does it fit in our list of diatonic-degree-intervals plus chromatic-intervals?
@@ -912,6 +1092,20 @@ class Scale:
         """A scale is natural pentatonic if it is the major or minor pentatonic scale"""
         return (self.factors in [all_scale_name_factors['major pentatonic'], all_scale_name_factors['minor pentatonic']])
 
+    @property
+    def rarity(self):
+        """Single integer representing this Scale's rarity with respect to other scales"""
+        for r, names in scale_names_by_rarity.items():
+            if self.name in names:
+                return r
+        # unregistered scales are even rarer than the most rare registered scale:
+        return r + 1
+
+    @property
+    def likelihood(self):
+        # inverse of rarity
+        return round(1.0 - (0.1 * self.rarity), 1)
+
     def is_subscale_of(self, other):
         """returns True if this scale's intervals all occur in the intervals
         of some other desired scale, and False otherwise"""
@@ -922,6 +1116,49 @@ class Scale:
                 # n.b. this double loop is O(2N) and could probably be optimised if necessary
                 return False
         return True
+
+    def find_possible_parent_scale_names(self, of_length=None):
+        """returns a list of the names of scales that this Scale object
+        could be a strict subscale of.
+        arg 'of_length' controls the length that returned scales are allowed to be.
+            if it is an integer, return only scales of that exact length.
+            if it is a list, range, etc., return scales of any length in that list/range.
+            if it is None (default), return any scales longer than this scale."""
+        # check scales with lengths at least as long as this scale:
+        if of_length is None:
+            possible_parent_lengths = range(len(self)+1, 9)
+        elif isinstance(of_length, int):
+            possible_parent_lengths = [of_length]
+        elif isinstance(of_length, (list, tuple, range)):
+            assert check_all(of_length, 'isinstance', int), "possible parent scale lengths must be integers"
+            possible_parent_lengths = of_length
+        else:
+            raise ValueError(f"arg 'of_length' must be int, list of ints, or None, but got: {type(of_length)}")
+
+        match_names = []
+        for pl in possible_parent_lengths:
+            assert len(self) < pl, f"{self.name} can have no parent scales of length {pl} because it already has {len(self)} elements"
+            possible_parent_names = canonical_scale_names_by_length[pl]
+            possible_parent_name_intervals = {n:canonical_scale_name_intervals[n] for n in possible_parent_names}
+            for p_name, p_intervals in possible_parent_name_intervals.items():
+                is_match = True
+                # loop over deg/val pairs in self and check if each has a match in the parent:
+                for iv in self.intervals:
+                    if iv not in p_intervals:
+                        is_match = False
+                        break
+                if is_match:
+                    match_names.append(p_name)
+        return match_names
+
+    def find_possible_parent_scales(self, heptatonic_only=False):
+        """returns a list of Scale objects that this Scale object could be
+        a strict subscale of."""
+        # just wraps around possible_parent_scale_names but casts the results
+        # to Scale objects:
+        parent_names = self.possible_parent_scale_names(heptatonic_only=heptatonic_only)
+        parent_scales = [Scale(n) for n in parent_names]
+        return parent_scales
 
     def is_mode_of(self, other):
         """returns True if this Scale is a mode of a specified other Scale,
@@ -1009,14 +1246,16 @@ class Scale:
             waves = [['ionian', 'aeolian'], # natural scales
                      [names[0] for mode_idx, names in base_scale_mode_names['natural major'].items() if mode_idx not in [1,6]], # diatonic modes
                      ['harmonic minor', 'melodic minor', 'harmonic major', 'melodic major'], # non-diatonic heptatonic scales
-                     chromatic_scale_factor_names.values(),
-                     rare_scale_factor_names.values()]
+                     [name for name, facs in chromatic_scale_factor_names.items() if len(facs) == 7],
+                     [name for name, facs in rare_scale_factor_names.items() if len(facs) == 7]]
         elif len(self) == 5:
-            waves = [pentatonic_scale_factor_names.values(),
-                     rare_scale_factor_names.values(),]
+            # check natural pentatonics first, then all others
+            natural_pentatonics = ['major pentatonic', 'minor pentatonic']
+            waves = [natural_pentatonics,
+                     [n for n in pentatonic_scale_factor_names.values() if n not in natural_pentatonics]]
         else:
-            waves = [chromatic_scale_factor_names.values(),
-                     rare_scale_factor_names.values()]
+            # just one wave, all scales of this length:
+            waves = [canonical_scale_names_by_length[len(self)]]
 
         for comp_name_list in waves:
             for comp_name in comp_name_list:
@@ -1068,6 +1307,11 @@ class Scale:
     def name(self):
         return self.get_name()
 
+    @property
+    def scale_name(self):
+        """the name of this scale alone; not overriden by Key.name"""
+        return Scale.get_name(self)
+
     def get_aliases(self):
         if self.name in canonical_scale_name_aliases:
             return canonical_scale_name_aliases[self.name]
@@ -1081,19 +1325,21 @@ class Scale:
         """returns a string corresponding to this scale's factors.
         identical to str(self.factors) for scales without chromatic intervals,
         but wraps chromatic intervals in brackets if they exist"""
-        if len(self.chromatic_intervals) == 0:
-            return str(self.factors)
-        else:
-            factors_lst = []
-            for iv in self.intervals:
-                f = iv.factor_name
-                if iv in self.chromatic_intervals:
-                    lb, rb = self._chromatic_brackets
-                    f = f'{lb}{f}{rb}'
-                factors_lst.append(f)
-            lb, rb = ScaleFactors._brackets
-            factors_joined = ','.join(factors_lst)
-            return f'{lb}{factors_joined}{rb}'
+        return str(self.factors)
+        # if len(self.chromatic_intervals) == 0:
+        #     return str(self.factors)
+        #
+        # else:
+        #     factors_lst = []
+        #     for iv in self.intervals:
+        #         f = iv.factor_name
+        #         if iv in self.chromatic_intervals:
+        #             lb, rb = self._chromatic_brackets
+        #             f = f'{lb}{f}{rb}'
+        #         factors_lst.append(f)
+        #     lb, rb = ScaleFactors._brackets
+        #     factors_joined = ','.join(factors_lst)
+        #     return f'{lb}{factors_joined}{rb}'
 
     def __str__(self):
         return f'{self._marker}{self.name} scale: {self._factors_str()}'
@@ -1105,8 +1351,8 @@ class Scale:
     _chromatic_brackets = _settings.BRACKETS['chromatic_intervals']
 
 
-# 'standard' scales are: natural/melodic/harmonic majors and minors, the most commonly used in pop music
-standard_scale_names = {'natural major', 'natural minor', 'harmonic major', 'harmonic minor', 'melodic major', 'melodic minor'}
+# 'standard' scales are: naturals, harmonic majors/minors, and melodic minor, the most commonly used in pop music
+standard_scale_names = {'natural major', 'natural minor', 'harmonic major', 'harmonic minor', 'melodic minor'}
 # 'base' scales are those not obtained by rotations of any other scales:
 base_scale_names = {'natural major', 'melodic minor', 'harmonic minor', 'harmonic major', 'neapolitan major', 'neapolitan minor', 'double harmonic'}
 # 'natural' scales are just the natural major and minors:
@@ -1138,7 +1384,7 @@ base_scale_mode_names = {
    'natural major': {1: ['ionian', 'bilawal'], 2: ['dorian', 'kafi'], 3: ['phrygian', 'bhairavi'], 4: ['lydian', 'kalyan'],
                      5: ['mixolydian', 'khamaj'], 6: ['aeolian', 'asavari'], 7: ['locrian']},
    'melodic minor': {1: ['athenian'], 2: ['cappadocian', 'phrygian ♯6', 'dorian ♭2'],
-                     3: ['asgardian', 'lydian augmented'], 4: ['pontikonisian', 'lydian dominant'],
+                     3: ['asgardian', 'lydian augmented'], 4: ['acoustic', 'pontikonisian', 'lydian dominant', 'overtone'],
                      5: ['olympian', 'aeolian dominant', 'mixolydian ♭6'],
                      6: ['sisyphean', 'aeolocrian', 'half-diminished'], 7: ['palamidian', 'altered dominant']},
   'harmonic minor': {1: [], 2: ['locrian ♯6'], 3: ['ionian ♯5'], 4: ['ukrainian dorian', 'ukrainian minor'],
@@ -1157,7 +1403,7 @@ base_scale_mode_names = {
 
 pentatonic_scale_factor_names = {
     # natural pentatonics and their modes:
-    ScaleFactors('1,  2,  3,  5,  6'): ['major pentatonic', 'natural major pentatonic', 'ryo'], # mode 1
+    ScaleFactors('1,  2,  3,  5,  6'): ['major pentatonic', 'pentatonic', 'natural major pentatonic', 'ryo'], # mode 1
     ScaleFactors('1,  2,  4,  5, b7'): ['egyptian pentatonic'], # mode 2
     ScaleFactors('1, b3,  4, b6, b7'): ['blues minor pentatonic', 'phrygian pentatonic', 'minyo', 'man gong'], # mode 3
     ScaleFactors('1,  2,  4,  5,  6'): ['yo', 'ritsu', 'ritusen', 'major pentatonic II'], # mode 4
@@ -1194,13 +1440,13 @@ pentatonic_scale_factor_names = {
     ScaleFactors('1,  3,  4,  5,  7'): ['okinawan'],
     ScaleFactors('1, b2, b3,  5, b6'): ['balinese'], # 2nd mode of okinawan scale
     ScaleFactors('1,  2,  3,  5, b6'): ['major b6 pentatonic'],
-
     }
-
 pentatonic_scale_name_factors = unpack_and_reverse_dict(pentatonic_scale_factor_names)
 
 chromatic_scale_factor_names = {
-    ScaleFactors('1, b3,  4, [b5], 5, b7'): ['minor blues', 'minor blues hexatonic'],
+    # note: while 'pentatonic' on its own redirects to major pentatonic,
+    # 'blues' on its own redirects to minor blues, by convention
+    ScaleFactors('1, b3,  4, [b5], 5, b7'): ['minor blues', 'blues', 'minor blues hexatonic'],
     ScaleFactors('1,  2, [b3], 3,  5,  6'): ['major blues', 'major blues hexatonic'],
     ScaleFactors('1, b2, [b3], 4,  5,  b6, [b7]'): ['sakura'],
     ScaleFactors('1, 2, 3, 4, 5, 6, [b7],7'): ['bebop dominant'],
@@ -1210,6 +1456,10 @@ chromatic_scale_factor_names = {
     # natural-melodic-harmonic hybrids:
     ScaleFactors('1,  2,  b3,  4,  5,  b6, [6], b7, [7]'): ['full minor'],
     ScaleFactors('1,  2,   3,  4,  5,[b6],  6,[b7],  7'): ['full major'],
+
+    # chromatic scale from major:
+    ScaleFactors('1, [b2], 2,  [b3], 3, 4, [b5], 5, [b6], 6, [b7], 7'): ['chromatic major'],
+    ScaleFactors('1, [b2], 2,  b3, [3], 4, [b5], 5, b6, [6], b7, [7]'): ['chromatic minor'],
     }
 chromatic_scale_name_factors = unpack_and_reverse_dict(chromatic_scale_factor_names)
 
@@ -1289,6 +1539,9 @@ canonical_scale_name_factors = reverse_dict(canonical_scale_factor_names)
 canonical_scale_name_intervals = reverse_dict(canonical_scale_interval_names)
 canonical_scale_alias_names = unpack_and_reverse_dict(canonical_scale_name_aliases, include_keys=True)
 
+# mapping of possible scale lengths to lists of scale names which have that length:
+# canonical_scale_names_by_length = {l: [scale for scale, factors in canonical_scale_name_factors if len(factors) == l] for l in range(5,9)}
+
 wordbag_scale_names = {frozenset(name.split(' ')):name for name in canonical_scale_name_factors.keys()}
 
 def is_valid_scale_name(name):
@@ -1348,13 +1601,13 @@ scale_name_replacements = {
                           }
 replacement_scale_names = unpack_and_reverse_dict(scale_name_replacements, include_keys=True)
 
-rex_patterns = []
-for target, substrings in scale_name_replacements.items():
-    for substring in substrings:
-        remainder = [char for char in target if char not in substring]
-        remainder = ''.join(remainder)
-        pattern = f'(?P<{target}>{substring}({remainder})?)'
-        rex_patterns.append(pattern)
+# rex_patterns = []
+# for target, substrings in scale_name_replacements.items():
+#     for substring in substrings:
+#         remainder = [char for char in target if char not in substring]
+#         remainder = ''.join(remainder)
+#         pattern = f'(?P<{target}>{substring}({remainder})?)'
+#         rex_patterns.append(pattern)
 
 # build alias mappings and master mapping of all possible scale names to their factors
 all_scale_name_factors = {k:v for k,v in canonical_scale_name_factors.items()}
@@ -1362,6 +1615,19 @@ for alias, canonical_name in canonical_scale_alias_names.items():
     if alias not in all_scale_name_factors:
         alias_factors = canonical_scale_name_factors[canonical_name]
         all_scale_name_factors[alias] = alias_factors
+
+scale_names_by_rarity = {
+1: {'natural major', 'natural minor', 'major pentatonic', 'minor pentatonic'},
+2: {'harmonic major', 'harmonic minor', 'melodic minor', 'minor blues', 'major blues'},
+3: {'melodic major', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'locrian'},
+4: {'neapolitan major', 'neapolitan minor', 'double harmonic'}}
+common_scale_names = set()
+for r, names in scale_names_by_rarity.items():
+    common_scale_names.update(names)
+
+# all remaining scales:
+scale_names_by_rarity[5] = {n for n in canonical_scale_name_factors if n not in common_scale_names and not contains_accidental(n)}
+scale_names_by_rarity[6] = {n for n in canonical_scale_name_factors if contains_accidental(n)}
 
 
 # initialise empty caches:
@@ -1386,9 +1652,6 @@ MajorPentatonic = MajorPentatonicScale = MajorPent = MajPent = Scale('major pent
 MinorPentatonic = MinorPentatonicScale = MinorPent = MinPent = Scale('minor pentatonic')
 MajorBlues = MajorBluesScale = MajBlues = Scale('major blues')
 MinorBlues = MinorBluesScale = MinBlues = Scale('minor blues')
-
-common_scales = [MajorScale, MinorScale, HarmonicMajor, HarmonicMinor, MelodicMinor]
-common_subscales = [MajorPent, MinorPent, MajorBlues, MinorBlues]
 
 # dict mapping parallel major/minor scales:
 parallel_scales = {NaturalMajor: NaturalMinor,

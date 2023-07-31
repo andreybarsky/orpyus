@@ -4,6 +4,7 @@ from .util import rotate_list, least_common_multiple, euclidean_gcd, numeral_sub
 from .conversion import value_to_pitch
 from . import _settings
 import math
+from functools import cached_property
 
 # interval instances are cached for fast init, since they get called a lot:
 cached_intervals = {}
@@ -116,7 +117,7 @@ class Interval:
             else: # non-perfect degree, major by default
                 self.quality = Quality.from_offset_wrt_major(offset)
 
-    @property
+    @cached_property
     def ratio(self):
         if self.value in interval_ratios:
             return interval_ratios[self.value]
@@ -130,7 +131,7 @@ class Interval:
             gcd = euclidean_gcd(left, right)
             return (left // gcd, right // gcd)
 
-    @property
+    @cached_property
     def consonance(self):
         """consonance of an interval, defined as
         the base2 log of the least common multiple of
@@ -359,7 +360,7 @@ class Interval:
         """intervals only hash their values, not their degrees"""
         return hash(self.value)
 
-    @property
+    @cached_property
     def name(self):
         if self.mod == 0 and self.value > 0:
             # this is a 'span', like an octave
@@ -396,7 +397,7 @@ class Interval:
 
         return f'{self.quality.full_name.capitalize()} {degree_name}{qualifier_string}'
 
-    @property
+    @cached_property
     def short_name(self):
         lb, rb = self._brackets
         if self.value == 0:
@@ -408,7 +409,7 @@ class Interval:
 
 
     # alternate str method:
-    @property
+    @cached_property
     def factor_name(self):
         # display this interval as an accidental and a degree:
         acc = offset_accidentals[self.offset_from_default][0]
@@ -520,7 +521,7 @@ class IntervalList(list):
         interval_items = self._cast_intervals(items)
 
         super().__init__(interval_items)
-        # self.value_set = set([s.value for s in self]) # for efficient use of __contains__
+        self.values_cached = False
 
     @staticmethod
     def _cast_intervals(items):
@@ -593,28 +594,38 @@ class IntervalList(list):
         """IntervalLists hash as sorted tuples for the purposes of chord/key reidentification"""
         return hash(tuple(self.sorted()))
 
-    # def __contains__(self, item):
-    #     """check if interval with a value (not degree) of item is contained inside this IntervalList"""
-    #     # using self.value_set for efficient lookup"""
-    #     return item in self
-    #     #### removed self.value_set, so this is probably just a duplicate of list.__contains__ now
-    #     # if isinstance(item, Interval):
-    #     #     item = item.value
-    #     # return item in self.value_set
+    def __contains__(self, item):
+        """check if interval with a value (not degree) of item is contained inside this IntervalList"""
+        # using self.value_set for efficient lookup"""
+        if isinstance(item, Interval):
+            item = item.value # lookup intervals by value, else just accept ints
+        return item in self.value_set
+
+    @cached_property
+    def value_set(self):
+        # for efficient use of __contains__
+        self.values_cached = True # used to determine if cache needs to be cleared by mutation
+        return set([s.value for s in self])
 
     def append(self, item):
         """as list.append, but updates our set object as well"""
         super().append(item)
-        self.value_set = set([s.value for s in self])
+        if self.values_cached:
+            del self.value_set # clear value_set cache so it can be recomputed again later
+            self.values_cached = False
 
     def remove(self, item):
         super().remove(item)
-        self.value_set = set([s.value for s in self])
+        if self.values_cached:
+            del self.value_set # clear value_set cache so it can be recomputed again later
+            self.values_cached = False
 
     def pop(self, item):
         popped_item = self[-1]
         del self[-1]
-        self.value_set = set([s.value for s in self])
+        if self.values_cached:
+            del self.value_set # clear value_set cache so it can be recomputed again later
+            self.values_cached = False
 
     def unique(self):
         """returns a new IntervalList, where repeated notes are dropped after the first"""
@@ -660,15 +671,24 @@ class IntervalList(list):
     def pad(self, left=True, right=False):
         """if this list does NOT start and/or end with unisons, add them where appropriate"""
         assert self == self.sorted(), f'non-sorted IntervalLists should NOT be padded'
+        iv_class = self[0].__class__
         if (self[0].mod != 0) and left:
-            new_intervals = [Interval.from_cache(0, None, self[0].max_degree)] + self[:]
+            new_intervals = [iv_class.from_cache(0, None, self[0].max_degree)] + self[:]
         else:
             new_intervals = self[:]
         if (self[-1].mod != 0) and right:
             # add unison/octave above the last interval:
             octave_span = self[-1].octave_span + 1
-            new_intervals = new_intervals + [Interval.from_cache(self[0].span_size*(octave_span), None, self[0].max_degree)]
+            new_intervals = new_intervals + [iv_class.from_cache(self[0].span_size*(octave_span), None, self[0].max_degree)]
         return IntervalList(new_intervals)
+
+    def strict_pad(self, left=True, right=False):
+        """like IntervalList.pad, but strips beforehand, ensuring that the requested
+        padding is the ONLY padding in the list.
+        for example:
+            IntervalList([2,7,12]).pad(left=True) gives intervals [0,2,7,12]
+        but IntervalList([2,7,12]).strict_pad(left=True) gives intervals [0,2,7]  """
+        return self.strip().pad(left, right)
 
     def flatten(self, duplicates=False):
         """flatten all intervals in this list and return them as a new (sorted) list.
@@ -737,6 +757,21 @@ class IntervalList(list):
         for i in range(1, len(self)):
             interval_unstack.append(self[i] - self[i-1])
         return IntervalList(interval_unstack)
+
+    def _seems_stacked(self):
+        """makes a best guess as to whether this is a list of stacked intervals (True),
+        or a list of unstacked intervals (False).
+        effective for Scale intervals, but NOT for Chord intervals"""
+        if max(self) < 5:
+            # every pentatonic scale has unstacked intervals of a major third at most
+            return False
+        elif len(self) != len(self.value_set):
+            # repeated, non-unique intervals guarantee unstacked:
+            return False
+        else:
+            # this is sufficient to distinguish between stacked and unstacked intervals
+            # for all canonical scale names at least
+            return True
 
     def is_sanitised(self):
         """returns True if no intervals in this list are double sharp or

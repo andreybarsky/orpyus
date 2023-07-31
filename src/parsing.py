@@ -337,6 +337,14 @@ def is_alteration(string):
     else:
         return (is_accidental(string[0])) and (string[1:].isnumeric())
 
+def contains_accidental(string):
+    """returns True if string has any explicit accidental characters
+    (not including 'b' or '#'), and False otherwise"""
+    for acc_char in '♯𝄪♭𝄫♮':
+        if acc_char in string:
+            return True
+    return False
+
 def parse_out_alterations(string):
     """given a string that contains arbitrary characters along with alterations,
     split across a list with each alteration as its own element"""

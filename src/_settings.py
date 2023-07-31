@@ -23,13 +23,21 @@ DEFAULT_SHARPS = False
 # orpyus musical objects use little unicode MARKERS in their string methods
 # to identify them at a glance. the default markers are defined here, so you
 # can change them if you don't like them:
-MARKERS = { 'Note': '♩',
+MARKERS = { # class markers used to identify musical object types:
+            'Note': '♩',
       'OctaveNote': '♪',
    'AbstractChord': '♫ ',
            'Chord': '♬ ',
            'Scale': '𝄢 ',
              'Key': '𝄞 ',
+
+             # chord-movement markers used in progression analysis:
+             'right': '⇾ ', # '>',
+             'up': '↿', #'↑' # '⇧'
+             'down': '⇃', # '↓' # '⇩'
             }
+
+
 
 ### BRACKETS are used similarly to markers, but placed around the objects they contain:
 BRACKETS = { 'Interval': ['‹', '›'],
@@ -38,6 +46,7 @@ BRACKETS = { 'Interval': ['‹', '›'],
               'Quality': ['~', '~'],
        'ChordModifier' : ['≈', '≈'],
          'ChordFactors': ['¦ ', ' ¦'],
+            'ChordList': ['𝄃 ', ' 𝄂'],
           'Progression': ['𝄆 ', ' 𝄇'],    #['𝄃 ', ' 𝄂'],
      'ChordProgression': ['𝄆 ', ' 𝄇'],    # ['╟', '╢'],
                'Guitar': ['〚', ' 〛'],

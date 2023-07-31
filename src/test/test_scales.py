@@ -2,6 +2,7 @@ from ..intervals import *
 from ..scales import *
 from ..chords import AbstractChord
 from .testing_tools import compare
+from ..display import DataFrame
 
 def unit_test():
 
@@ -18,7 +19,7 @@ def unit_test():
     compare(Scale('major').mode(6), Scale('minor'))
     compare(Scale('major', mode=6), Scale('minor'))
 
-    compare(Scale('harmonic major b6'), Scale('major natural'))
+    compare(Scale('harmonic major b7'), Scale('melodic major'))
 
     # test modes of pentatonic scales:
     compare(Scale('hirajoshi').mode(2).intervals, Scale('hirajoshi').intervals.mode(2))
@@ -27,7 +28,7 @@ def unit_test():
     compare(Scale('mixo').nearest_natural_scale, Scale('major pent').nearest_natural_scale)
 
     print('Test scale init by intervals:')
-    compare(Scale('major'), Scale(intervals=scale_name_intervals['natural major']))
+    compare(Scale('major'), Scale(intervals=canonical_scale_name_intervals['natural major'][0]))
 
     print('Test chords built on Scale degrees:')
     compare(Scale('minor').chord(2), AbstractChord('dim'))
@@ -41,20 +42,22 @@ def unit_test():
 
     print('Subscales:')
     compare(Scale('major').pentatonic.intervals, [0, 2, 4, 7, 9])
-    compare(Scale('minor').blues.intervals, [0, 3, 5, 6, 7, 10])
+    compare(Scale('minor blues').intervals, [0, 3, 5, 6, 7, 10])
 
-    compare(Scale('pentatonic minor')[3], m3)
-    compare(Scale('blues minor').intervals[2], Scale('minor').blues.chromatic_intervals[0])
+    compare(Scale('pentatonic minor').factor_intervals[3], m3)
+    compare(Scale('blues minor').factors.chromatic.as_intervals[0], Scale('minor blues').chromatic_intervals[0])
+
+    # test Scale init by unstacked intervals
+    compare(Scale([2,1,2,2,1,2]), Scale([2,3,5,7,8,10]))
 
     # test neighbours:
     major_neighbours = Scale('natural major').neighbouring_scales
     print(f'Neighbours of natural major scale:')
-    for a, sc in major_neighbours.items():
-        print(f'with {a.name}: {sc}')
+    for sc in major_neighbours:
+        print(sc)
 
     # extreme test case: do we crash if computing neighbours for every possible scale?
-    for intvs, names in canonical_scale_interval_names.items():
-        name = names[0]
+    for intvs, name in canonical_scale_interval_names.items():
         sc = Scale(name)
         neighbours = sc.neighbouring_scales
         # print(f'{name} scale has {len(neighbours)} neighbours')
@@ -64,8 +67,7 @@ def unit_test():
 
     Scale('harmonic minor').valid_chords_on(4, order=6)
 
-    #### TBI: (bug?)
-    Scale(intervals=[2,1,2,2,1,2], stacked=False) # returns error?
+
 
     # which modes correspond to which 13 chords?
 
@@ -73,7 +75,7 @@ def unit_test():
     for chord_name in _13chords:
         c = AbstractChord(chord_name)
         chord_intervals = c.intervals
-        s = Scale(intervals=chord_intervals)
+        s = Scale(intervals=chord_intervals.flatten())
         alias_str = f" (aka: {', '.join(s.aliases)})" if len(s.aliases) > 0 else ''
 
         print(f'\n{c}')
@@ -86,49 +88,52 @@ def unit_test():
     # display all scale consonances:
     all_consonances = {}
     for name, factors in canonical_scale_name_factors.items():
-        sc = NewScale(name)
+        sc = Scale(name)
         all_consonances[sc] = sc.consonance
 
     sorted_scales = sorted(all_consonances, key=lambda x: all_consonances[x], reverse=True)
     cons_names = [sc.name for sc in sorted_scales]
     cons_values = [all_consonances[sc] for sc in sorted_scales]
 
+    df = DataFrame(['Scale Name',
+                    'Consonance'])
+    for name, cons in zip(cons_names, cons_values):
+        df.append([name, round(cons,3)])
+    df.show()
+
     # cons_names, cons_values = [sc.name for sc in all_consonances.keys()], [c for c in all_consonances.values()]
 
-    descriptors = []
-    aliases = []
-    for cons_name in cons_names:
-        if cons_name in base_scale_names:
-            # full_names.append(f'{cons_name}')
-            descriptors.append('')
-            this_aliases = list(set(mode_name_aliases[cons_name]))
-        elif cons_name in subscales_by_name:
-            subsc = subscales_by_name[cons_name]
-            descriptors.append(f'subscale of {subsc.parent_scale.name} scale')
-            this_aliases = []
-        else:
-            base, mode = mode_lookup[cons_name]
-            descriptors.append(f'mode {mode} of {base} scale')
-            this_aliases = list(set(mode_name_aliases[cons_name]))
-        aliases.append(this_aliases)
-
-    longest_name = max([len(c) for c in cons_names])
-    longest_desc = max([len(d) for d in descriptors])
-
-    # rows = zip(cons_names, cons_values)
-    # rows = rows.sorted(lambda x: (x[1]), reverse=True)
-
-    print('====================================\n')
-    print('Modes/scales by pairwise consonance:\n')
-
-    print(f'consonance {"    scale name":{longest_name}}   {"    mode rotation":{longest_desc}}           aliases')
-    print('---------------------------------------------------------------------------------------------------')
-    for i, (name, desc, value, this_aliases) in enumerate(zip(cons_names, descriptors, cons_values, aliases)):
-        if i % 4 == 0:
-            print('')
-        print(f'  {value:.3f}       {name:{longest_name}}   {desc:{longest_desc}}      {", ".join(this_aliases)}')
-
-    import numpy as np
-    print(f'Highest consonance: {np.max(cons_values):.05f} ({cons_names[np.argmax(cons_values)]})')
-    print(f'Lowest consonance: {np.min(cons_values):.05f} ({cons_names[np.argmin(cons_values)]})')
+    # descriptors = []
+    # aliases = []
+    # for cons_name in cons_names:
+    #     if cons_name in base_scale_names:
+    #         # full_names.append(f'{cons_name}')
+    #         descriptors.append('')
+    #         this_aliases = list(set(mode_name_aliases[cons_name]))
+    #
+    #     else:
+    #         base, mode = mode_lookup[cons_name]
+    #         descriptors.append(f'mode {mode} of {base} scale')
+    #         this_aliases = list(set(mode_name_aliases[cons_name]))
+    #     aliases.append(this_aliases)
+    #
+    # longest_name = max([len(c) for c in cons_names])
+    # longest_desc = max([len(d) for d in descriptors])
+    #
+    # # rows = zip(cons_names, cons_values)
+    # # rows = rows.sorted(lambda x: (x[1]), reverse=True)
+    #
+    # print('====================================\n')
+    # print('Modes/scales by pairwise consonance:\n')
+    #
+    # print(f'consonance {"    scale name":{longest_name}}   {"    mode rotation":{longest_desc}}           aliases')
+    # print('---------------------------------------------------------------------------------------------------')
+    # for i, (name, desc, value, this_aliases) in enumerate(zip(cons_names, descriptors, cons_values, aliases)):
+    #     if i % 4 == 0:
+    #         print('')
+    #     print(f'  {value:.3f}       {name:{longest_name}}   {desc:{longest_desc}}      {", ".join(this_aliases)}')
+    #
+    # import numpy as np
+    # print(f'Highest consonance: {np.max(cons_values):.05f} ({cons_names[np.argmax(cons_values)]})')
+    # print(f'Lowest consonance: {np.min(cons_values):.05f} ({cons_names[np.argmin(cons_values)]})')
     # import matplotlib.pyplot as plt
