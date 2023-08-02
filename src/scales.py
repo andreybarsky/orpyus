@@ -343,6 +343,9 @@ class Scale:
         # the .intervals attribute includes both factor ('diatonic') and chromatic ('passing') intervals:
         self.intervals = IntervalList(list(self.factor_intervals.values()) + self.chromatic_intervals).sorted()
 
+        # set quality object: (by re-using AbstractChord method that uses the exact same logic)
+        self.quality = AbstractChord._determine_quality(self)
+
         self.cached_name = None # name retrieval is expensive, so we only do it once and cache it at that time
 
     ####### internal init subroutines:
@@ -688,7 +691,12 @@ class Scale:
         # outer loop is across degree intervals:
         for deg, left_iv in self.degree_intervals.items(): # range(1, len(self.degree_intervals)+1):  # (is this equivalent to mode rotation?)
             # inner loop is across all intervals from that degree, including chromatics:
-            ivs = [self[i] for i in range(int(deg), (deg**1).extended_degree)] # degrees from this interval to an octave higher
+            ivs = [self.get_interval_from_degree(i) for i in range(int(deg), (deg**1).extended_degree)] # degrees from this interval to an octave higher
+            if len(self.chromatic_intervals) > 0:
+                for civ in self.chromatic_intervals:
+                    # raise chromatic intervals by an octave if they're below the left interval
+                    ivs.append(civ if civ > left_iv else civ**1)
+            ivs = sorted(ivs)
             for right_iv in ivs:
                 pairwise[(left_iv, right_iv)] = right_iv - left_iv
                 if extra_tonic and (deg == 1):
@@ -734,8 +742,8 @@ class Scale:
     ### Key production methods:
     def on_tonic(self, tonic):
         """returns a Key object corresponding to this Scale built on a specified tonic"""
-        if not isinstance(tonic, Note):
-            tonic = notes.Note.from_cache(tonic)
+        # if not isinstance(tonic, Note):
+        #     tonic = notes.Note.from_cache(tonic)
         # lazy import to avoid circular dependencies:
         from .keys import Key
         return Key(factors=self.factors, tonic=tonic)
@@ -797,7 +805,7 @@ class Scale:
         to produce tertian chords specifically (or their nearest equivalents),
             see Scale.get_tertian_chord """
         root_offsets = [i] + [i + (o*2) for o in range(1, order)]
-        scale_intervals = [self[i] for i in root_offsets]
+        scale_intervals = [self.get_interval_from_degree(i) for i in root_offsets]
         # shift left to get chord that starts on root:
         start_interval = scale_intervals[0]
         chord_intervals = IntervalList(scale_intervals) - start_interval
@@ -828,20 +836,28 @@ class Scale:
             # simply build a triad chord since we have all the notes needed:
             log(f'All desired factors {list(desired_scale_factors)} are available, so we can build an ordinary triad')
             root_interval = self.degree_intervals[root_degree]
-            chord_intervals = IntervalList([self.factor_intervals[f] for f in desired_scale_factors])
+            chord_intervals = [self.factor_intervals[root_factor]]
+            for i, f in enumerate(desired_scale_factors[1:]):
+                raw_interval = self.factor_intervals[f]
+                if raw_interval < chord_intervals[i-1]:
+                    # raise by octave if we've lapped round the start of the scale:
+                    chord_intervals.append(raw_interval ** 1)
+                else:
+                    chord_intervals.append(raw_interval)
+            chord_intervals = IntervalList(chord_intervals)
             log(f'With root interval: {root_interval} and chord intervals: {chord_intervals}, resulting in: {chord_intervals - root_interval}')
             return AbstractChord(intervals=chord_intervals - root_interval)
         else:
             ### otherwise, fall back on valid_chords method:
-            valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0.7, min_consonance=0.5, min_order=order, max_order=order, no5s=False, inversions=False, display=False)
+            valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0.7, min_consonance=0.5, min_order=order, max_order=order, no5s=False, inversions=True, display=False)
             log(f'Instead choosing a consonant chord from the valid chords that can be built on this degree:\n {valid_chords_on_root}')
 
             if len(valid_chords_on_root) == 0:
                 log(f'Did not find any with initial parameters, so expanding search parameters')
-                valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0.5, min_consonance=0.4, min_order=order, max_order=order, no5s=True, inversions=False, display=False)
+                valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0.5, min_consonance=0.4, min_order=order, max_order=order, no5s=True, inversions=True, display=False)
                 if len(valid_chords_on_root) == 0:
                     log(f'Did not find any with expanded parameters, so dropping all search constraints except subscale membership')
-                    valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0, min_consonance=0, min_order=order, max_order=order, no5s=True, inversions=False, display=False)
+                    valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0, min_consonance=0, min_order=order, max_order=order, no5s=True, inversions=True, display=False)
                     assert len(valid_chords_on_root) > 0, f"Could somehow not make any chords at all of order={order} on degree {degree} of subscale: {self.name}"
             # secondary filtering step:
             shortlist = []
@@ -850,9 +866,14 @@ class Scale:
                     # is tertian
                     shortlist.append(c)
                     continue
+                elif c.is_inverted_tertian():
+                    log(f'Failed first tertian check, but an inversion of this chord is tertian: {c}')
+                    shortlist.append(c)
+                    continue
                     # otherwise, prefer chords with 3rds and 5th if possible:
                 elif (3 in c) and (5 in c):
-                    print(f'Failed tertian check Found a potential chord that contains a 3rd and a 5th: {c}')
+                    log(f'Failed first and second tertian check')
+                    log(f'But found a potential chord that contains a 3rd and a 5th: {c}')
                     shortlist.append(c) # (since valid_chords is already sorted, shortlist is sorted by extension)
                     continue
             if len(shortlist) >= 1:
@@ -860,13 +881,14 @@ class Scale:
                 return shortlist[0]
             else:
                 # just return the most likely/consonant valid one
-                print(f'Degree {i}: Did not find any chords that contain a 3rd and 5th, so just taking the first match')
+                log(f'Degree {i}: Did not find any chords that contain a 3rd and 5th, so just taking the first match')
                 return valid_chords_on_root[0]
 
     def tertian_chord(self, i, order=3):
         """convenience wrapper around Scale.get_tertian_chord;
         see the documentation for that method."""
         return self.get_tertian_chord(i, order)
+    tertian = tertian_chord
 
     def get_chords(self, order=3):
         """returns an ordered dict of the AbstractChords built on every degree
@@ -889,9 +911,10 @@ class Scale:
     @property
     def tertian_chords(self, order=3):
         return self.get_tertian_chords(order=order)
+    tertians = tertian_chords
 
     def valid_chords_on(self, degree, order=None, min_order=3, max_order=4,
-        min_likelihood=0.6, min_consonance=0, max_results=None, sort_by='likelihood',
+        min_likelihood=0.7, min_consonance=0, max_results=None, sort_by='likelihood',
         inversions=False, display=True, _root_note=None, no5s=False, **kwargs):
         """For a specified degree, returns all the chords that can be built on that degree
         that fit perfectly into this scale."""
@@ -901,7 +924,7 @@ class Scale:
             min_order = max_order = order
 
         degree = int(degree)
-        root_interval = self[degree]
+        root_interval = self.get_interval_from_degree(degree)
         degrees_above_this_degree = [d for d in range(degree, degree+14) ]  # no chords span more than 14 degrees
         intervals_from_this_degree = IntervalList([self.get_interval_from_degree(d) for d in degrees_above_this_degree]) - root_interval
         # intervals_set = set(intervals_from_this_degree) # for faster lookup
@@ -993,42 +1016,12 @@ class Scale:
         sorted_cands = sorted(candidate_stats, key=sort_key, reverse=True)[:max_results]
 
         if display:
-            from src.display import DataFrame
-            # print result as nice dataframe instead of returning a dict
+            from src.display import DataFrame, chord_table
             title = f"Valid chords built on degree {degree} of {self}"
             print(title)
-
-            df = DataFrame(['Chord',
-                            '', 'Intervals', '',
-                            # '', 'Factors', '',
-                            'ScaleDegrees',
-                            'Tert.', 'Likl.', 'Cons.'])
-            for cand in sorted_cands:
-                # scores = candidate_chords[cand]
-                tert, lik, cons = cand.is_tertian(), cand.likelihood, cand.consonance
-                tert_str = 'Y' if tert else 'n'
-                # take right bracket off the notelist and add it as its own column:
-                ilb, irb = cand.intervals._brackets
-                dlb, drb = ScaleFactors._brackets
-                clb, crb = _settings.BRACKETS['chromatic_intervals']
-                intervals_str = str(cand.intervals)[1:-1]
-
-                scale_intervals = [(iv + root_interval).flatten() for iv in cand.intervals]
-                scale_degs = [str(int(self.interval_degrees[iv]))  if iv in self.intervals else '?' for iv in scale_intervals]
-                scale_degs_str = ', '.join(scale_degs)
-
-                factors = [iv.factor_name if iv in self.intervals else f'{clb}{iv.factor_name}{crb}' for iv in scale_intervals]
-                factors_str = ', '.join(factors)
-
-                # # use chord.__repr__ method to preserve dots over notes: (and strip out note markers)
-                # notes_str = (f'{cand.__repr__()}'.split(rb)[0]).split(lb)[-1].replace(Note._marker, '')
-                df.append([f'{cand._marker} {cand.name}',
-                           ilb, intervals_str, irb[-1],
-                           # dlb, factors_str, drb[-1],
-                           scale_degs_str,
-                           tert_str, f'{lik:.2f}', f'{cons:.3f}'])
-            df.show(max_rows=max_results, margin=' ', **kwargs)
-
+            chord_table(sorted_cands,
+                        columns=['intervals', 'scaledegrees', 'tert', 'likl', 'cons'],
+                        parent_scale=self, parent_degree=degree, max_results=max_results, **kwargs)
         else:
             return sorted_cands
 
@@ -1150,6 +1143,9 @@ class Scale:
                 if is_match:
                     match_names.append(p_name)
         return match_names
+    @property
+    def possible_parent_scale_names(self):
+        return self.find_possible_parent_scale_names()
 
     def find_possible_parent_scales(self, heptatonic_only=False):
         """returns a list of Scale objects that this Scale object could be
@@ -1159,6 +1155,9 @@ class Scale:
         parent_names = self.possible_parent_scale_names(heptatonic_only=heptatonic_only)
         parent_scales = [Scale(n) for n in parent_names]
         return parent_scales
+    @property
+    def possible_parent_scales(self):
+        return self.find_possible_parent_scales()
 
     def is_mode_of(self, other):
         """returns True if this Scale is a mode of a specified other Scale,
@@ -1178,7 +1177,7 @@ class Scale:
                     if mode_scale.factors == other.factors:
                         return True
                 except:
-                    import ipdb; ipdb.set_trace() # why has this mode rotation failed?
+                    raise Exception('Mode rotation failed unexpectedly')
             # checked all of this scale's modes and didn't find a hit
             return False
 
@@ -1198,11 +1197,11 @@ class Scale:
             full_notes.extend(notes_down)
         full_notes.play(**kwargs)
 
-    def show(self, tuning='EADGBE'):
+    def show(self, tuning='EADGBE', **kwargs):
         """just a wrapper around the Guitar.show method, which is generic to most musical classes,
         so this method is also inherited by all Scale subclasses"""
         from .guitar import Guitar
-        Guitar(tuning).show_scale(self)
+        Guitar(tuning).show_scale(self, **kwargs)
     @property
     def fretboard(self):
         # just a quick accessor for guitar.show in standard tuning
