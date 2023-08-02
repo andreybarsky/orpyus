@@ -57,10 +57,9 @@ class Note:
                 name = ''.join([n for n in name if not n.isdigit()])
 
         # set main object attributes from init args:
-        self.name, self.position, self.prefer_sharps = self._parse_input(name, position, prefer_sharps, case_sensitive)
-
+        self.chroma, self.position, self.prefer_sharps = self._parse_input(name, position, prefer_sharps, case_sensitive)
         # 'chroma' is the string denoting pitch class: ('C#', 'Db', 'E', etc.)
-        self.chroma = self.name # these two are the same for Note class, but may be different for OctaveNote subclass
+
 
         # boolean flag, is True for white notes:
         self.natural = self.chroma in parsing.natural_note_names
@@ -146,7 +145,7 @@ class Note:
     def _set_sharp_preference(self, prefer_sharps):
         """modify sharp preference in place"""
         self.prefer_sharps = prefer_sharps
-        self.name = preferred_name(self.position, prefer_sharps=self.prefer_sharps)
+        self.chroma = preferred_name(self.position, prefer_sharps=self.prefer_sharps)
 
     #### magic methods and note constructors:
     def __add__(self, other):
@@ -237,6 +236,10 @@ class Note:
         else:
             raise Exception('< operation for Notes only defined over other Notes')
 
+    @property
+    def name(self):
+        return f'{self.chroma}'
+
     #### useful public methods:
     @property
     def properties(self):
@@ -315,7 +318,6 @@ class OctaveNote(Note):
         self.chroma, self.value, self.pitch, self.prefer_sharps = self._parse_input(name, value, pitch, prefer_sharps)
         # compute octave, position, and name:
         self.octave, self.position = conv.oct_pos(self.value)
-        self.name = f'{self.chroma}{self.octave}'
 
         # self.prefer_sharps = prefer_sharps
 
@@ -385,7 +387,6 @@ class OctaveNote(Note):
         """modify sharp preference in place"""
         self.prefer_sharps = preference
         self.chroma = preferred_name(self.position, prefer_sharps=self.prefer_sharps)
-        self.name = f'{self.chroma}{self.octave}'
 
     #### operators & magic methods:
     def __add__(self, interval):
@@ -428,6 +429,10 @@ class OctaveNote(Note):
     def __hash__(self):
         """note and octavenote hash-equivalence is based on position alone, not value"""
         return hash(f'Note:{self.position}')
+
+    @property
+    def name(self):
+        return f'{self.chroma}{self.octave}'
 
     #### useful public methods:
 
@@ -853,16 +858,16 @@ G = Note('G')
 Ab = Note('Ab')
 
 # all chromatic pitch classes:
-chromatic_scale = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
+chromatic_notes = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
 
 # note cache by name for efficient init:
 cached_notes = {n: Note(n, prefer_sharps=s) for n in parsing.common_note_names for s in [None, False, True]}
 cached_notes.update({p : Note(position=p, prefer_sharps=s) for p in range(12) for s in [None, False, True]})
 
 # relative minors/majors of all chromatic notes:
-relative_minors = {c.name : (c - 3).name for c in chromatic_scale}
-relative_minors.update({c.sharp_name: (c-3).sharp_name for c in chromatic_scale})
-relative_minors.update({c.flat_name: (c-3).flat_name for c in chromatic_scale})
+relative_minors = {c.name : (c - 3).name for c in chromatic_notes}
+relative_minors.update({c.sharp_name: (c-3).sharp_name for c in chromatic_notes})
+relative_minors.update({c.flat_name: (c-3).flat_name for c in chromatic_notes})
 
 relative_majors = {value:key for key,value in relative_minors.items()}
 

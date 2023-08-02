@@ -539,7 +539,7 @@ chord_tweaks = {    'sus4': ChordModifier(remove=3, add=4, verify={2:False}),
 
                     'add9': ChordModifier(add={9:0}, verify={7: False, 2:False}),
                     'add11': ChordModifier(add=11, verify={9: False, 4:False}),
-                    'add13': ChordModifier(add=13, verify={11: False, 6:False, 5:0}), # verify natural 5 is a kludge, see: Bbdim9add13/C
+                    'add13': ChordModifier(add=13, verify={11: False, 6:False, 5:0, 7:True}), # verify natural 5 is a kludge, see: Bbdim9add13/C
 
                     '(no5)': ChordModifier(remove=5), # , verify={3: True, 10:False}),    # we don't need verifiers on this because no5s are not registered anywhere, just treated as a valid input
                     '(b5)': ChordModifier(make={5:-1}, verify={3:0}),

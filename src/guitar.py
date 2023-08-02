@@ -338,7 +338,7 @@ class Guitar: ### TBI: allow ukelele tunings?
             if highlight_fifths:
                 if (5 in key.factors):
                     highlights.extend(self.locate_note(key.factor_notes[5], max_fret=max_fret))
-        elif highlight_pentatonic and not key.is_subscale:
+        elif highlight_pentatonic and not key.is_pentatonic():
             # pick out the pentatonic notes to highlight
             this_pentatonic = key.pentatonic
             for n in this_pentatonic.notes[1:]:

@@ -24,11 +24,16 @@ def unit_test():
     # test modes of pentatonic scales:
     compare(Scale('hirajoshi').mode(2).intervals, Scale('hirajoshi').intervals.mode(2))
 
-    # test utility methods on heptatonic/pentatonic/chromatic scales:
+    # test utility methods on heptatonic/pentatonic scales:
     compare(Scale('mixo').nearest_natural_scale, Scale('major pent').nearest_natural_scale)
+    compare(Scale('melodic major').is_mode_of(Scale('melodic minor')), True)
+    compare(Scale('harmonic major').is_mode_of(Scale('harmonic minor')), False)
 
     print('Test scale init by intervals:')
     compare(Scale('major'), Scale(intervals=canonical_scale_name_intervals['natural major'][0]))
+    # by unstacked intervals:
+    compare(Scale([2,1,2,2,1,2]), Scale([2,3,5,7,8,10]))
+
 
     print('Test chords built on Scale degrees:')
     compare(Scale('minor').chord(2), AbstractChord('dim'))
@@ -47,8 +52,6 @@ def unit_test():
     compare(Scale('pentatonic minor').factor_intervals[3], m3)
     compare(Scale('blues minor').factors.chromatic.as_intervals[0], Scale('minor blues').chromatic_intervals[0])
 
-    # test Scale init by unstacked intervals
-    compare(Scale([2,1,2,2,1,2]), Scale([2,3,5,7,8,10]))
 
     # test neighbours:
     major_neighbours = Scale('natural major').neighbouring_scales
@@ -95,11 +98,20 @@ def unit_test():
     cons_names = [sc.name for sc in sorted_scales]
     cons_values = [all_consonances[sc] for sc in sorted_scales]
 
-    df = DataFrame(['Scale Name',
+    df_pent = DataFrame(['Scale Name',
                     'Consonance'])
-    for name, cons in zip(cons_names, cons_values):
-        df.append([name, round(cons,3)])
-    df.show()
+    df_other = DataFrame(['Scale Name',
+                'Consonance'])
+    for scale, cons in zip(sorted_scales, cons_values):
+        if scale.is_pentatonic():
+            df_pent.append([scale.name, round(cons,3)])
+        else:
+            df_other.append([scale.name, round(cons,3)])
+    print(f'\n=== Pentatonic scale consonances: ===')
+    df_pent.show()
+
+    print(f'\n=== Other scale consonances: ===')
+    df_other.show()
 
     # cons_names, cons_values = [sc.name for sc in all_consonances.keys()], [c for c in all_consonances.values()]
 

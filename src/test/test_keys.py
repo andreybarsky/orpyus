@@ -5,12 +5,13 @@ from .testing_tools import compare
 
 def unit_test():
     # 3 types of initialisation:
-    compare(Key(scale_name='natural minor', tonic='B'), Key('Bm'))
+    compare(Key(intervals=[2,3,5,7,8,10], tonic='B'), Key('Bm'))
     compare(Key(intervals=[2,4,5,7,9,11], tonic='C'), Key(notes='CDEFGAB'))
     compare(Key('Cm').intervals, Scale('natural minor').intervals)
 
     # and by import from Scale class:
     compare(Scale('dorian').on_tonic('D'), Key('D dorian'))
+
 
     print('Test Key __contains__:')
     # normal scale-degree triads/tetrads:
@@ -28,6 +29,14 @@ def unit_test():
     compare(Chord('D13sus4') in Key('C'), True)
     # or not:
     compare(Chord('Fmmaj11') in Key('C'), False)
+
+    # test key equivalence across enharmonic tonics:
+    compare(Key('F#') == Key('Gb'), True)
+    compare(Key('F#') == Key('G'), False)
+
+    # test utility methods:
+    compare(Key('C').mode(2), Key('D dorian'))
+    compare(Key('C').pentatonic, Key('C pentatonic'))
 
     matching_keys(['C', Chord('F'), 'G7', 'Bdim'], upweight_pentatonics=False)
 

@@ -51,9 +51,13 @@ BRACKETS = { 'Interval': ['‹', '›'],
      'ChordProgression': ['𝄆 ', ' 𝄇'],    # ['╟', '╢'],
                'Guitar': ['〚', ' 〛'],
   'chromatic_intervals': ['[', ']'],
+            }
 
-
-}
+### CHARACTERS are used in lists to compactly denote certain traits
+CHARACTERS = { 'true': '+',    # e.g. displayed in 'Tertian' column if a chord is tertian
+           'somewhat': '~',    # e.g. displayed in 'Tertian' column if inverted-tertian
+   'chromatic_degree': 'c',    # displayed instead of integer ScaleDegree for a non-degree (chromatic) interval
+             }
 
 ############# performance settings:
 

@@ -731,6 +731,10 @@ class IntervalList(list):
         """used for calculating inversions: rotates, then subtracts
         the value of the resulting first interval in list, and returns
         those inverted intervals as a new IntervalList"""
+        if position >= len(self):
+            # mod into own range: i.e. a list of 5 items, rotated 5 times, is the same as itself
+            position = position % len(self)
+
         rotated = self.rotate(position)
         recentred = rotated - rotated[0] # centres first interval to be root again
         positive = abs(recentred) # inverts any negative intervals to their positive inversions
