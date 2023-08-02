@@ -2,6 +2,17 @@ from . import parsing, _settings
 from .util import log
 import math
 
+class Keyboard:
+    ...
+    # example:
+    # | C  Db  D Eb   E   F  Gb  G  Ab  A Ab   B   C  Db  D Eb   E   F  Gb  G  Ab  A Ab   B   C |
+    # |░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|
+    # |░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|
+    # |░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|
+    # |░░░░░|░░░░░|░░░░░|░░░░░|░░░░░░|░░░░░|░░░░░|░░░░░|░░░░░|░░░░░|░░░░░|░░░░░░|░░░░░|░░░░░|░░░|
+    # | C  Db  D Eb   E   F  Gb  G  Ab  A Ab   B   C  Db  D Eb   E   F  Gb  G  Ab  A Ab   B   C |
+
+    # □■
 
 class Fretboard:
     ### a guitar fretboard display class that is initialised with its data
@@ -316,59 +327,93 @@ class DataFrame:
         # finally, print result:
         print('\n'.join(printed_rows))
 
-def chord_table(chords, columns=['intervals', 'tertian', 'scaledegrees'],
-                parent_scale=None, parent_degree=None,
+def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
+                parent_scale=None, parent_degree=None, # can parent_degree be 'idx'?
                 scores=None, max_results=None, **kwargs):
-    df_cols = ['Chord']
-    col_name_lookup = {'intervals': ['', 'Intervals', ''],
-                           'notes': ['', 'Notes', ''],
-                         'factors': ['', 'Factors', '',],
-                    'scaledegrees': ['ScaleDegrees'],
+    df_cols = []
+    col_name_lookup = {    'chord': ['Chord'],
+                           'idx'  : [''],
+                       'intervals': ['Intervals'],
+                           'notes': ['Notes'],
+                         'factors': ['Factors'],
+                         'degrees': ['Degrees'],
                             'tert': ['Tert.'],
                             'likl': ['Likl.'],
                             'cons': ['Cons.'],
-                            'rec': ['Rec.'],
+                             'rec': ['Rec.'],
                             'prec': ['Prec.'],
                       }
 
     for col_name in columns:
         df_cols.extend(col_name_lookup[col_name])
 
-    if parent_scale is not None and parent_degree is not None:
+    if parent_scale is not None and parent_degree is not None and parent_degree != 'idx':
         root_interval = parent_scale.get_interval_from_degree(parent_degree)
 
     df = DataFrame(df_cols)
     for i, chord in enumerate(chords):
-        df_row = [chord.name]
+        df_row = []
         if parent_scale is not None:
+            if parent_degree == 'idx':
+                root_interval = parent_scale.get_interval_from_degree(i+1)
             chord_intervals_wrt_scale = [(iv + root_interval).flatten() for iv in chord.intervals]
+            if parent_scale.is_irregular():
+                # recast to appropriate IrregularIntervals if needed:
+                irreg_obj = parent_scale.intervals[0]
+                chord_intervals_wrt_scale = [irreg_obj.re_cache(iv.value) for iv in chord_intervals_wrt_scale]
         if scores is not None:
             if type(scores) == dict:
                 chord_scores = scores[chord]
             elif type(scores) == list:
                 chord_scores = scores[i]
 
+        clb, crb = _settings.BRACKETS['chromatic_intervals']
+
         for col_name in columns:
             # separate out intervallist/notelist brackets into their own columns:
             # (just for neatness/alignment)
-            if col_name == 'intervals':
-                ilb, irb = chord.intervals._brackets
+            if col_name == 'chord':
+                df_row.extend([chord.name])
+            elif col_name == 'idx':
+                df_row.extend([str(i+1)])
+
+            elif col_name == 'intervals':
+                illb, ilrb = chord.intervals._brackets
                 intervals_str = str(chord.intervals)[1:-1]
-                df_row.extend([ilb, intervals_str, irb])
+
+                # annotate chromatic intervals:
+                if parent_scale is not None and len(parent_scale.chromatic_intervals) > 0:
+                    ivlb, ivrb = _settings.BRACKETS['Interval']
+                    for iv in parent_scale.chromatic_intervals:
+                        iv_short = iv.short_name[1:-1] # interval short name without surrounding brackets
+                        intervals_str = intervals_str.replace(f'{ivlb}{iv_short}{ivrb}', f'{clb}{iv_short}{crb}')
+
+                # df_row.extend([illb, intervals_str, ilrb])
+                df_row.extend([intervals_str])
+
             elif col_name == 'notes':
                 nlb, nrb = chord.notes._brackets
                 notes_str = chord._dotted_notes(markers=False)
-                df_row.extend([nlb, notes_str, nrb])
+
+                # annotate chromatic notes:
+                if parent_scale is not None and len(parent_scale.chromatic_intervals) > 0:
+                    chrom_idxs = parent_scale.which_intervals_chromatic()
+                    scale_chrom_notes = [n for i,n in enumerate(parent_scale.notes) if chrom_idxs[i]]
+                    for n in scale_chrom_notes:
+                        notes_str = notes_str.replace(n.name, f'{clb}{n.name}{crb}')
+
+                # df_row.extend([nlb, notes_str, nrb])
+                df_row.extend([notes_str])
             elif col_name == 'factors':
                 flb, frb = ScaleFactors._brackets
-                factors = [iv.factor_name if iv in parent_scale.interval_degrees else f'{clb}{iv.factor_name}{crb}' for iv in chord_intervals_wrt_scale]
+                factors = [iv.factor_name if iv not in parent_scale.chromatic_intervals else f'{clb}{iv.factor_name}{crb}' for iv in chord_intervals_wrt_scale]
                 factors_str = ', '.join(factors)
-                df_row.extend([flb, factors_str, frb])
+                # df_row.extend([flb, factors_str, frb])
+                df_row.extend([factors_str])
 
-            elif col_name == 'scaledegrees':
-                clb, crb = _settings.BRACKETS['chromatic_intervals']
+            elif col_name == 'degrees':
                 cmark = _settings.CHARACTERS['chromatic_degree']
-                scale_degs = [str(int(parent_scale.interval_degrees[iv]))  if iv in parent_scale.interval_degrees else cmark for iv in chord_intervals_wrt_scale]
+                scale_degs = [str(int(parent_scale.interval_degrees[iv]))  if iv not in parent_scale.chromatic_intervals else cmark for iv in chord_intervals_wrt_scale]
                 scale_degs_str = ', '.join(scale_degs)
                 df_row.append(scale_degs_str)
             elif col_name == 'tert':
@@ -378,10 +423,10 @@ def chord_table(chords, columns=['intervals', 'tertian', 'scaledegrees'],
                     tert_str = _settings.CHARACTERS['somewhat']
                 else:
                     tert_str = ' '
-                df_row.append(tert_str)
+                df_row.append('  ' + tert_str)
             elif col_name == 'likl':
                 likl = chord.likelihood
-                df_row.append(f'{likl:.2f}')
+                df_row.append(f' {likl:.2f}')
             elif col_name == 'cons':
                 cons = chord.consonance
                 df_row.append(f'{cons:.3f}')
@@ -392,4 +437,4 @@ def chord_table(chords, columns=['intervals', 'tertian', 'scaledegrees'],
 
         df.append(df_row)
 
-    df.show(max_rows=max_results, margin=' ', **kwargs)
+    df.show(max_rows=max_results, **kwargs)
