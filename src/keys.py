@@ -294,6 +294,11 @@ class Key(Scale):
         """returns the abstract Scale associated with this key"""
         return Scale(factors=self.factors)
 
+    @property
+    def members(self):
+        # a Key's members are its notes
+        return self.notes
+
     def get_chord(self, degree, order=3):
         """overwrites Scale.get_chord, returns a Chord object instead of an AbstractChord"""
         abstract_chord = Scale.get_chord(self, degree, order)
@@ -304,9 +309,9 @@ class Key(Scale):
         chord_obj._set_sharp_preference(self.prefer_sharps)
         return chord_obj
 
-    def get_tertian_chord(self, degree, order=3):
+    def get_tertian_chord(self, degree, order=3, prefer_chromatic=False):
         """overwrites Scale.get_tertian_chord, returns a Chord object instead of an AbstractChord"""
-        abstract_chord = Scale.get_tertian_chord(self, degree, order)
+        abstract_chord = Scale.get_tertian_chord(self, degree, order, prefer_chromatic=prefer_chromatic)
         root_interval = self.get_interval_from_degree(degree)
         root_note = self.tonic + root_interval
         chord_obj = abstract_chord.on_bass(root_note)
@@ -338,8 +343,8 @@ class Key(Scale):
             title = f"Valid chords built on degree {degree} of {self}"
             print(title)
             chord_table(chords,
-                        columns=['notes', 'scaledegrees', 'tert', 'likl', 'cons'],
-                        parent_scale=self, parent_degree=degree, **kwargs)
+                        columns=['chord', 'notes', 'degrees', 'tert', 'likl', 'cons'],
+                        parent_scale=self, parent_degree=degree, margin=' | ', **kwargs)
         else:
             return chords # already sorted
 

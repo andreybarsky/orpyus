@@ -57,6 +57,7 @@ BRACKETS = { 'Interval': ['‹', '›'],
 CHARACTERS = { 'true': '+',    # e.g. displayed in 'Tertian' column if a chord is tertian
            'somewhat': '~',    # e.g. displayed in 'Tertian' column if inverted-tertian
    'chromatic_degree': 'c',    # displayed instead of integer ScaleDegree for a non-degree (chromatic) interval
+      'unknown_chord': '?',    # displayed after root for a chord of unknown type, e.g. C? chord
              }
 
 ############# performance settings:

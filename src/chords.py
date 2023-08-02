@@ -480,7 +480,8 @@ class AbstractChord:
             # fall back on name given to an exotic chord like Am7/B if one was assigned
             return self.assigned_name
         else:
-            return f'(altered){inv_string}'
+            marker = _settings.CHARACTERS['unknown_chord']
+            return f'{marker}{inv_string}'
 
     @property
     def rarity(self):
@@ -986,7 +987,7 @@ class Chord(AbstractChord):
                         assigned_name = f'{naive_chord_name}/{bass.name}'
 
                         corrected_chord_on_root = (Chord(f'{naive_chord_name}') + bass.name)
-                        if corrected_chord_on_root.suffix != '(altered)':
+                        if corrected_chord_on_root.suffix != _settings.CHARACTERS['unknown_chord']:
                             # this is a real chord, so we can use it as an inversion:
                             corrected_chord = corrected_chord_on_root.invert(-1)
                             self.__init__(factors=corrected_chord.factors, root=corrected_chord.root, inversion=corrected_chord.inversion)

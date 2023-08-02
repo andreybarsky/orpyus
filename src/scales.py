@@ -4,6 +4,7 @@ from .util import rotate_list, reverse_dict, unpack_and_reverse_dict, numeral_su
 from .chords import Factors, AbstractChord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
 from .qualities import ChordModifier, Quality
 from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental
+from .display import chord_table
 from . import notes, _settings
 from math import floor, ceil
 import re
@@ -765,6 +766,11 @@ class Scale:
         return len(self)
 
     @property
+    def members(self):
+        # a Scale's members are its intervals
+        return self.intervals
+
+    @property
     def order(self):
         """A scale's order is the number of factors/degrees it has, not counting
         chromatic intervals. So the blues scale has order 5, even though it contains
@@ -817,72 +823,116 @@ class Scale:
         'chord' is a noun, but Scale.chord is meaningless without a degree arg, so it hopefully remains intuitive)"""
         return self.get_chord(i, order)
 
-    def get_tertian_chord(self, i, order=3):
+    def get_tertian_chord(self, i, order=3, prefer_chromatic=False):
         """returns an AbstractChord built on degree i of this Scale,
         by attempting to construct a chord using this scale's degrees that is as
         tertian as possible. may not always work, but will always try to return something."""
         assert i in self.degrees, f'{self.name} does not have a degree {degree}'
+
+        # first try ordinary get_chord method (with spaced-degree harmonisation)
+        # and see if the result is tertian:
+        naive_chord = self.get_chord(i, order=order)
+        if naive_chord.is_tertian() or naive_chord.is_inverted_tertian():
+            # if so, just return it
+            log(f'Degree {i}: Naive spaced chord construction returns a tertian chord: {naive_chord}')
+            return naive_chord
+
+        # otherwise, try building a tertian chord from other scale degrees
         root_degree = i
         root_factor = self.degree_factors[i]
         desired_chord_factors = range(1, (2*order), 2) # i.e. chord factors 1, 3, 5, etc.
         desired_scale_factors = [(((root_factor+f-2)%7)+1) for f in desired_chord_factors]
-        all_factors_available = True
-        for f in desired_scale_factors:
-            if f not in self.factors:
-                all_factors_available = False
-                log(f'Factor {f} not available in this subscale, so we cannot build an ordinary triad')
-                break
-        if all_factors_available:
-            # simply build a triad chord since we have all the notes needed:
-            log(f'All desired factors {list(desired_scale_factors)} are available, so we can build an ordinary triad')
-            root_interval = self.degree_intervals[root_degree]
-            chord_intervals = [self.factor_intervals[root_factor]]
-            for i, f in enumerate(desired_scale_factors[1:]):
-                raw_interval = self.factor_intervals[f]
-                if raw_interval < chord_intervals[i-1]:
-                    # raise by octave if we've lapped round the start of the scale:
-                    chord_intervals.append(raw_interval ** 1)
-                else:
-                    chord_intervals.append(raw_interval)
-            chord_intervals = IntervalList(chord_intervals)
-            log(f'With root interval: {root_interval} and chord intervals: {chord_intervals}, resulting in: {chord_intervals - root_interval}')
-            return AbstractChord(intervals=chord_intervals - root_interval)
-        else:
-            ### otherwise, fall back on valid_chords method:
-            valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0.7, min_consonance=0.5, min_order=order, max_order=order, no5s=False, inversions=True, display=False)
-            log(f'Instead choosing a consonant chord from the valid chords that can be built on this degree:\n {valid_chords_on_root}')
+        available_chromatic_factors = {}
+        if len(self.chromatic_intervals) > 0:
+            for civ in self.chromatic_intervals:
+                # note which degrees can be filled with a chromatic interval:
+                for d in civ.common_degrees:
+                    available_chromatic_factors[d] = civ
+            for civ in self.chromatic_intervals:
+                # fill possible degrees too:
+                for d in civ.possible_degrees:
+                    if d not in available_chromatic_factors:
+                        available_chromatic_factors[d] = civ
 
+        if not self.is_irregular():
+            all_factors_available = True
+            available_with_chromatic = False
+            for f in desired_scale_factors:
+                if f not in self.factors:
+                    if f in available_chromatic_factors:
+                        available_with_chromatic = True
+                    else:
+                        all_factors_available = False
+                        log(f'Factor {f} not available in this subscale, so we cannot build an ordinary triad')
+                        break
+            if all_factors_available:
+                # simply build a triad chord since we have all the notes needed:
+                log(f'All desired factors {list(desired_scale_factors)} are available, so we can build an ordinary triad')
+                root_interval = self.degree_intervals[root_degree]
+                chord_intervals = [self.factor_intervals[root_factor]]
+                for i, f in enumerate(desired_scale_factors[1:]):
+                    if not prefer_chromatic:
+                        # use raw factors first, then chromatic factors
+                        factor_dicts = [self.factor_intervals, available_chromatic_factors]
+                    else:
+                        # use chromatic factors first:
+                        factor_dicts = [available_chromatic_factors, self.factor_intervals]
+                    for dct in factor_dicts:
+                        if f in dct:
+                            raw_interval = dct[f]
+                            break
+
+                    if raw_interval < chord_intervals[i-1]:
+                        # raise by octave if we've lapped round the start of the scale:
+                        chord_intervals.append(raw_interval ** 1)
+                    else:
+                        chord_intervals.append(raw_interval)
+                chord_intervals = IntervalList(chord_intervals)
+                log(f'With root interval: {root_interval} and chord intervals: {chord_intervals}, resulting in: {chord_intervals - root_interval}')
+                return AbstractChord(intervals=chord_intervals - root_interval)
+
+        # otherwise...
+        # could not construct a tertian chord using available scale degrees,
+        # so generate all valid chords and make a shortlist from those
+
+        valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0.7, min_consonance=0.5, min_order=order, max_order=order, no5s=False, inversions=True, display=False)
+        log(f'Instead choosing a consonant chord from the valid chords that can be built on this degree:\n {[c.name for c in valid_chords_on_root]}')
+        valid_chords_on_root = [c for c in valid_chords_on_root if c in self]
+
+        if len(valid_chords_on_root) == 0:
+            log(f'Did not find any with initial parameters, so expanding search parameters')
+            valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0.5, min_consonance=0.4, min_order=order, max_order=order, no5s=True, inversions=True, display=False)
+            valid_chords_on_root = [c for c in valid_chords_on_root if c in self]
             if len(valid_chords_on_root) == 0:
-                log(f'Did not find any with initial parameters, so expanding search parameters')
-                valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0.5, min_consonance=0.4, min_order=order, max_order=order, no5s=True, inversions=True, display=False)
-                if len(valid_chords_on_root) == 0:
-                    log(f'Did not find any with expanded parameters, so dropping all search constraints except subscale membership')
-                    valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0, min_consonance=0, min_order=order, max_order=order, no5s=True, inversions=True, display=False)
-                    assert len(valid_chords_on_root) > 0, f"Could somehow not make any chords at all of order={order} on degree {degree} of subscale: {self.name}"
-            # secondary filtering step:
-            shortlist = []
-            for c in valid_chords_on_root:
-                if c.is_tertian():
-                    # is tertian
-                    shortlist.append(c)
-                    continue
-                elif c.is_inverted_tertian():
-                    log(f'Failed first tertian check, but an inversion of this chord is tertian: {c}')
-                    shortlist.append(c)
-                    continue
-                    # otherwise, prefer chords with 3rds and 5th if possible:
-                elif (3 in c) and (5 in c):
-                    log(f'Failed first and second tertian check')
-                    log(f'But found a potential chord that contains a 3rd and a 5th: {c}')
-                    shortlist.append(c) # (since valid_chords is already sorted, shortlist is sorted by extension)
-                    continue
-            if len(shortlist) >= 1:
-                # return the most likely/consonant
-                return shortlist[0]
-            else:
-                # just return the most likely/consonant valid one
-                log(f'Degree {i}: Did not find any chords that contain a 3rd and 5th, so just taking the first match')
-                return valid_chords_on_root[0]
+                log(f'Did not find any with expanded parameters, so dropping all search constraints except subscale membership')
+                valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0, min_consonance=0, min_order=order, max_order=order, no5s=True, inversions=True, display=False)
+                valid_chords_on_root = [c for c in valid_chords_on_root if c in self]
+                assert len(valid_chords_on_root) > 0, f"Could somehow not make any chords at all of order={order} on degree {degree} of subscale: {self.name}"
+        # secondary filtering step:
+        shortlist = []
+        for c in valid_chords_on_root:
+            if c.is_tertian():
+                log(f'Generated valid chord {c} is tertian, added to shortlist')
+                shortlist.append(c)
+                continue
+            elif c.is_inverted_tertian():
+                log(f'Generated chord {c} failed first tertian check, but an inversion of this chord is tertian: {c}')
+                shortlist.append(c)
+                continue
+                # otherwise, prefer chords with 3rds and 5th if possible:
+            elif (3 in c) and (5 in c):
+                log(f'Generated chord {c} failed first and second tertian check')
+                log(f'But does contains a 3rd and a 5th, so adding to shortlist')
+                shortlist.append(c) # (since valid_chords is already sorted, shortlist is sorted by extension)
+                continue
+        if len(shortlist) >= 1:
+            # return the most likely/consonant
+            log(f'Degree {i}: Selecting first item from shortlist: {shortlist[0]}')
+            return shortlist[0]
+        else:
+            # just return the most likely/consonant valid one
+            log(f'Degree {i}: Did not find any chords that contain a 3rd and 5th, so just taking the first match')
+            return valid_chords_on_root[0]
 
     def tertian_chord(self, i, order=3):
         """convenience wrapper around Scale.get_tertian_chord;
@@ -890,28 +940,55 @@ class Scale:
         return self.get_tertian_chord(i, order)
     tertian = tertian_chord
 
-    def get_chords(self, order=3):
+    def get_chords(self, order=3, display=False, **kwargs):
         """returns an ordered dict of the AbstractChords built on every degree
         of this Scale"""
         scale_chords = {}
         for d in self.degrees:
             scale_chords[d] = self.get_chord(d, order=order)
-        return scale_chords
+        if display:
+            title = f"Spaced-degree chords over: {self.__repr__()}"
+            print(title)
+            members = 'intervals' if type(self) == Scale  else 'notes'
+            chord_table(scale_chords.values(),
+                        columns=['idx', 'chord', members, 'degrees', 'tert', 'cons'],
+                        parent_scale=self, parent_degree='idx', margin=' | ',
+                        **kwargs)
+        else:
+            return scale_chords
     @property
-    def chords(self, order=3):
-        return self.get_chords(order=order)
+    def chords(self):
+        return self.get_chords(display=False)
 
-    def get_tertian_chords(self, order=3):
+    def show_chords(self):
+        self.get_chords(display=True)
+    # convenience aliases:
+    harmonise = harmonize = show_chords
+
+    def get_tertian_chords(self, order=3, prefer_chromatic=False, display=False, **kwargs):
         """returns an ordered dict of the (tertian) AbstractChords built on
        every degree of this Scale"""
         scale_chords = {}
         for d in self.degrees:
-            scale_chords[d] = self.get_tertian_chord(d, order=order)
-        return scale_chords
+            scale_chords[d] = self.get_tertian_chord(d, order=order, prefer_chromatic=prefer_chromatic)
+        if display:
+            title = f"Attempted tertian chords over: {self.__repr__()}"
+            print(title)
+            members = 'intervals' if type(self) == Scale  else 'notes'
+            chord_table(scale_chords.values(),
+                        columns=['idx', 'chord', members, 'degrees', 'tert', 'cons'],
+                        parent_scale=self, parent_degree='idx', margin=' | ',
+                        **kwargs)
+        else:
+            return scale_chords
     @property
-    def tertian_chords(self, order=3):
-        return self.get_tertian_chords(order=order)
+    def tertian_chords(self):
+        return self.get_tertian_chords(display=False)
     tertians = tertian_chords
+
+    def show_tertian_chords(self):
+        self.get_tertian_chords(display=True)
+    harmonise_tertian = harmonize_tertian = show_tertians = show_tertian_chords
 
     def valid_chords_on(self, degree, order=None, min_order=3, max_order=4,
         min_likelihood=0.7, min_consonance=0, max_results=None, sort_by='likelihood',
@@ -1016,12 +1093,12 @@ class Scale:
         sorted_cands = sorted(candidate_stats, key=sort_key, reverse=True)[:max_results]
 
         if display:
-            from src.display import DataFrame, chord_table
             title = f"Valid chords built on degree {degree} of {self}"
             print(title)
             chord_table(sorted_cands,
-                        columns=['intervals', 'scaledegrees', 'tert', 'likl', 'cons'],
-                        parent_scale=self, parent_degree=degree, max_results=max_results, **kwargs)
+                        columns=['chord', 'intervals', 'degrees', 'tert', 'likl', 'cons'],
+                        parent_scale=self, parent_degree=degree, margin=' | ',
+                        max_results=max_results, **kwargs)
         else:
             return sorted_cands
 
@@ -1084,6 +1161,13 @@ class Scale:
     def is_natural_pentatonic(self):
         """A scale is natural pentatonic if it is the major or minor pentatonic scale"""
         return (self.factors in [all_scale_name_factors['major pentatonic'], all_scale_name_factors['minor pentatonic']])
+    def is_irregular(self):
+        """A scale is irregular if it contains any IrregularIntervals,
+        which in practice is true for octatonic scales (but not pentatonics)"""
+        for iv in self.intervals:
+            if isinstance(iv, IrregularInterval):
+                return True
+        return False
 
     @property
     def rarity(self):
