@@ -1,4 +1,4 @@
-from . import parsing
+from . import parsing, _settings
 from .util import log
 import math
 
@@ -315,3 +315,81 @@ class DataFrame:
             printed_rows.append(margin.join(this_row))
         # finally, print result:
         print('\n'.join(printed_rows))
+
+def chord_table(chords, columns=['intervals', 'tertian', 'scaledegrees'],
+                parent_scale=None, parent_degree=None,
+                scores=None, max_results=None, **kwargs):
+    df_cols = ['Chord']
+    col_name_lookup = {'intervals': ['', 'Intervals', ''],
+                           'notes': ['', 'Notes', ''],
+                         'factors': ['', 'Factors', '',],
+                    'scaledegrees': ['ScaleDegrees'],
+                            'tert': ['Tert.'],
+                            'likl': ['Likl.'],
+                            'cons': ['Cons.'],
+                            'rec': ['Rec.'],
+                            'prec': ['Prec.'],
+                      }
+
+    for col_name in columns:
+        df_cols.extend(col_name_lookup[col_name])
+
+    if parent_scale is not None and parent_degree is not None:
+        root_interval = parent_scale.get_interval_from_degree(parent_degree)
+
+    df = DataFrame(df_cols)
+    for i, chord in enumerate(chords):
+        df_row = [chord.name]
+        if parent_scale is not None:
+            chord_intervals_wrt_scale = [(iv + root_interval).flatten() for iv in chord.intervals]
+        if scores is not None:
+            if type(scores) == dict:
+                chord_scores = scores[chord]
+            elif type(scores) == list:
+                chord_scores = scores[i]
+
+        for col_name in columns:
+            # separate out intervallist/notelist brackets into their own columns:
+            # (just for neatness/alignment)
+            if col_name == 'intervals':
+                ilb, irb = chord.intervals._brackets
+                intervals_str = str(chord.intervals)[1:-1]
+                df_row.extend([ilb, intervals_str, irb])
+            elif col_name == 'notes':
+                nlb, nrb = chord.notes._brackets
+                notes_str = chord._dotted_notes(markers=False)
+                df_row.extend([nlb, notes_str, nrb])
+            elif col_name == 'factors':
+                flb, frb = ScaleFactors._brackets
+                factors = [iv.factor_name if iv in parent_scale.interval_degrees else f'{clb}{iv.factor_name}{crb}' for iv in chord_intervals_wrt_scale]
+                factors_str = ', '.join(factors)
+                df_row.extend([flb, factors_str, frb])
+
+            elif col_name == 'scaledegrees':
+                clb, crb = _settings.BRACKETS['chromatic_intervals']
+                cmark = _settings.CHARACTERS['chromatic_degree']
+                scale_degs = [str(int(parent_scale.interval_degrees[iv]))  if iv in parent_scale.interval_degrees else cmark for iv in chord_intervals_wrt_scale]
+                scale_degs_str = ', '.join(scale_degs)
+                df_row.append(scale_degs_str)
+            elif col_name == 'tert':
+                if chord.is_tertian():
+                    tert_str = _settings.CHARACTERS['true']
+                elif chord.is_inverted_tertian():
+                    tert_str = _settings.CHARACTERS['somewhat']
+                else:
+                    tert_str = ' '
+                df_row.append(tert_str)
+            elif col_name == 'likl':
+                likl = chord.likelihood
+                df_row.append(f'{likl:.2f}')
+            elif col_name == 'cons':
+                cons = chord.consonance
+                df_row.append(f'{cons:.3f}')
+            elif col_name == 'rec':
+                df_row.append(chord_scores['recall'])
+            elif col_name == 'prec':
+                df_row.append(chord_scores['precision'])
+
+        df.append(df_row)
+
+    df.show(max_rows=max_results, margin=' ', **kwargs)
