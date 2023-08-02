@@ -6,6 +6,7 @@ from .chords import Chord, AbstractChord
 from .util import check_all, precision_recall, reverse_dict, log
 
 from collections import Counter
+from functools import cached_property
 from pdb import set_trace
 
 # natural notes in order of which are flattened/sharpened in a key signature:
@@ -15,6 +16,28 @@ sharp_order = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
 # circle of 5ths in both directions as linked lists:
 co5s_clockwise = {Note('C')+(7*i) : Note('C')+(7*(i+1)) for i in range(12)}
 co5s_counterclockwise = {Note('C')-(7*i) : Note('C')-(7*(i+1)) for i in range(12)}
+
+
+relative_co5_distances = IntervalList([0, 5, 2, 3, 4, 1, 6, 1, 4, 3, 2, 5])
+# this list looks funny, but it's the circle-of-fifths distance for each key with tonic
+# N+i, with respect to the key that has tonic N.
+# e.g. co5_distance between E and D is based on the interval between E and D,
+# i.e. Note('E') - Note('D'), which is 2, or Note('D') - Note('E'), which is 10
+# so the co5_distance is relative_co5_distances[2] (or [10]), which either way is 2.
+# this works for any diatonic key, and is just a property of how the notes are arranged
+
+# build co5 distance between key tonics:
+co5_distances = {}
+for n_left in notes.chromatic_notes:
+    for n_right in notes.chromatic_notes:
+        num_steps = 0
+        clockwise_n = Note(n_left)
+        counterclockwise_n = Note(n_left)
+        while (clockwise_n != n_right) and (counterclockwise_n != n_right):
+            clockwise_n += 7
+            counterclockwise_n -= 7
+            num_steps += 1
+        co5_distances[(n_left, n_right)] = num_steps
 
 class Key(Scale):
     """a Scale that is also rooted on a tonic, and therefore associated with a set of notes"""
@@ -36,12 +59,12 @@ class Key(Scale):
                     notes=None, chromatic_notes=None, tonic=None,
                     mode=1):
 
-        name, intervals, factors, notes, tonic = self._reparse_args(name, intervals, factors, notes, tonic)
+        name, intervals, factors, notes, tonic = self._reparse_key_args(name, intervals, factors, notes, tonic)
 
         # if notes have been provided, parse them into tonic and intervals:
         if notes is not None:
             # ignore intervals/factors/root inputs
-            assert tonic is None and intervals is None and scale_name is None
+            assert tonic is None and intervals is None and name is None
             note_list = NoteList(notes)
             assert len(note_list) == 7, f"a Key must have exactly 7 notes, but there are {len(note_list)} in: {note_list}"
             # recover intervals and tonic, and continue to init as normal:
@@ -49,7 +72,9 @@ class Key(Scale):
             tonic = note_list[0]
 
         # get correct tonic and scale name from (key_name, tonic) input args:
-        self.tonic, scale_name = self._parse_tonic(scale_name, tonic)
+        self.tonic, scale_name = self._parse_tonic(name, tonic)
+        if scale_name == '': # catch special case of: only tonic is given
+            scale_name = 'natural major'
 
         if chromatic_notes is not None:
             assert chromatic_intervals is None, 'Key init can only include ONE of chromatic_notes or chromatic_intervals, but both are supplied'
@@ -63,14 +88,17 @@ class Key(Scale):
         # (this sets self.factors, self.degrees, self.intervals, self.chromatic_intervals, and their mappings
 
         # set Key-specific attributes: notes, degree_notes, etc.
-        self.notes = NoteList([self.tonic] + [self.tonic + i for i in self.intervals])
+        self.notes = NoteList([self.tonic + i for i in self.intervals])
         self.chromatic_notes = [self.tonic + iv for iv in self.chromatic_intervals]
 
         self.degree_notes = {d: self.tonic + iv for d,iv in self.degree_intervals.items()}
         self.factor_notes = {f: self.tonic + iv for f,iv in self.factor_intervals.items()}
+        self.interval_notes = {iv:n for n,iv in zip(self.notes, self.intervals)}
 
         self.note_degrees = reverse_dict(self.degree_notes)
         self.note_factors = reverse_dict(self.factor_notes)
+        self.note_intervals = reverse_dict(self.interval_notes)
+
 
 
         # # used only for Keys with strange chromatic notes not built on integer degrees, like blues notes
@@ -98,10 +126,11 @@ class Key(Scale):
 
         # update this Key's notes to prefer sharps/flats depending on its tonic:
         self._set_sharp_preference()
+        self._set_key_signature()
 
 
     ####### internal init subroutines:
-    def _reparse_args(self, name, intervals, factors, notes, tonic):
+    def _reparse_key_args(self, name, intervals, factors, notes, tonic):
         """detect if notes or factors etc. have been given as first arg instead of name,
         and return corrected (name, intervals, factors, notes, tonic) tuple."""
         # this method overrides Scale._reparse_args and also looks for note and tonic args
@@ -129,7 +158,7 @@ class Key(Scale):
             tonic_idx = parsing.begins_with_valid_note_name(name)
             assert tonic_idx > 0, f"Key init by string must start with a valid note name, but got: {name}"
             assert tonic is None, f"Key init by string parsed tonic {name[:tonic_idx]} but got conflicting tonic arg: {tonic}"
-            tonic, rest_name = parsing.note_split(name)
+            _tonic, rest_name = parsing.note_split(name)
 
             # then check if tonic is followed by more notes
             rest_notes = parsing.parse_out_note_names(rest_name, graceful_fail=True)
@@ -142,7 +171,7 @@ class Key(Scale):
                 name = None
         elif isinstance(name, Scale):
             # accept re-casting from Scale or Key here too
-            # just strip the factors attr from a Scale or Key object:
+            # just strip the factors and tonic attrs from a Scale or Key object:
             factors = name.factors
             if isinstance(name, Key):
                 tonic = name.tonic
@@ -152,7 +181,9 @@ class Key(Scale):
         elif name is not None:
             raise TypeError(f'Key init did not expect first arg of type: {type(name)}')
         else:
-            raise Exception('Should never happen')
+            # name is None, assert that another arg has been provided
+            assert factors is not None or intervals is not None or notes is not None
+            # raise Exception('Should never happen')
 
         return name, intervals, factors, notes, tonic
 
@@ -170,9 +201,9 @@ class Key(Scale):
             else:
                 assert tonic is not None, f'Key object initiated by Scale name ({name}) but no tonic note provided'
                 scale_name = name
-            tonic = Note.from_cache(tonic)
+            tonic = Note(tonic)
         elif tonic is not None:
-            tonic = Note.from_cache(tonic)
+            tonic = Note(tonic)
             scale_name = name # i.e. None
         else:
             raise Exception('neither scale_name nor tonic provided to Key init, we need one or the other!')
@@ -186,11 +217,13 @@ class Key(Scale):
         elif (self.quality.major and self.tonic in notes.flat_major_tonics) or (self.quality.minor and self.tonic in notes.flat_minor_tonics):
             return False
         else:
-            return default
+            # fall back on whatever the tonic prefers:
+            # (which catches the distinction between Key('F#') and Key('Gb'))
+            return self.tonic.prefer_sharps
 
     def _set_sharp_preference(self, prefer_sharps=None):
         """set the sharp preference of this Key,
-        and of all notes inside this Key"""
+        and of all notes inside this Key, in-place."""
         if prefer_sharps is None:
             # detect from tonic and quality
             prefer_sharps = self._detect_sharp_preference()
@@ -235,26 +268,48 @@ class Key(Scale):
         and sets internal attributes reflecting that key signature"""
         self.num_sharps = sum([('#' in n.chroma) for n in self.notes])
         self.num_flats = sum([('b' in n.chroma) for n in self.notes])
+        self.key_signature = '♭'* self.num_flats + '♯'*self.num_sharps
 
-        self.key_signature = {}
+        # expressed as a dict of accidental offsets:
+        self.key_signature_values = {}
         for n in self.notes:
             if '#' in n.chroma:
-                self.key_signature
+                self.key_signature_values[n] = 1
+            elif 'b' in n.chroma:
+                self.key_signature_values[n] = -1
 
-    @property
+        # expressed as a string:
+        # (this is an inefficient loop and could be optimised if needed)
+        flat_str = ' '.join([f'{n}♭' for n in flat_order if f'{n}b' in self.notes])
+        sharp_str = ' '.join([f'{n}♯' for n in sharp_order if f'{n}#' in self.notes])
+        self.key_signature_str = f'{flat_str} {sharp_str}'
+
+    @cached_property
     def scale_name(self):
         """a Key's scale_name is whatever name it would get as a Scale"""
         return Scale.get_name(self) # inherits from Scale
 
-    @property
+    @cached_property
     def scale(self):
         """returns the abstract Scale associated with this key"""
         return Scale(factors=self.factors)
 
-    def chord(self, degree, order=3, sub_degree=False):
-        """overwrites Scale.chord, returns a Chord object instead of an AbstractChord"""
-        abstract_chord = Scale.chord(self, degree, order)
-        chord_obj = abstract_chord.on_bass(root)
+    def get_chord(self, degree, order=3):
+        """overwrites Scale.get_chord, returns a Chord object instead of an AbstractChord"""
+        abstract_chord = Scale.get_chord(self, degree, order)
+        root_interval = self.get_interval_from_degree(degree)
+        root_note = self.tonic + root_interval
+        chord_obj = abstract_chord.on_bass(root_note)
+        # initialised chords inherit this key's sharp preference:
+        chord_obj._set_sharp_preference(self.prefer_sharps)
+        return chord_obj
+
+    def get_tertian_chord(self, degree, order=3):
+        """overwrites Scale.get_tertian_chord, returns a Chord object instead of an AbstractChord"""
+        abstract_chord = Scale.get_tertian_chord(self, degree, order)
+        root_interval = self.get_interval_from_degree(degree)
+        root_note = self.tonic + root_interval
+        chord_obj = abstract_chord.on_bass(root_note)
         # initialised chords inherit this key's sharp preference:
         chord_obj._set_sharp_preference(self.prefer_sharps)
         return chord_obj
@@ -269,56 +324,74 @@ class Key(Scale):
     #             chord_dict[d] = Chord(notes=chord_dict[d].notes)
     #     return chord_dict
 
-    def valid_abstract_chords(self, *args, **kwargs):
-        """wrapper around Scale.get_valid_chords method"""
-        return super().valid_chords(*args, **kwargs)
+    # def valid_abstract_chords(self, *args, **kwargs):
+    #     """wrapper around Scale.get_valid_chords method"""
+    #     return super().valid_chords(*args, **kwargs)
 
-    def valid_chords(self, degree, *args, **kwargs):
+    def valid_chords_on(self, degree, *args, display=True, **kwargs):
         """wrapper around Scale.get_valid_chords but feeding it the appropriate root note from this Key"""
-        return super().valid_chords(degree, *args, _root_note = self.degree_notes[degree], **kwargs)
+        abs_chords = Scale.valid_chords_on(self, degree, *args, display=False, **kwargs) # _root_note = self.degree_notes[degree], **kwargs)
+        root_note = self.degree_notes[degree]
+        chords = [a.on_bass(root_note) for a in abs_chords]
+        if display:
+            from src.display import chord_table
+            title = f"Valid chords built on degree {degree} of {self}"
+            print(title)
+            chord_table(chords,
+                        columns=['notes', 'scaledegrees', 'tert', 'likl', 'cons'],
+                        parent_scale=self, parent_degree=degree, **kwargs)
+        else:
+            return chords # already sorted
 
     def clockwise(self, value=1):
         """fetch the next key from clockwise around the circle of fifths,
         or if value>1, go clockwise that many steps"""
-        reference_key = self if self.major else self.relative_major
-        new_co5s_pos = (co5s_positions[reference_key] + value) % 12
-        # instantiate new key object: (just in case???)
-        new_key = co5s[new_co5s_pos]
-        new_key = new_key if self.major else new_key.relative_minor
-        # set_trace(context=30)
-        return Key(new_key.tonic, new_key.suffix)
+        return Key(factors=self.factors, tonic=self.tonic + (7*value))
+        # reference_key = self if self.major else self.relative_major
+        # new_co5s_pos = (co5s_positions[reference_key] + value) % 12
+        # # instantiate new key object: (just in case???)
+        # new_key = co5s[new_co5s_pos]
+        # new_key = new_key if self.major else new_key.relative_minor
+        # # set_trace(context=30)
+        # return Key(new_key.name)
 
     def counterclockwise(self, value=1):
         return self.clockwise(-value)
 
-    def rotate(self, mode):
-        """rotates this Key to produce another mode of this Key's base scale, on the same tonic"""
-        rotated_scale = Scale.rotate(self, mode)
-        rotated_key = rotated_scale.on_tonic(self.tonic)
-        return rotated_key
+    def mode(self, N):
+        """as Scale.mode, but returns Keys with transposed tonics too.
+        so that the modes of C major are D dorian, E phrygian, etc."""
+        # mod the rotation value into our factor range:
+        N = ((N-1) % self.order) + 1
+        scale_mode = self.scale.mode(N)
+        mode_tonic = self.degree_notes[N]
+        return scale_mode.on_tonic(mode_tonic)
 
     # @property
     # def modes(self):
     #     return [self.rotate(m) for m in range(1,8)]
 
-    # return all the modes of this scale, starting from wherever it is:
-    @property
-    def parallel_modes(self):
-        """the 'parallel' modes of a Key are all its modes that start on the same tonic"""
-        return [self.rotate(m) for m in range(1,8)]
+
+    # @property
+    # def parallel_modes(self):
+    #     """the 'parallel' modes of a Key are all its modes that start on the same tonic"""
+    #     return [self.rotate(m) for m in range(1,8)]
 
     @property
     def modes(self):
         """the modes of a Key are the relative keys that share its notes but start on a different tonic
         i.e. modes of C major are D dorian, E phrygian, etc."""
-        return [Key(notes=Key('C').notes.rotate(i)) for i in range(1,8)]
+        return [self.mode(n) for n in range(1,8)]
+        # return [Key(notes=Key('C').notes.rotate(i)) for i in range(1,8)]
 
-    def subscale(self, degrees=None, omit=None, chromatic_intervals=None, name=None):
-        """as Scale.subscale, but adds this key's tonic as well and initialises a Subkey instead"""
-        return Subkey(parent_scale=self, degrees=degrees, omit=omit, chromatic_intervals=chromatic_intervals, assigned_name=name, tonic=self.tonic) # [self[s] for s in degrees]
+    # def subscale(self, degrees=None, omit=None, chromatic_intervals=None, name=None):
+    #     """as Scale.subscale, but adds this key's tonic as well and initialises a Subkey instead"""
+    #     return Subkey(parent_scale=self, degrees=degrees, omit=omit, chromatic_intervals=chromatic_intervals, assigned_name=name, tonic=self.tonic) # [self[s] for s in degrees]
+
 
     @property
     def pentatonic(self):
+        """as Scale.pentatonic, but returns a Key on the same tonic"""
         return self.scale.pentatonic.on_tonic(self.tonic)
 
     @property
@@ -410,6 +483,12 @@ class Key(Scale):
     def __hash__(self):
         return hash((self.notes, self.diatonic_intervals, self.intervals, self.chromatic_intervals))
 
+    def show(self, tuning='EADGBE', **kwargs):
+        """just a wrapper around the Guitar.show method, which is generic to most musical classes,
+        so this method is also inherited by all Scale subclasses"""
+        from .guitar import Guitar
+        Guitar(tuning).show_key(self, **kwargs)
+
     def play(self, *args, **kwargs):
         # plays the notes in this key (we also add an octave over root on top for resolution)
         # played_notes = NoteList([n for n in self.notes] + [self.tonic])
@@ -426,17 +505,24 @@ class Key(Scale):
         return Progression(*degrees, scale=self.scale, order=order).on_tonic(self.tonic)
 
     @property
-    def name(self):
-        suffix = Scale.get_suffix(self)
-        # leave a space between tonic and scale name if the scale name is a suffix:
-        if suffix != self.scale_name:
-            gap = ''
+    def suffix(self):
+        # a key's suffix is its scale name (with a leading space),
+        # UNLESS it is natural major or minor,
+        # in which case it is shortened:
+        if self.scale_name == 'natural major':
+            return ''
+        elif self.scale_name == 'natural minor':
+            return 'm'
         else:
-            gap = ' '
-        return f'{self.tonic.name}{gap}{suffix}'
+            return ' ' + self.scale_name
+
+
+    @property
+    def name(self):
+        return f'{self.tonic.chroma}{self.suffix}'
 
     def __str__(self):
-        return f'{self._marker} Key of {self.name}'
+        return f'{self._marker}Key of {self.name}'
 
     def __repr__(self):
         lb, rb = self.notes._brackets
@@ -444,7 +530,8 @@ class Key(Scale):
             note_names = [str(n) for n in self.notes]
         else:
             # show diatonic notes as in normal note list, and chromatic notes in square brackets
-            note_names = [f'[{n}]' if n in self.chromatic_notes  else str(n)  for n in self.notes]
+            which_chromatic = self.which_intervals_chromatic()
+            note_names = [f'[{n}]' if which_chromatic[i]  else str(n)  for i,n in enumerate(self.notes)]
         notes_str = ', '.join(note_names)
         return f'{str(self)}  {lb}{notes_str}{rb}'
 
