@@ -1,7 +1,7 @@
 # new chord class with explicit factor recognition and compositional name generation/recognition
 
 # import notes
-from .notes import Note, NoteList, chromatic_scale
+from .notes import Note, NoteList
 from .intervals import Interval, IntervalList, P5, default_degree_intervals
 from .util import log, precision_recall, rotate_list, check_all, reverse_dict, unpack_and_reverse_dict
 from .qualities import Quality, ChordModifier, parse_chord_modifiers
@@ -390,10 +390,13 @@ class AbstractChord:
 
         if (inversion is not None) and (inversion != 0):
             if isinstance(inversion, int):
-                # allow -1 as a valid inversion degree, meaning final inversion:
-                if inversion == -1:
-                    inversion = len(factors)-1
-                assert 0 < inversion <= (len(intervals)-1), f'{inversion} is an invalid inversion number for chord with {len(intervals)} notes'
+                # mod inversion so that it can wrap around to the start,
+                # or allow for negative inversions (i.e. -1 meaning final inversion)
+                inversion = inversion % len(intervals)
+                # # allow -1 as a valid inversion degree, meaning final inversion:
+                # if inversion == -1:
+                #     inversion = len(factors)-1
+                # # assert 0 <= inversion, f'Cannot have a negative inversion'
             elif isinstance(inversion, str):
                 if not _allow_note_name:
                     raise TypeError(f'inversion arg for AbstractChord must be an int, but got: {type(inversion)}')
@@ -582,7 +585,21 @@ class AbstractChord:
     def invert(self, inversion=None, inversion_degree=None):
         """returns a new AbstractChord based off this one, but inverted.
         not to be confused with self.__invert__!"""
+        if inversion >= self.order:
+            # mod inversion back into chord range: i.e. Chord('C').invert(3) is the same as invert(0)
+            inversion = inversion % self.order
         return AbstractChord(factors=self.factors, inversion=inversion, inversion_degree=inversion_degree)
+
+    @property
+    def inversions(self):
+        return self.get_inversions()
+    def get_inversions(self):
+        """a list of this chord's inversions"""
+        inversions = []
+        for i in range(self.order):
+            if i != self.inversion:
+                inversions.append(self.invert(i))
+        return inversions
 
     def on_root(self, root_note):
         """constructs a Chord object from this AbstractChord with respect to a desired root"""
@@ -626,6 +643,12 @@ class AbstractChord:
         else:
             return False
 
+    def is_inverted_tertian(self):
+        """returns True if any of this chord's inversions are tertian"""
+        for inv in self.inversions:
+            if inv.is_tertian():
+                return True
+        return False
 
     def __add__(self, other):
         """Chord + Chord results in a ChordList (which can further be analysed as a progression)
@@ -927,7 +950,8 @@ class Chord(AbstractChord):
             return (inv_params), inverted_notes, inverted_intervals
 
         elif isinstance(inversion, int):
-            assert 0 < inversion <= (len(self.factors)-1), f'{inversion} is an invalid inversion number for chord with {len(self.factors)} factors'
+            # assert 0 <= inversion, f'Cannot have a negative inversion'
+            inversion = inversion % len(self)
             inversion_degree = self.root_intervals[inversion].degree
             bass = self.root_notes[inversion]
         elif isinstance(inversion, (Note, str)):
@@ -1329,25 +1353,37 @@ class Chord(AbstractChord):
     def __str__(self):
         return f'{self._marker}{self.name}'
 
-    def __repr__(self):
-        """shows full Chord name as well as constituent notes, with clarifying diacritics:
-        dots over note names indicate that note is in a higher octave"""
-        lb, rb = NoteList._brackets
+    def _dotted_notes(self, markers=True, sep=', '):
+        """outputs list of notes in this chord,
+        with diacritic dotes to indicate notes outside the starting octave"""
         notes_str = [] # notes are annotated with accent marks depending on which octave they're in (with respect to root)
         for i, n in zip(self.intervals, self.notes):
             assert (self.bass + i) == n, f'bass ({self.bass}) + interval ({i}) should be {n}, but is {self.bass + i}'
-            nl, na = str(n)[:2], str(n)[2:] # note letter and accidental (so we can put the dot over the letter)
+            if markers:
+                this_note_str = str(n)
+                start_idx = 2
+            else:
+                this_note_str = n.name
+                start_idx = 1
+            nl, na = this_note_str[:start_idx], this_note_str[start_idx:] # note letter and accidental (so we can put the dot over the letter)
             if i < -12:
                 notes_str.append(f'{nl}\u0324{na}') # lower diaresis
             elif i < 0:
                 notes_str.append(f'{nl}\u0323{na}') # lower dot
             elif i < 12:
-                notes_str.append(str(n))
+                notes_str.append(this_note_str)
             elif i < 24:
                 notes_str.append(f'{nl}\u0307{na}') # upper dot
             else:
                 notes_str.append(f'{nl}\u0308{na}') # upper diaresis
-        notes_str = ', '.join(notes_str)
+        notes_str = sep.join(notes_str)
+        return notes_str
+
+    def __repr__(self):
+        """shows full Chord name as well as constituent notes, with clarifying diacritics:
+        dots over note names indicate that note is in a higher octave"""
+        lb, rb = NoteList._brackets
+        notes_str = self._dotted_notes(markers=True)
 
         return f'{str(self)}  {lb}{notes_str}{rb}'
 
@@ -1362,7 +1398,7 @@ chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor 
                           2: ['9', 'maj9', 'm9', 'aug', '6', 'm6'],
                           3: ['dim7', 'hdim7', 'aug7', 'mmaj7', '7b5', '7#9', '7b9', '(b5)'],
                           4: ['dim9', 'dmin9', 'mmaj9', 'hdmin9', 'dimM7', 'augM7', 'augM9'] + [f'{q}{d}' for q in ('', 'm', 'maj') for d in (11,13)],
-                          5: ['add11', 'add13', ] + [f'{q}{d}' for q in ('dim', 'mmaj') for d in (11,13)],
+                          5: ['add11'] + [f'{q}{d}' for q in ('dim', 'mmaj') for d in (11,13)],
                           6: [], 7: [], 8: [], 9: []}
 
 # removed no5 - handled better by incomplete chord matching
