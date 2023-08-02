@@ -360,6 +360,24 @@ class Interval:
         """intervals only hash their values, not their degrees"""
         return hash(self.value)
 
+    @property
+    def common_degrees(self):
+        """returns a list of the degrees that this interval is commonly used as.
+        usually this is only one possibility (i.e. m3 and M3 both return [3]),
+        but dim5s will return [4,5]"""
+        if self.mod == 6:
+            return [4,5]
+        else:
+            return [self.degree]
+
+    @property
+    def possible_degrees(self):
+        """returns a list of the degrees that this interval could conceivably
+        be used as, up to singly augmented/diminished (but not doubly)"""
+        return allowable_interval_degrees[self.mod]
+    # convenience alias:
+    allowable_degrees = possible_degrees
+
     @cached_property
     def name(self):
         if self.mod == 0 and self.value > 0:
@@ -943,6 +961,8 @@ default_interval_degrees = {
                 10:7, 11:7,
                 }
 
+
+
 # and the reverse mapping
 default_degree_intervals = {
                 1: 0, # unison
@@ -954,6 +974,22 @@ default_degree_intervals = {
                 7: 11, # maj7
                 # 8: 12, # octave
                 }
+
+allowable_interval_degrees = {
+                0: [1],
+                1: [2],
+                2: [2,3],
+                3: [2,3],
+                4: [3,4],
+                5: [3,4,5],
+                6: [4,5],
+                7: [5,6],
+                8: [5,6],
+                9: [6,7],
+                10: [6,7],
+                11: [7],
+}
+
 # defaults of degrees in higher octaves, just in case:
 higher_defaults = {k+(7*o):v+(12*o) for k,v in default_degree_intervals.items() for o in range(1,3)}
 default_degree_intervals.update(higher_defaults)
