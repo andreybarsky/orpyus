@@ -1,7 +1,7 @@
 from .intervals import *
 # from scales import interval_scale_names, key_name_intervals
 from .util import rotate_list, reverse_dict, unpack_and_reverse_dict, numeral_subscript, reduce_aliases, check_all, log
-from .chords import Factors, AbstractChord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
+from .chords import Factors, AbstractChord, Chord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
 from .qualities import ChordModifier, Quality
 from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental
 from .display import chord_table
@@ -236,6 +236,13 @@ class ScaleDegree(int):
         obj.compound = (obj.degree != obj.extended_degree) # boolean flag
         return obj
 
+    @staticmethod
+    def of_scale(scale, degree):
+        """alternative ScaleDegree init method, accepts a specified
+        Scale object as the parent and instantiates a ScaleDegree of the
+        appropriate order on the desired degree of that scale"""
+        return ScaleDegree(degree, scale.factors.max_degree)
+
     # mathematical operations on scale degrees preserve extended degree and scale size:
     def __add__(self, other):
         # assert not isinstance(other, Interval), "ScaleDegrees cannot be added to intervals"
@@ -304,7 +311,26 @@ class ScaleDegree(int):
         return str(self)
 
 
+class ScaleChord(AbstractChord):
+    """AbstractChord that lives in a Scale, and understands a few things about
+    harmony within the scale as well as its relative position inside it"""
+    def __init__(self, *args, scale, degree, **kwargs):
+        if not isinstance(scale, Scale):
+            scale = Scale(scale)
+        if not isinstance(degree, ScaleDegree):
+            degree = ScaleDegree.from_scale(scale, degree)
 
+        self.scale = scale
+        self.degree = degree
+
+        # initialise everything else as AbstractChord:
+        AbstractChord.__init__(self, *args, **kwargs)
+
+        self.in_scale = scale.contains_degree_chord(degree, self)
+
+    def __repr__(self):
+        in_str = 'not ' if not self.in_scale else ''
+        return f'{Chord.__repr__(self)} ({in_str}in: {self.scale})'
 
 ### Scale class that spans diatonic scales, subscales, blues scales, octatonic scales and all the rest:
 
@@ -771,6 +797,13 @@ class Scale:
         return self.intervals
 
     @property
+    def span(self):
+        """returns a raw list of intervals including the octave/span above"""
+        out = [iv for iv in self.intervals]
+        out.append(self.intervals[0] + 12)
+        return out
+
+    @property
     def order(self):
         """A scale's order is the number of factors/degrees it has, not counting
         chromatic intervals. So the blues scale has order 5, even though it contains
@@ -815,7 +848,7 @@ class Scale:
         # shift left to get chord that starts on root:
         start_interval = scale_intervals[0]
         chord_intervals = IntervalList(scale_intervals) - start_interval
-        return AbstractChord(chord_intervals)
+        return ScaleChord(chord_intervals, scale=self, degree=i)
 
     def chord(self, i, order=3):
         """convenience wrapper around Scale.get_chord; see the documentation for that method
@@ -889,7 +922,7 @@ class Scale:
                         chord_intervals.append(raw_interval)
                 chord_intervals = IntervalList(chord_intervals)
                 log(f'With root interval: {root_interval} and chord intervals: {chord_intervals}, resulting in: {chord_intervals - root_interval}')
-                return AbstractChord(intervals=chord_intervals - root_interval)
+                return ScaleChord(intervals=chord_intervals - root_interval, scale=self, degree=i)
 
         # otherwise...
         # could not construct a tertian chord using available scale degrees,
@@ -959,11 +992,32 @@ class Scale:
     @property
     def chords(self):
         return self.get_chords(display=False)
+    @property
+    def triads(self):
+        return self.get_chords(order=3, display=False)
+    @property
+    def tetrads(self):
+        return self.get_chords(order=4, display=False)
+    @property
+    def pentads(self):
+        return self.get_chords(order=5, display=False)
+    @property
+    def hexads(self):
+        return self.get_chords(order=6, display=False)
+    @property
+    def heptads(self):
+        return self.get_chords(order=7, display=False)
 
-    def show_chords(self):
-        self.get_chords(display=True)
+    def show_chords(self, order=3, display=True):
+        if display:
+            self.get_chords(order=order, display=display)
+        else:
+            return self.get_chords(order=order, display=display)
     # convenience aliases:
     harmonise = harmonize = show_chords
+    @property
+    def harmony(self):
+        return self.harmonise()
 
     def get_tertian_chords(self, order=3, prefer_chromatic=False, display=False, **kwargs):
         """returns an ordered dict of the (tertian) AbstractChords built on
@@ -986,8 +1040,8 @@ class Scale:
         return self.get_tertian_chords(display=False)
     tertians = tertian_chords
 
-    def show_tertian_chords(self):
-        self.get_tertian_chords(display=True)
+    def show_tertian_chords(self, order=3):
+        self.get_tertian_chords(order=order, display=True)
     harmonise_tertian = harmonize_tertian = show_tertians = show_tertian_chords
 
     def valid_chords_on(self, degree, order=None, min_order=3, max_order=4,
@@ -1119,9 +1173,30 @@ class Scale:
                 if iv not in padded_intervals:
                     return False
             return True
+        elif type(item) is ScaleChord:
+            # a scale cannot be asked if it contains an AbstractChord without any other qualiifers,
+            # but a ScaleChord contains its degree within the scale, so we wrap around
+            # contains_degree_chord in this case:
+            return self.contains_degree_chord(item.degree, item)
         else:
             raise TypeError(f'Scale.__contains__ not defined for items of type: {type(item)}')
 
+    def contains_degree_chord(self, degree, abs_chord, degree_interval=None):
+        """checks whether a given AbstractChord on a given Degree of this Scale belongs in this Subscale"""
+        if isinstance(abs_chord, str):
+            abs_chord = AbstractChord(abs_chord)
+        # assert type(abs_chord) == AbstractChord, "Scales can only contain AbstractChords"
+        assert 1 <= degree <= self.factors.max_degree, "Scales can only contain chords built on degrees between 1 and 7"
+        if degree not in self.degrees:
+            return False # this subscale does not even have that degree
+        if degree_interval is not None:
+            # optionally require the specified degree to be a specific interval
+            if self.degree_intervals[degree] != degree_interval:
+                return False # this subscale does not have that interval
+        root_interval = self.degree_intervals[degree]
+        intervals_from_root = IntervalList([root_interval + iv for iv in abs_chord.intervals])
+        # call __contains__ on resulting iv list:
+        return intervals_from_root in self
 
     # scales hash according to their factors and their chromatic intervals:
     def __hash__(self):

@@ -39,6 +39,8 @@ def unit_test():
     # test chord abstraction:
     compare(Chord('Cmaj7sus2').abstract(), AbstractChord('maj7sus2'))
 
+    compare(Chord('C/G').abstract(), AbstractChord('maj/2'))
+
     # test chord factor init by strings and lists:
     compare(ChordFactors('1-♭3-b5'), ChordFactors(['1', '♭3', 'b5']))
 
@@ -50,8 +52,8 @@ def unit_test():
     compare(Chord('D/C#'), Chord('Dmaj7/C#'))
     compare(Chord('Amaj7/B'), Chord('Amaj9/B'))
 
-    # test arg re-parsing
-    compare(Chord('CEA'), Chord(notes='CEA'))
+    # test implicit inversion identification:
+    compare(Chord('CEA'), Chord('Am/C'))
     # (this one also tests automatic chord factor detection from uninitialised intervals:
     # Interval(8) is a minor sixth by default but here we parse it as the fifth in an aug chord)
     compare(Chord([4,8], root='C'), Chord('C+'))

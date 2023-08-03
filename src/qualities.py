@@ -1,9 +1,10 @@
 # OOP representation of major/minor quality that is invertible and has a null (indeterminate) value
 from .util import reverse_dict, unpack_and_reverse_dict, reduce_aliases, log
-from .parsing import degree_names, is_valid_note_name, parse_alteration, accidental_offsets, offset_accidentals
+from .parsing import degree_names, is_valid_note_name, parse_alteration, accidental_offsets, offset_accidentals, fl, sh, nat, dfl, dsh
 from . import _settings
 
 # TBI: double dim/aug qualities?
+
 
 #### interval qualities:
 
@@ -509,12 +510,12 @@ chord_types =  {'m': ChordModifier(make={3:-1}),
                 'hdim7': ['dim', '7'],    # half diminished 7th (diminished triad with minor 7th), also called m7b5
                 '9': ['7', '♮9'],          # i.e. dominant 9th
                 'maj9': ['maj7', '♮9'],    # major 9th
-                '7b9': ['7', '♭9'],        # dominant minor 9th, (i.e. dm9?)
+                f'7{fl}9': ['7', '♭9'],        # dominant minor 9th, (i.e. dm9?)
                 'dim9': ['dim7', '♮9'],    # diminished 9th
                 'dmin9': ['dim7', '♭9'],   # diminished minor 9th
                 'hdim9': ['hdim7', '♮9'],  # half diminished 9th
                 'hdmin9': ['hdim7', '♭9'],   # half diminished minor 9th
-                # '7#9': ['7', '♯9'],        # dominant 7 sharp 9, i.e. Hendrix chord
+               f'7{sh}9': ['7', '♯9'],        # dominant 7 sharp 9, i.e. Hendrix chord
 
                 '11': ['9', '♮11'],        # dominant 11th
                 'maj11': ['maj9', '♮11'],  # major 11th
@@ -523,7 +524,8 @@ chord_types =  {'m': ChordModifier(make={3:-1}),
                 'hdmin11': ['hdmin9', '♮11'],  # half-diminished minor 11th
 
                 '13': ['11', '♮13'],               # dominant 13th
-                'maj13': ['maj11', '♯11', '♮13'],  # major 13th with a raised 11th
+               f'maj13{sh}11': ['maj11', '♯11', '♮13'],  # major 13th with a raised 11th
+                'maj13': ['maj11', '♮13'],         # major 13th WITHOUT raised 11th
                 'dmin13': ['dmin11', '♮13'],  # diminished minor 11th
                 'hdim13': ['hdim11', '♮13'],  # half-diminished 11th
                 'hdmin13': ['hdmin11', '♮13'],  # half-diminished minor 11th
@@ -542,12 +544,12 @@ chord_tweaks = {    'sus4': ChordModifier(remove=3, add=4, verify={2:False}),
                     'add13': ChordModifier(add=13, verify={11: False, 6:False, 5:0, 7:True}), # verify natural 5 is a kludge, see: Bbdim9add13/C
 
                     '(no5)': ChordModifier(remove=5), # , verify={3: True, 10:False}),    # we don't need verifiers on this because no5s are not registered anywhere, just treated as a valid input
-                    '(b5)': ChordModifier(make={5:-1}, verify={3:0}),
+                 f'({fl}5)': ChordModifier(make={5:-1}, verify={3:0}),
                     }
 
 # add degree alterations too:
 chord_alterations = {}
-for acc in ['b', '#']:
+for acc in [fl, sh]:
    for deg in range(5,14):
        acc_val = accidental_offsets[acc]
        chord_alterations[f'{acc}{deg}'] = ChordModifier(make={deg:acc_val})
@@ -600,15 +602,19 @@ modifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      'dmin9': ['dmin9', 'dimm9', 'dimmin9'],
                      'dmin11': ['dmin11', 'dimm11', 'dimmin11'],
                      'dmin13': ['dmin13', 'dimm13', 'dimmin13'],
-                     '7b9': ['dm9', 'domin9', 'domm9'],
-                     '7#9': ['hendrix', 'purple haze'],
+                    f'7{fl}9': ['dm9', 'domin9', 'domm9'],
+                    f'7{sh}9': ['hendrix', 'purple haze'],
 
-                      '#': ['♯', 'sharp', 'sharpened', 'sharped', 'raised'],
-                      'b': ['♭', 'flat', 'flattened', 'flatted', 'lowered'],
-                      'N': ['♮', 'with', 'include'],
-                      # '♯5': ['#5', 'sharp5', 'raised fifth'],
-                      # '♭5': ['b5', 'flat5', 'lowered fifth'],
-                     }
+                    # map all accidentals back onto preferred char
+                     sh: ['#', '♯', 'sh', 'sharpened', 'sharped', 'raised'],
+                     fl: ['b', '♭', 'fl', 'flattened', 'flatted', 'lowered'],
+                    dsh: ['𝄪', '♯♯', '##', 'dsh'],
+                    dfl: ['𝄫', '♭♭', 'bb', 'dfl'],
+                    nat: ['♮', 'N', 'with', 'include', 'nat', 'natural'],
+                    }
+
+
+
 
 alias_modifiers = unpack_and_reverse_dict(modifier_aliases)
 

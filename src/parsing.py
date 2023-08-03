@@ -1,6 +1,7 @@
 #### string parsing functions
 from collections import defaultdict
 from .util import reverse_dict, unpack_and_reverse_dict, log
+from . import _settings
 import string
 
 ######################################## accidentals
@@ -19,6 +20,27 @@ def accidental_value(acc):
 
 # mapping of accidental aliases to canonical ascii strings (i.e. #, ##, b, bb)
 accidentals_to_ascii = {char: chars[-1] for chars in offset_accidentals.values() for char in chars}
+
+
+if _settings.PREFER_UNICODE_ACCIDENTALS:
+    fl = flat = '♭'
+    sh = sharp = '♯'
+    dfl = dflat = '𝄫'
+    dsh = dsharp = '𝄪'
+    nat = '♮'
+else:
+    fl = flat = 'b'
+    sh = sharp = '#'
+    dfl = dflat = 'bb'
+    dsh = dsharp = '##'
+    nat = 'N'
+
+preferred_accidentals = {-2: dfl, -1: fl, 0: nat, 1: sh, 2: dsh}
+# map all possible accidental back to preferred chars too:
+for val, chars in offset_accidentals.items():
+    pref = preferred_accidentals[val]
+    preferred_accidentals.update({c:pref for c in chars})
+
 
 # string checking/cleaning for accidental unicode characters:
 def is_sharp(char):
@@ -40,16 +62,16 @@ def is_accidental(char):
         raise ValueError("'' is technically not an accidental but this is an edge case")
     return (char in accidental_offsets.keys())
 def cast_accidental(acc, max_len=1):
-    """reads what might be unicode accidentals and casts to ascii '#' or 'b' if required"""
+    """reads what might be unicode accidentals and casts to preferred accidental according to _settings"""
     assert isinstance(acc, str) and len(acc) <= max_len, f'Invalid input to parse_accidental: {acc} (where max_len={max_len})'
     if acc in accidentals_to_ascii:
-        return accidentals_to_ascii[acc]
+        return preferred_accidentals[acc]
     else:
         return None
 
 
 ######################################## note names
-generic_note_names = ['C', 'C# / Db', 'D', 'D# / Eb', 'E', 'F', 'F# / Gb', 'G', 'G# / Ab', 'A', 'A# / Bb', 'B']
+generic_note_names = ['C', f'C{sh} / D{fl}', 'D', f'D{sh} / E{fl}', 'E', 'F', f'F{sh} / G{fl}', 'G', f'G{sh} / A{fl}', 'A', f'A{sh} / B{fl}', 'B']
 natural_note_names = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
 next_natural_note = {natural_note_names[i-1]:natural_note_names[i] for i in range(1,7)}
 next_natural_note['B'] = 'C'
@@ -74,7 +96,7 @@ for c in accidental_offsets.keys():
 
 # now the preferred name of each note by preference:
 preferred_note_names = {}
-for preference in 'b', '#':
+for preference in fl, sh:
     acc_notes = note_names_by_accidental[preference]
     nat_notes = note_names_by_accidental[''] # all the white notes
     # use natural names for white notes, and the preferred accidental for black notes:
@@ -85,7 +107,7 @@ preferred_note_names['generic'] = generic_note_names # in rare cases where we wa
 natural_note_positions = set(note_positions[n] for n in natural_note_names)
 valid_note_names = set(note_positions.keys())
 # common note names are cached for chord init, they are just the natural notes plus the commonly typed sharp and flat accidentals:
-common_note_names = set(preferred_note_names['b'] + preferred_note_names['#'])
+common_note_names = set(preferred_note_names[fl] + preferred_note_names[sh])
 
 
 
@@ -140,7 +162,12 @@ common_note_names = set(preferred_note_names['b'] + preferred_note_names['#'])
 
 ######################################## natural language names for numerical interval/scale degrees
 
-num_suffixes = defaultdict(lambda: 'th', {1: 'st', 2: 'nd', 3: 'rd', 4: 'th', 5: 'th', 6: 'th', 7: 'th'})
+num_suffixes = defaultdict(lambda: 'th', {1: 'st', 2: 'nd', 3: 'rd'})
+for tens in range(20,100,10):
+    # 21st, 22nd, 23rd etc for all numbers 21-23, 31-33 etc, otherwise 'th'
+    num_suffixes[tens+1] = 'st'
+    num_suffixes[tens+2] = 'nd'
+    num_suffixes[tens+3] = 'rd'
 
 numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII'}
 roman_numerals = reverse_dict(numerals_roman)
@@ -152,11 +179,14 @@ degree_names = {1: 'unison',  2: 'second', 3: 'third',
 
 multiple_names = {2: 'Double', 3: 'Triple', 4: 'Quadruple'}
 
-# very niche use: 'Octave' is not appropriate for e.g. eight-note scales,
+# very niche use: 'Octave' is not technically appropriate for octatonic scales,
+# and other theoretical scales with more than 7 degrees,
 # so we define what else these non-Octave 'spans' might be called:
 span_names = {5: 'pentave', 6: 'sexave', 7: 'septave', 8: 'octave',
               9: 'nonave', 10: 'decave', 11: 'undecave', 12: 'duodecave'}
-
+# in practice we avoid 'sexave' etc. for pentatonic scales
+# because they have eight IMPLIED degrees, some of which are skipped,
+# but we do use 'nonave' in the context of octatonic scales and so on
 
 
 #### note name parsing functions:
@@ -327,6 +357,7 @@ def parse_octavenote_name(name, case_sensitive=True):
     #         raise ValueError(f'Provided note name is too long: {name}')
     # return note_name, octave
 
+
 def is_alteration(string):
     """returns True if a string is a valid chord/scale alteration, like #5 or b11,
     and False otherwise"""
@@ -341,6 +372,16 @@ def contains_accidental(string):
     """returns True if string has any explicit accidental characters
     (not including 'b' or '#'), and False otherwise"""
     for acc_char in '♯𝄪♭𝄫♮':
+        if acc_char in string:
+            return True
+    return False
+def contains_sharp(string):
+    for acc_char in '#♯𝄪':
+        if acc_char in string:
+            return True
+    return False
+def contains_flat(string):
+    for acc_char in 'b♭𝄫':
         if acc_char in string:
             return True
     return False
@@ -422,3 +463,49 @@ def auto_split(inp, allow='', allow_numerals=True, allow_letters=True, allow_acc
         # strip whitespace in addition: in case our sep is something like ', '
         splits = [s.strip() for s in splits]
         return splits
+
+
+### subscript and superscript mappings:
+
+subscript_integers = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉']
+superscript_integers = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹']
+
+subscript = {   # lowercase:
+              'a': 'ₐ',  'e': 'ₑ',  'o': 'ₒ',  'x': 'ₓ',
+              'h': 'ₕ',  'k': 'ₖ',  'm': 'ₘ',  'n': 'ₙ',
+              'p': 'ₚ',  's': 'ₛ',  't': 'ₜ',  'l': 'ₗ',
+              'j': 'ⱼ',  'i': 'ᵢ',  'r': 'ᵣ',  'u': 'ᵤ',
+              'v': 'ᵥ',
+
+                # symbols:
+              '+': '₊',  '-': '₋',  '=': '₌',
+              '(': '₍',  ')': '₎',
+             }
+
+superscript = {  # lowercase: (nearly complete alphabet)
+               'a': 'ᵃ',  'b': 'ᵇ',  'c': 'ᶜ',  'd': 'ᵈ',  'e': 'ᵉ',
+               'f': 'ᶠ',  'g': 'ᵍ',  'h': 'ʰ',  'i': 'ⁱ',  'j': 'ʲ',
+               'k': 'ᵏ',  'l': 'ˡ',  'm': 'ᵐ',  'n': 'ⁿ',  'o': 'ᵒ',
+               'p': 'ᵖ',  'r': 'ʳ',  's': 'ˢ',  't': 'ᵗ',  'u': 'ᵘ', # note: no Q
+               'v': 'ᵛ',  'w': 'ʷ',  'x': 'ˣ',  'y': 'ʸ',  'z': 'ᶻ',
+
+                 # uppercase:
+               'A': 'ᴬ',  'B': 'ᴮ',  'D': 'ᴰ',  'E': 'ᴱ',
+               'G': 'ᴳ',  'H': 'ᴴ',  'I': 'ᴵ',  'J': 'ᴶ',
+               'K': 'ᴷ',  'L': 'ᴸ',  'M': 'ᴹ',  'N': 'ᴺ',
+               'O': 'ᴼ',  'P': 'ᴾ',  'R': 'ᴿ',  'T': 'ᵀ',
+               'U': 'ᵁ',  'V': 'ⱽ',  'W': 'ᵂ',  'Z': 'ᙆ',
+
+                 # symbols:
+               '+': '⁺',  '-': '⁻',  '=': '⁼',
+               '(': '⁽',  ')': '⁾',  '?': 'ˀ', '!': 'ᵎ',
+               'Δ': 'ᐞ',  '/': 'ᐟ',  '\\': 'ᐠ', '.': 'ᐧ',
+             }
+
+
+subscript.update({str(i): subscript_integers[i] for i in range(10)})
+superscript.update({str(i): superscript_integers[i] for i in range(10)})
+
+# reverse mapping of either:
+unscript = reverse_dict(superscript)
+unscript.update(reverse_dict(subscript))

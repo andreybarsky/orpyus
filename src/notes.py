@@ -4,6 +4,7 @@
 ### NoteLists are simply lists of either types of note, with some useful methods.
 
 from .intervals import Interval, IntervalList
+from .parsing import fl, sh, nat, dfl, dsh
 from . import parsing
 from . import conversion as conv
 from .util import log, rotate_list
@@ -28,7 +29,7 @@ def preferred_name(pos, prefer_sharps=False):
     # if we've accidentally been given an Interval object for position, we quietly parse it:
     if isinstance(pos, Interval):
         pos = pos.value
-    name = parsing.preferred_note_names['b'][pos] if not prefer_sharps else parsing.preferred_note_names['#'][pos]
+    name = parsing.preferred_note_names[fl][pos] if not prefer_sharps else parsing.preferred_note_names[sh][pos]
     return name
 
 
@@ -403,6 +404,10 @@ class OctaveNote(Note):
             return Interval(self.value - other.value)
         else:
             raise Exception("Only Intervals/integers can be added or subtracted to an Octave note")
+
+    def __pow__(self, i):
+        """raise this note by i octaves"""
+        return OctaveNote(self.value + (12*i))
 
     def __ge__(self, other):
         assert isinstance(other, OctaveNote), "OctaveNotes can only be greater or less than other OctaveNotes"
@@ -873,8 +878,8 @@ relative_majors = {value:key for key,value in relative_minors.items()}
 
 # some chord/key tonics correspond to a preference for sharps or flats:
 sharp_tonic_names = ['G', 'D', 'A', 'E', 'B']
-flat_tonic_names = ['F', 'Bb', 'Eb', 'Ab', 'Db']
-neutral_tonic_names = ['C', 'Gb'] # no sharp/flat preference, fall back on default
+flat_tonic_names = ['F', f'B{fl}', f'E{fl}', f'A{fl}', f'D{fl}']
+neutral_tonic_names = ['C', f'G{fl}'] # no sharp/flat preference, fall back on default
 
 sharp_major_tonics = [Note(t, prefer_sharps=True) for t in sharp_tonic_names]
 flat_major_tonics = [Note(t, prefer_sharps=False) for t in flat_tonic_names]

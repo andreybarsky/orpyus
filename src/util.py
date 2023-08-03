@@ -84,6 +84,15 @@ def reverse_dict(dct):
     # rev_dct = {k:v for v,k in dct.items()}
     return rev_dct
 
+def reverse_mod_dict(mdct, index, max_key=None, raise_values=False):
+    """as reverse_dict, but acts on a ModDict and returns another ModDict"""
+    rev_dct = ModDict(index=index, max_key=max_key, raise_values=raise_values)
+    for k,v in mdct.items():
+        if isinstance(v, list):
+            v = tuple(v)
+        rev_dct[v] = k
+    return rev_dct
+
 def unpack_and_reverse_dict(dct, include_keys=False, force_list=False):
     """accepts a dict whose values are iterables, the items of which are all unique,
     and returns the reversed dict that maps each item to its corresponding parent key"""
@@ -258,3 +267,47 @@ def numeral_subscript(numerals):
     numerals = str(numerals)
     subscripts = [subscript_digits[int(n)] for n in numerals]
     return ''.join(subscripts)
+
+class ModDict(dict):
+    def __init__(self, *args, index=0, max_key=None, raise_values=False, **kwargs):
+        """a special dict class with integer keys (or integer-like keys, such as ScaleDegrees)
+        that modulos during its lookup if a provided index  exceeds its defined maximum key.
+        arg 'index' determines the integer key associated with the first element.
+        arg 'max_key' determines the highest allowable key before modulo;
+            if None, it is auto-determined and dynamically updated with dict updates.
+        arg 'raise_values' determines if output values are exponentiated if index exceeds max.
+            in practice, output values of key [i] are mapped from m and raised
+            to the power d, where d,m = divmod(i, max_key)"""
+        # index should be 0 for mappings that start at 0, like integer values
+        # or 1 for mappings that start at 1, like scale degrees or chord factors
+        super().__init__(*args, **kwargs)
+
+        if max_key is None:
+            self.dynamic_max = True # will be updated along with this dict
+            self.max_key = max(list(self.keys()))
+        else:
+            self.dynamic_max = False # will not be updated
+            self.max_key = max_key
+
+        self.index = index
+        self.raise_values = raise_values
+
+    def __getitem__(self, i):
+        if i > self.max_key:
+            div, m = (divmod(i - self.index, self.max_key))
+            m += self.index
+        else:
+            div, m = 0, i
+
+        if not self.raise_values:
+            return super().__getitem__(m)
+        else:
+            # raise output value by power div (i.e. increase by octave)
+            return super().__getitem__(m) ** div
+
+    def __setitem__(self, x, y):
+        """as dict.__setitem__, but also updates self.max_key
+        if dynamic maxing is on"""
+        super().__setitem__(x, y)
+        if self.dynamic_max:
+            self.max_key = max(list(self.keys()))

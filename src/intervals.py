@@ -347,8 +347,8 @@ class Interval:
         else:
             raise TypeError('Intervals can only be compared to integers or other Intervals')
 
-    def __gt__(self, other):
-        return other < self
+    # def __gt__(self, other):
+    #     return self > other
 
     def __int__(self):
         return self.value

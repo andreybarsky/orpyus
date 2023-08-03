@@ -1,15 +1,4 @@
 
-############# tuning settings:
-
-### TUNING_MODE controls which system of tuning is used to
-### calculate note/interval pitches. must be one of 'JUST' or 'EQUAL':
-TUNING_MODE = 'JUST'
-
-# under JUST-intonation tuning, intervals are built from clean integer ratios.
-# (in this case, restricted to ratios allowed by 5-limit tuning, i.e. powers of 2*3*5 )
-# under EQUAL-temperament tuning, semitones are spaced equally on a log scale.
-
-
 ############# preference settings:
 
 ### DEFAULT_SHARPS controls whether accidental ('black') notes are spelled
@@ -19,6 +8,15 @@ TUNING_MODE = 'JUST'
 ### circle of fifths, and the chords of that key inherit this preference, but
 ### in the simple case of "Note('C') + 1", this setting determines the result.
 DEFAULT_SHARPS = False
+
+### PREFER_UNICODE_ACCIDENTALS controls whether the default behaviour
+### when printing sharp and flat signs are the normal keyboard-typable
+### characters '#' and 'b' (if False)
+### or the unicode characters '♯' and '♭' (if True)
+PREFER_UNICODE_ACCIDENTALS = True
+### both are treated as valid input options in either case,
+### this only affects what the program outputs to screen
+
 
 # orpyus musical objects use little unicode MARKERS in their string methods
 # to identify them at a glance. the default markers are defined here, so you
@@ -58,7 +56,19 @@ CHARACTERS = { 'true': '+',    # e.g. displayed in 'Tertian' column if a chord i
            'somewhat': '~',    # e.g. displayed in 'Tertian' column if inverted-tertian
    'chromatic_degree': 'c',    # displayed instead of integer ScaleDegree for a non-degree (chromatic) interval
       'unknown_chord': '?',    # displayed after root for a chord of unknown type, e.g. C? chord
+'unknown_superscript': 'ˀ',    # as unknown_chord, but used where superscripts are used (e.g. progressions)
              }
+
+############# tuning settings:
+
+### TUNING_MODE controls which system of tuning is used to
+### calculate note/interval pitches. must be one of 'JUST' or 'EQUAL':
+TUNING_MODE = 'JUST'
+
+# under JUST-intonation tuning, intervals are built from clean integer ratios.
+# (in this case, restricted to ratios allowed by 5-limit tuning, i.e. powers of 2*3*5 )
+# under EQUAL-temperament tuning, semitones are spaced equally on a log scale.
+
 
 ############# performance settings:
 

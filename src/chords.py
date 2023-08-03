@@ -5,6 +5,7 @@ from .notes import Note, NoteList
 from .intervals import Interval, IntervalList, P5, default_degree_intervals
 from .util import log, precision_recall, rotate_list, check_all, reverse_dict, unpack_and_reverse_dict
 from .qualities import Quality, ChordModifier, parse_chord_modifiers
+from .parsing import sh, fl, nat
 from . import notes, parsing, qualities, _settings
 
 from collections import defaultdict, UserDict
@@ -831,8 +832,7 @@ class Chord(AbstractChord):
         # if prefer_sharps is not given, we parse the name to see if we've been asked for it:
         if prefer_sharps is None and isinstance(name, str):
             # have we been given the name of a tonic note with a sharp in it?
-            if '#' in name[1:3]:
-                # prefer_sharps = ('#' in name[1:3])
+            if parsing.contains_sharp(name[1:3]):
                 prefer_sharps = True
 
         # re-parse args to detect if 'name' is a list of notes, a list of intervals, or a dict of chordfactors:
@@ -1253,7 +1253,7 @@ class Chord(AbstractChord):
 
     def abstract(self):
         """return the AbstractChord that this Chord is associated with"""
-        return AbstractChord(factors=self.factors)
+        return AbstractChord(factors=self.factors, inversion=self.inversion)
 
     def _get_flags(self):
         """Returns a list of the boolean flags associated with this object"""
@@ -1397,9 +1397,9 @@ class Chord(AbstractChord):
 chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
                           1: ['m7', 'maj7', 'dim', 'sus4', 'sus2', 'add9'], # maj/min7s, dim triads, and common alterations like sus2/4 and add9
                           2: ['9', 'maj9', 'm9', 'aug', '6', 'm6'],
-                          3: ['dim7', 'hdim7', 'aug7', 'mmaj7', '7b5', '7#9', '7b9', '(b5)'],
-                          4: ['dim9', 'dmin9', 'mmaj9', 'hdmin9', 'dimM7', 'augM7', 'augM9'] + [f'{q}{d}' for q in ('', 'm', 'maj') for d in (11,13)],
-                          5: ['add11'] + [f'{q}{d}' for q in ('dim', 'mmaj') for d in (11,13)],
+                          3: ['dim7', 'hdim7', 'aug7', 'mmaj7', f'7{fl}5', f'7{sh}9', f'7{fl}9', f'({fl}5)'],
+                          4: ['dim9', 'dmin9', 'mmaj9', 'hdmin9', 'dimM7', 'augM7', 'augM9', f'maj13{sh}11'] + [f'{q}{d}' for q in ('', 'm', 'maj') for d in (11,13)],
+                          5: ['maj13', 'add11'] + [f'{q}{d}' for q in ('dim', 'mmaj') for d in (11,13)],
                           6: [], 7: [], 8: [], 9: []}
 
 # removed no5 - handled better by incomplete chord matching
@@ -1517,6 +1517,281 @@ if _settings.PRE_CACHE_CHORDS: # initialise common chord objects in cache for fa
 
 
 ######################################################
+
+
+class ChordList(list):
+    """container for multiple Chord objects"""
+    def __init__(self, *items):
+
+        # this class contains some lazy imports from the keys and progressions modules,
+        # which is untidy as those modules themselves inherit from this module (chords),
+        # but since chordlists are inherently tied to progressions, this seems cleanest
+
+        if len(items) == 1:
+            arg = items[0]
+            if isinstance(arg, str):
+                # could be a dash-separated string of chord names or something, try auto-split:
+                items = parsing.auto_split(arg, allow='°øΔ♯♭♮+𝄫𝄪#/' + ''.join(modifier_marks.values()))
+            else:
+                assert isinstance(arg, (list, tuple)), f"Expected list or tuple of chord-like objects, but got single non-list/tuple arg: {type(arg)}"
+                items = arg
+        assert len(items) > 1, "ChordList must contain at least two Chords"
+
+        valid_chords = []
+        for c in items:
+            # if is chord: add it to list
+            if isinstance(c, Chord):
+                valid_chords.append(c)
+            elif isinstance(c, AbstractChord):
+                valid_chords.append(c)
+            # if is string: try parsing as chord name
+            elif isinstance(c, str):
+                if parsing.begins_with_valid_note_name(c):
+                    # chord
+                    valid_chords.append(Chord(c))
+                else:
+                    valid_chords.append(AbstractChord(c))
+
+        # initialise as list:
+        super().__init__(valid_chords)
+
+    # outer brackets for this container class:
+    _brackets = _settings.BRACKETS['ChordList']
+
+
+    def __str__(self):
+        # return f'𝄃{super().__repr__()}𝄂'
+        lb, rb = self._brackets
+        sep_char = ' - '
+        # if any of the chords in this progression are AbstractChords, use a different sep char
+        # (because AbstractChords have spaces in their names)
+        for c in self:
+            if type(c) == AbstractChord:
+                sep_char = ' - '
+                break
+        return f'{lb}{sep_char.join([n.name for n in self])}{rb}'
+
+    def __repr__(self):
+        return str(self)
+
+    def append(self, c):
+        """appends an item to self, ensuring it is a Chord or AbstractChord"""
+        if isinstance(c, Chord):
+            super().append(c)
+        elif isinstance(c, AbstractChord):
+            super().append(c)
+        # if is string: try parsing as chord name
+        elif isinstance(c, str):
+            if parsing.begins_with_valid_note_name(c):
+                # chord
+                super().append(Chord(c))
+            else:
+                super().append(AbstractChord(c))
+        else:
+            raise TypeError(f'Tried to append to ChordList, expected Chord or str but got: {type(other)}')
+
+    def __add__(self, other):
+        # if other is a str, try and parse it as a chord:
+        if isinstance(other, str):
+            if parsing.begins_with_valid_note_name(other):
+                other = Chord(other)
+            else:
+                other = AbstractChord(other)
+
+        # appending a new chord:
+        if isinstance(other, Chord):
+            new_chords = list(self) + [other]
+            return ChordList(new_chords)
+
+        # concatenation of chordlists:
+        elif isinstance(other, (tuple, list, ChordList)):
+            # if this is a list or tuple, needs to be a list or tuple of chords or strings that cast to chords:
+            if type(other) in {tuple, list}:
+                other = ChordList(other)
+            new_chords = list(self) + list(other)
+            return ChordList(new_chords)
+
+        # transpose every chord in this list by an interval:
+        elif isinstance(other, (int, Interval)):
+            new_chords = [c + int(other) for c in self]
+            return ChordList(new_chords)
+
+        else:
+            raise TypeError(f'ChordList.__add__ not defined for type: {type(other)}')
+
+    def abstract(self):
+        """returns a new ChordList that is purely the AbstractChords within this existing ChordList"""
+        abs_chords = [c.abstract() if (type(c) == Chord)  else c  for c in self]
+        assert check_all(abs_chords, 'type_is', AbstractChord)
+        return ChordList(abs_chords)
+
+    # def matching_keys(self, *args, **kwargs):
+    #     """just wraps around keys.matching_keys module function"""
+    #     return matching_keys(self, *args, **kwargs)
+
+    def root_degrees_in(self, key):
+        from src.keys import Key
+        if isinstance(key, str):
+            key = Key(key)
+        assert isinstance(key, Key), f"key input to ChordList.root_degrees_in must be a Key or string that casts to Key, but got: {type(key)})"
+        root_intervals_from_tonic = [c.root - key.tonic for c in self]
+        root_degrees = [key.interval_degrees[iv]  if iv in key  else iv.degree  for iv in root_intervals_from_tonic]
+        return root_degrees
+
+    def as_numerals_in(self, key, sep=' ', modifiers=True):
+        from src.keys import Key
+        if isinstance(key, str):
+            key = Key(key)
+        root_degrees = self.root_degrees_in(key)
+        degree_chords = zip(root_degrees, self)
+        numerals = [] # build a list of numerals, allocating case as we go
+        for d,c in degree_chords:
+            # use the quality of the chord if it is not indeterminate, otherwise use the quality of the key:
+            chord_mod = c.quality if not c.quality.perfect else key.quality
+            if chord_mod.major_ish:
+                numerals.append(numerals_roman[d])
+            elif chord_mod.minor_ish:
+                numerals.append(numerals_roman[d].lower())
+            else:
+                raise Exception(f'Could not figure out whether to make numeral upper or lowercase: {d}:{c} in {key} (should never happen)')
+
+        # numerals = [numerals_roman[d]  if c.quality.major_ish else numerals_roman[d].lower()  for d,c in degree_chords]
+        # add suffixes: (we ignore the 'm' suffix because it is denoted by lowercase instead)
+        if modifiers:
+            suffix_list = [c.get_suffix(inversion=False) if c.get_suffix() != 'm' else '' for c in self]
+            inversion_list = ['' if c.inversion==0 else f'/{c.inversion}' for c in self]
+            roman_chords_list = [f'{numerals[i]}{suffix_list[i]}{inversion_list[i]}' for i in range(len(self))]
+            # turn suffix modifiers into superscript marks etc. where possible:
+            roman_chords_list = [''.join(reduce_aliases(r, modifier_marks)) for r in roman_chords_list]
+        else:
+            roman_chords_list = [f'{numerals[i]}' for i in range(len(self))]
+        if sep is not None:
+            roman_chords_str = sep.join(roman_chords_list)
+            return roman_chords_str
+        else:
+            # just return the raw list, instead of a sep-connected string
+            return roman_chords_list
+
+    @property
+    def progression(self):
+        from src.progressions import ChordProgression
+        return ChordProgression(self)
+
+    def find_key(self, natural_only=False, verbose=True):
+        """wraps around matching_keys but additionally uses cadence information to distinguish between competing candidates"""
+        from src.keys import matching_keys
+        matches = matching_keys(chords=self, return_matches=True, min_likelihood=0, max_results=12, require_tonic=True, require_roots=True,
+                                upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False, natural_only=natural_only)
+
+        if len(matches) == 0:
+            # if no matches at all first, open up the min recall property:
+            log(f'No key found matching notes using default parameters, widening search')
+            matches = matching_keys(chords=self, return_matches=True, min_recall=0, min_likelihood=0, max_results=12,
+                                    require_tonic=True, require_roots=True, natural_only=natural_only,
+                                    upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False)
+            if len(matches) == 0:
+                # open up everything:
+                log(f'Still no key found with widened search, removing all search constraints')
+                matches = matching_keys(chords=self, return_matches=True, min_recall=0, min_precision=0, min_likelihood=0, max_results=12,
+                                        require_tonic=False, require_roots=False, natural_only=natural_only,
+                                        upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False)
+                if len(matches) == 0:
+                    raise Exception(f'No key matches at all found for chords: {self} \n(this should never happen!)')
+        # try ideal matches (with perfect recall) first:
+        ideal_matches = [(c,s) for c,s in matches.items() if s['recall'] == 1.0]
+        log(f'{len(matches)} possible key matches found')
+
+        if len(ideal_matches) == 0:
+            # no good matches, so open up to all matches that share the max recall:
+            max_rec = max([s['recall'] for c,s in matches.items()])
+            max_rec_matches = [(c,s) for c,s in matches.items() if s['recall'] == max_rec]
+            match_tuples = max_rec_matches
+            log('No ideal matches with perfect recall')
+            log(f'So opened up to all {len(match_tuples)} matches tied for the highest recall')
+        else:
+            log(f'Found {len(ideal_matches)} candidate/s with perfect recall')
+            # at least one ideal match, so we'll focus on those
+            match_tuples = ideal_matches
+
+        if len(match_tuples) == 1:
+            log(f'Only one candidate for key: {match_tuples}')
+            # only one good match, so use it
+            key = match_tuples[0][0]
+            print(f'Found key: {key}')
+
+        elif len(match_tuples) >= 2:
+            # multiple good matches, see if one has better precision than the other
+            max_prec = max([s['precision'] for c,s in match_tuples])
+            precise_matches = [(c,s) for c,s in match_tuples if s['precision'] == max_prec]
+            log(f'Multiple candidates for key: {[m[0].name for m in match_tuples]}')
+            log(f' So focusing on the {len(precise_matches)} tied for highest precision')
+            if len(precise_matches) == 1:
+                # one of the perfect-recall matches is better than all the others, so use it (probably?)
+                key = precise_matches[0][0]
+                print(f'Found key: {key}')
+
+            # elif len(best_matches) == 2:
+            #     # is one major and the other minor?
+            #     m1, m2 = best_matches[0][0], best_matches[1][0]
+            #     if (m1.quality.major and m2.quality.minor) or (m1.quality.minor and m2.quality.major):
+            #         # decide between major and minor candidate keys:
+            #         candidate_progressions = [Progression(self.as_numerals_in(k)) for k in [m1, m2]]
+
+            else:
+                # multiple matches that are equally as good,
+                # so look for a cadence-based match around V-I resolutions or something
+
+                # log(f'Reducing the shortlist to those tied for highest likelihood')
+                # max_likely = max([s['likelihood'] for c,s in match_tuples])
+                # likely_matches = [(c,s) for c,s in match_tuples if s['likelihood'] == max_likely]
+
+                # limit shortlist to natural keys only if specified:
+                if natural_only:
+                    candidate_keys = [match for match,stats in precise_matches if match.is_natural]
+                else:
+                    candidate_keys = [match for match,stats in precise_matches]
+                log(f'Testing {len(candidate_keys)} candidate keys for grammaticity of this progression in those keys')
+                candidate_progressions = [Progression(self.as_numerals_in(k), scale=k.scale).in_key(k) for k in candidate_keys]
+                log(f'Candidate keys: {", ".join([str(p.key) for p in candidate_progressions])}')
+                grammatical_progressions = most_grammatical_progression(candidate_progressions, verbose=log.verbose)
+                grammatical_keys = [p.key for p in grammatical_progressions]
+                if len(grammatical_keys) == 1:
+                    key = grammatical_keys[0]
+                    log(f'Found one key more grammatical than the others: {str(key)}')
+                else:
+                    # multiple keys equally tied for how grammatical they are
+                    # so tiebreak by likelihood:
+                    log(f'Found multiple equally grammatical keys: {[str(k) for k in grammatical_keys]}')
+                    log('So tie-breaking by key likelihood')
+                    max_likely = max([k.likelihood for k in grammatical_keys])
+                    likely_keys = [k for k in grammatical_keys if k.likelihood == max_likely]
+
+                    if len(likely_keys) == 1:
+                        key = likely_keys[0]
+                        log(f'One key is more likely than the others: {key}')
+                    else:
+                        # nothing else left, just tie-break by key consonance
+                        keys_by_consonance = sorted(likely_keys, key=lambda x: x.consonance, reverse=True)
+                        log(f'Found multiple equally likely keys: {[str(k) for k in keys_by_consonance]}')
+                        log(f'So doing a final tie-break by consonance')
+                        key = keys_by_consonance[0]
+
+                print(f'Found key: {key}')
+
+        assert isinstance(key, Key)
+        return key
+
+    def play(self, chord_delay=1, note_delay=0.1, duration=2.5, octave=None, falloff=True, block=False, type='fast', **kwargs):
+        """play this chordlist as audio"""
+        chord_waves = [c._melody_wave(duration=duration, delay=note_delay, octave=octave, type=type, **kwargs) for c in self]
+        from .audio import arrange_melody, play_wave, play_melody
+        play_melody(chord_waves, delay=chord_delay, falloff=falloff, block=block)
+        # prog_wave = arrange_melody(chord_waves, delay=delay, **kwargs)
+        # play_wave(prog_wave, block=block)
+
+# convenience alias:
+Chords = ChordList
+
 
 ######### function for matching likely chords from unordered lists of note names (e.g. guitar fingerings)
 # we cannot use intervals for this, because notes being in an arbitrary order means that
