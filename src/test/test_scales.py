@@ -40,7 +40,7 @@ def unit_test():
     compare(Scale('major').chord(5, order=5), AbstractChord('dom9'))
 
     print('Scales underlying the common 13th chords:')
-    compare(Scale('lydian').chord(1, order=7), AbstractChord('maj13'))
+    compare(Scale('lydian').chord(1, order=7), AbstractChord('maj13#11'))
     compare(Scale('mixolydian').chord(1, order=7), AbstractChord('13'))
     compare(Scale('dorian').chord(1, order=7), AbstractChord('m13'))
     compare(Scale('lydian b3').chord(1, order=7), AbstractChord('mmaj13'))

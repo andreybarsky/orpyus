@@ -86,12 +86,8 @@ def reverse_dict(dct):
 
 def reverse_mod_dict(mdct, index, max_key=None, raise_values=False):
     """as reverse_dict, but acts on a ModDict and returns another ModDict"""
-    rev_dct = ModDict(index=index, max_key=max_key, raise_values=raise_values)
-    for k,v in mdct.items():
-        if isinstance(v, list):
-            v = tuple(v)
-        rev_dct[v] = k
-    return rev_dct
+    rev_dct = reverse_dict(mdct)
+    return ModDict(rev_dct, index=index, max_key=max_key, raise_values=raise_values)
 
 def unpack_and_reverse_dict(dct, include_keys=False, force_list=False):
     """accepts a dict whose values are iterables, the items of which are all unique,
@@ -293,6 +289,7 @@ class ModDict(dict):
         self.raise_values = raise_values
 
     def __getitem__(self, i):
+        # by design we only modulo keys ABOVE max key, not below index
         if i > self.max_key:
             div, m = (divmod(i - self.index, self.max_key))
             m += self.index

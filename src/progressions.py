@@ -409,7 +409,7 @@ class Progression:
             assert scale is not None, f'Progression chords given as integers but scale arg not provided'
             if isinstance(scale, str):
                 scale = Scale(scale)
-            assert type(scale) in [Scale, Subscale]
+            assert type(scale) is Scale
             self.scale = scale
             self.root_degrees = numerals
             if chords is None:
@@ -528,6 +528,16 @@ class Progression:
 
         # add suffixes: (we ignore the 'm' suffix because it is denoted by lowercase instead)
         suffix_list = [c.suffix if c.suffix != 'm' else '' for c in self.chords]
+        # pull inversions out of suffixes:
+        for i in range(len(suffix_list)):
+            chord, suf = self.chords[i], suffix_list[i]
+            if '/' in suf:
+                # slash chord detected
+                new_slash = parsing.superscript['/']
+                new_inv = ''.join([parsing.superscript[s] for s in str(chord.inversion)])
+                new_suf = f'{new_slash}{new_inv}'
+                suffix_list[i] = new_suf
+
         roman_chords_list = [f'{numerals[i]}{suffix_list[i]}' for i in range(len(self))]
 
         if check_scale:

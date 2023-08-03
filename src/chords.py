@@ -211,7 +211,7 @@ class AbstractChord:
     """a hypothetical chord not built on any specific note but having all the modifiers that a chord would,
     whose principal members are Intervals. see AbstractChord._parse_input for valid input schemas.
     an AbstractChord is fully identified by its Factors and its Inversion."""
-    def __init__(self, name=None, factors=None, intervals=None, inversion=None, inversion_degree=None, modifiers=None):
+    def __init__(self, name=None, factors=None, intervals=None, inversion=None, inversion_degree=None, modifiers=None, auto_invert=True):
         """primary input arg must be one of the following mutually exclusive keywords, in order of resolution:
         1. 'name' arg as string denoting the name of an AbstractChord (like 'mmaj7'),
                 which we look up and parse as a list of ChordModifiers.
@@ -258,10 +258,15 @@ class AbstractChord:
 
         self.quality = self._determine_quality()
 
+        # check if the final chord has a registered name or not.
+        # if it doesn't, and the auto_invert flag is True, we try to find
+        # if it is an inversion of a registered chord instead:
+        if self.name == self._unknown_char:
+            if auto_invert:
+                pass
 
 
-
-    def _parse_input(self, name, factors, intervals, inversion, inversion_degree, modifiers, _allow_note_name=False, max_inversion_rarity=2):
+    def _parse_input(self, name, factors, intervals, inversion, inversion_degree, modifiers, _allow_note_name=False, min_inversion_rarity=3):
         """takes valid inputs to AbstractChord and parses them into factors, intervals and inversion.
         (see docstring for AbstractChord.__init__)"""
 
@@ -325,24 +330,34 @@ class AbstractChord:
 
             # check if this is an inversion of some common chord:
             if intervals in intervals_to_chord_names:
-                # (we'll use the inversion only if it's less rare than the root intervals)
+                # (we'll use the inversion only if it's significantly less rare than the root intervals)
                 supplied_interval_chord_name = intervals_to_chord_names[intervals]
                 supplied_rarity = chord_name_rarities[supplied_interval_chord_name]
+                has_uninverted_name = True
             else:
-                # supplied_rarity = 10 # max possible
-                supplied_rarity = max_inversion_rarity # call this an inversion of a more common chord
+                has_uninverted_name = False
+                supplied_rarity = 10 # max possible
 
             # search for possible inversions if this is not already one,
             # and adopt the most common, if it's more common than what we've been given:
             if inversion is None and inversion_degree is None:
                 possible_inversions = AbstractChord.inversions_from_intervals(intervals)
-                if len(possible_inversions) > 0 and possible_inversions[0].rarity < supplied_rarity:
-                    # adopt the inverted chord's root intervals and inversion instead
-                    intervals = possible_inversions[0].root_intervals
-                    inversion = possible_inversions[0].inversion
-                    # and one last change (bit of a kludge): if this is a Chord, intercept and change the root:
-                    if isinstance(self, Chord):
-                        self.root -= intervals[inversion]
+                if len(possible_inversions) > 0:
+                    # take least rare inversion:
+                    sorted_inversions = sorted(possible_inversions, key=lambda x: x.rarity)
+                    best_inversion = sorted_inversions[0]
+                    # adopt the inversion if it is less rare than our existing name and at least as common as our max_inversion_rarity threshold,
+                    # OR if we have no other registered chord to fall back on
+                    if (not has_uninverted_name) or (best_inversion.rarity < supplied_rarity and supplied_rarity > min_inversion_rarity):
+                        # adopt the inverted chord's root intervals and inversion instead
+                        intervals = best_inversion.root_intervals
+                        inversion = best_inversion.inversion
+                        # and one last change (bit of a kludge): if this is a Chord, intercept and change the root:
+                        if isinstance(self, Chord):
+                            self.root -= intervals[inversion]
+                    else:
+                        # found an inversion but it was too rare to consider and we have another name to use instead
+                        inversion = 0
                 else:
                     # we've failed to find an inversion, so just use the intervals as they are
                     inversion = 0
@@ -481,8 +496,8 @@ class AbstractChord:
             # fall back on name given to an exotic chord like Am7/B if one was assigned
             return self.assigned_name
         else:
-            marker = _settings.CHARACTERS['unknown_chord']
-            return f'{marker}{inv_string}'
+            unknown_marker = self._unknown_char
+            return f'{unknown_marker}{inv_string}'
 
     @property
     def rarity(self):
@@ -492,15 +507,13 @@ class AbstractChord:
         else:
             # no5 chords have no registered rarity; so here we check the rarity of this chord
             # WITH a perfect 5th, and make it one step rarer than that
-            assert 5 not in self.factors
-            intervals_with_5 = IntervalList(list(self.intervals) + [P5])
-            intervals_with_5.sort()
-            if intervals_with_5 in intervals_to_chord_names:
-                rarity_with_5 = chord_name_rarities[intervals_to_chord_names[intervals_with_5]]
-                return rarity_with_5 + 1
-            else:
-                return max_rarity
-                raise Exception(f'No rarity registered for chord: {self}')
+            if 5 not in self.factors:
+                intervals_with_5 = IntervalList(list(self.intervals) + [P5])
+                intervals_with_5.sort()
+                if intervals_with_5 in intervals_to_chord_names:
+                    rarity_with_5 = chord_name_rarities[intervals_to_chord_names[intervals_with_5]]
+                    return rarity_with_5 + 1
+            return max_rarity
 
     @property
     def likelihood(self):
@@ -781,6 +794,7 @@ class AbstractChord:
 
     # AbstractChord object unicode identifier:
     _marker = _settings.MARKERS['AbstractChord']
+    _unknown_char = _settings.CHARACTERS['unknown_chord']
 
 ################################################################################
 
@@ -1781,7 +1795,7 @@ class ChordList(list):
         assert isinstance(key, Key)
         return key
 
-    def play(self, chord_delay=1, note_delay=0.1, duration=2.5, octave=None, falloff=True, block=False, type='fast', **kwargs):
+    def play(self, chord_delay=1, note_delay=0, duration=2.5, octave=None, falloff=True, block=False, type='fast', **kwargs):
         """play this chordlist as audio"""
         chord_waves = [c._melody_wave(duration=duration, delay=note_delay, octave=octave, type=type, **kwargs) for c in self]
         from .audio import arrange_melody, play_wave, play_melody

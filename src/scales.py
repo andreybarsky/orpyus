@@ -1,7 +1,7 @@
 from .intervals import *
 # from scales import interval_scale_names, key_name_intervals
-from .util import rotate_list, reverse_dict, unpack_and_reverse_dict, numeral_subscript, reduce_aliases, check_all, log
-from .chords import Factors, AbstractChord, Chord, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
+from .util import ModDict, rotate_list, reverse_dict, reverse_mod_dict, unpack_and_reverse_dict, numeral_subscript, reduce_aliases, check_all, log
+from .chords import Factors, AbstractChord, Chord, ChordList, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
 from .qualities import ChordModifier, Quality
 from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental
 from .display import chord_table
@@ -242,6 +242,8 @@ class ScaleDegree(int):
         Scale object as the parent and instantiates a ScaleDegree of the
         appropriate order on the desired degree of that scale"""
         return ScaleDegree(degree, scale.factors.max_degree)
+    # convenience alias:
+    from_scale = of_scale
 
     # mathematical operations on scale degrees preserve extended degree and scale size:
     def __add__(self, other):
@@ -360,12 +362,12 @@ class Scale:
         # now we figure out how many degrees this scale has, and allocate degree_intervals accordingly:
         self.num_degrees = len(self.factors)
         self.degrees = [ScaleDegree(d, num_degrees = self.num_degrees) for d in range(1, self.num_degrees+1)]
-        self.degree_intervals = {d: self.factor_intervals[f] for d,f in zip(self.degrees, self.factors)}
-        self.interval_degrees = reverse_dict(self.degree_intervals)
-        self.interval_factors = reverse_dict(self.factor_intervals)
+        self.degree_intervals = ModDict({d: self.factor_intervals[f] for d,f in zip(self.degrees, self.factors)}, index=1, raise_values=True)
+        self.interval_degrees = reverse_mod_dict(self.degree_intervals, index=0, raise_values=True)
+        self.interval_factors = reverse_mod_dict(self.factor_intervals, index=0, raise_values=True)
 
-        self.factor_degrees = {f:d for f,d in zip(self.factors, self.degrees)}
-        self.degree_factors = {d:f for f,d in zip(self.factors, self.degrees)}
+        self.factor_degrees = ModDict({f:d for f,d in zip(self.factors, self.degrees)}, index=1, raise_values=True)
+        self.degree_factors = ModDict({d:f for d,f in zip(self.degrees, self.factors)}, index=1, max_key=self.num_degrees)
 
         # the .intervals attribute includes both factor ('diatonic') and chromatic ('passing') intervals:
         self.intervals = IntervalList(list(self.factor_intervals.values()) + self.chromatic_intervals).sorted()
@@ -379,6 +381,12 @@ class Scale:
     def _reparse_args(self, name, intervals, factors):
         """detect if intervals or factors have been given as first arg instead of name,
         and return corrected (name, intervals, factors) tuple"""
+        # first see if we've just been given an existing Scale object:
+        if isinstance(name, Scale):
+            # if so, strip its factors and move on
+            factors = name.factors
+            name = None
+
         if isinstance(name, (list, tuple)):
             # interpret first-argument list as an intervals input, not a name input
             intervals = name
@@ -472,7 +480,7 @@ class Scale:
         # now factors and intervals have necessarily been set, both including the tonic,
         # including any alterations and modal rotations that needed to be applied
         # so we can produce the factor_intervals; mapping of whole-tone degrees to their intervals:
-        factor_intervals = {f:iv for f,iv in zip(factors, intervals)}
+        factor_intervals = ModDict({f:iv for f,iv in zip(factors, intervals)}, index=1, raise_values=True)
 
         return factors, factor_intervals
 
@@ -561,14 +569,14 @@ class Scale:
         return self.get_modes()
 
     def compute_best_pentatonic(self, *args, **kwargs):
-        ranked_pentatonics = list(self.compute_pentatonics(*args, **kwargs).keys())
+        ranked_pentatonics = list(self.compute_pentatonics(*args, display=False, **kwargs).keys())
         return ranked_pentatonics[0]
 
-    def compute_pentatonics(self, preserve_character=False, preserve_quality=False):
+    def compute_pentatonics(self, display=True, preserve_character=True, preserve_quality=False, **kwargs):
         """Given this scale and its degree-intervals,
         find the size-5 subset of its degree-intervals that maximises pairwise consonance"""
         assert self.order > 5, "Cannot compute pentatonics of a scale with order 5 or less"
-        candidates = []
+        candidates = {}
         if preserve_character:
             character = self.character
             possible_degrees_to_exclude = [d for d, iv in self.degree_intervals.items() if ((d != 1) and (iv not in character))]
@@ -579,14 +587,32 @@ class Scale:
             ... # preserve the (major or minor) third in this scale if it has one?
 
         for deg1 in possible_degrees_to_exclude:
-            other_degrees_to_exclude = [d for d in possible_degrees_to_exclude if d not in {1, deg1}]
+            other_degrees_to_exclude = [d for d in possible_degrees_to_exclude if (d not in {1, deg1} and d > deg1)]
             for deg2 in other_degrees_to_exclude:
                 remaining_degrees = [d for d in self.degree_intervals.keys() if d not in {deg1, deg2}]
                 subscale_candidate = self.subscale(keep=remaining_degrees)
-                subscale_candidate.assigned_name = f'{self.name} omit({deg1},{deg2})'
-                candidates.append(subscale_candidate)
-        sorted_cands = sorted(candidates, key = lambda x: (x.consonance), reverse=True)
-        return {x: round(x.consonance,3) for x in sorted_cands}
+                subscale_candidate.assigned_name = f'{self.name} omit({int(deg1)},{int(deg2)})'
+                candidates[subscale_candidate] = subscale_candidate.consonance
+        sorted_cands = sorted(candidates.keys(), key = lambda x: (x.consonance), reverse=True)
+
+        if display:
+            from .display import DataFrame
+            pres_str = f'\n    while preserving scale character: {",".join(character.as_factors)}' if preserve_character else ''
+            title = f'Computed pentatonic scales of {self}{pres_str}'
+            print(title)
+
+            df = DataFrame(['Subscale', 'Factors', 'Omit', 'Cons.'])
+            for cand in sorted_cands:
+                cand_iv_key = (cand.intervals, cand.chromatic_intervals if len(cand.chromatic_intervals) > 0 else None)
+                name = cand.assigned_name if cand_iv_key not in canonical_scale_interval_names else canonical_scale_interval_names[cand_iv_key]
+                omitted = [str(f) for f in self.factors if f not in cand.factors]
+                # kept = [str(f) for f in cand.factors if f in self.factors]
+                factors_str = str(cand.factors)[1:-1]
+                df.append([name, factors_str, ','.join(omitted), round(cand.consonance,3)])
+            df.show(margin=' | ', **kwargs)
+
+        else:
+            return {x: round(x.consonance,3) for x in sorted_cands}
 
     @property
     def pentatonic(self):
@@ -847,7 +873,8 @@ class Scale:
         scale_intervals = [self.get_interval_from_degree(i) for i in root_offsets]
         # shift left to get chord that starts on root:
         start_interval = scale_intervals[0]
-        chord_intervals = IntervalList(scale_intervals) - start_interval
+        # drop degree from intervals (and cast away from IrregularInterval objects) to get nice chord names:
+        chord_intervals = IntervalList([Interval(iv.value) for iv in scale_intervals]) - start_interval
         return ScaleChord(chord_intervals, scale=self, degree=i)
 
     def chord(self, i, order=3):
@@ -973,22 +1000,25 @@ class Scale:
         return self.get_tertian_chord(i, order)
     tertian = tertian_chord
 
-    def get_chords(self, order=3, display=False, **kwargs):
+    def get_chords(self, order=3, display=False, pad=False, **kwargs):
         """returns an ordered dict of the AbstractChords built on every degree
         of this Scale"""
-        scale_chords = {}
+        scale_chords = []
         for d in self.degrees:
-            scale_chords[d] = self.get_chord(d, order=order)
+            scale_chords.append(self.get_chord(d, order=order))
+        if pad:
+            # add an extra tonic chord on top:
+            scale_chords.append(self.get_chord(self.degrees[0]**1, order=order))
         if display:
             title = f"Spaced-degree chords over: {self.__repr__()}"
             print(title)
             members = 'intervals' if type(self) == Scale  else 'notes'
-            chord_table(scale_chords.values(),
+            chord_table(scale_chords,
                         columns=['idx', 'chord', members, 'degrees', 'tert', 'cons'],
                         parent_scale=self, parent_degree='idx', margin=' | ',
                         **kwargs)
         else:
-            return scale_chords
+            return ChordList(scale_chords)
     @property
     def chords(self):
         return self.get_chords(display=False)
@@ -1022,19 +1052,19 @@ class Scale:
     def get_tertian_chords(self, order=3, prefer_chromatic=False, display=False, **kwargs):
         """returns an ordered dict of the (tertian) AbstractChords built on
        every degree of this Scale"""
-        scale_chords = {}
+        scale_chords = []
         for d in self.degrees:
-            scale_chords[d] = self.get_tertian_chord(d, order=order, prefer_chromatic=prefer_chromatic)
+            scale_chords.append(self.get_tertian_chord(d, order=order, prefer_chromatic=prefer_chromatic))
         if display:
             title = f"Attempted tertian chords over: {self.__repr__()}"
             print(title)
             members = 'intervals' if type(self) == Scale  else 'notes'
-            chord_table(scale_chords.values(),
+            chord_table(scale_chords,
                         columns=['idx', 'chord', members, 'degrees', 'tert', 'cons'],
                         parent_scale=self, parent_degree='idx', margin=' | ',
                         **kwargs)
         else:
-            return scale_chords
+            return ChordList(scale_chords)
     @property
     def tertian_chords(self):
         return self.get_tertian_chords(display=False)
