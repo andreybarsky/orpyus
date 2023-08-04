@@ -299,13 +299,16 @@ class Interval:
         else:
             return self.re_cache(-self.value)
 
-    def flatten(self):
+    def flatten(self, octaves=1):
         """returns Interval object corresponding to this interval's mod-value and mod-degree"""
         if self.value < 0:
             # invert before flattening:
-            return (~self).flatten()
+            return (~self).flatten(octaves=octaves)
         else:
-            return self.re_cache(self.mod, self.degree)
+            # allow for flattening into multiple octaves:
+            mod_value = self.value % (self.span_size * octaves)
+            mod_degree = ((self.extended_degree - 1) % (self.max_degree * octaves)) + 1
+            return self.re_cache(mod_value, mod_degree)
 
     def __eq__(self, other):
         """Value equivalence comparison for intervals - returns True if both have
@@ -625,6 +628,12 @@ class IntervalList(list):
         self.values_cached = True # used to determine if cache needs to be cleared by mutation
         return set([s.value for s in self])
 
+    @property
+    def octave_span(self):
+        """an IntervalList's octave span is the octave span between its min and max members"""
+        span = max(self) - min(self)
+        return span.octave_span
+
     def append(self, item):
         """as list.append, but updates our set object as well"""
         super().append(item)
@@ -708,10 +717,10 @@ class IntervalList(list):
         but IntervalList([2,7,12]).strict_pad(left=True) gives intervals [0,2,7]  """
         return self.strip().pad(left, right)
 
-    def flatten(self, duplicates=False):
+    def flatten(self, octaves=1, duplicates=False):
         """flatten all intervals in this list and return them as a new (sorted) list.
         if duplicates=False, remove those that are non-unique. else, keep them. """
-        new_intervals = [i.flatten() for i in self]
+        new_intervals = [i.flatten(octaves=octaves) for i in self]
         if not duplicates:
             new_intervals = list(set(new_intervals))
         return IntervalList(sorted(new_intervals))
@@ -753,13 +762,17 @@ class IntervalList(list):
             # mod into own range: i.e. a list of 5 items, rotated 5 times, is the same as itself
             position = position % len(self)
 
+        # first, rotate the interval list: (now it is non-sorted)
         rotated = self.rotate(position)
-        recentred = rotated - rotated[0] # centres first interval to be root again
-        positive = abs(recentred) # inverts any negative intervals to their positive inversions
-        inverted = positive.unique().sorted()
+        # then add octaves where needed: (to make it sorted)
+        ascending = rotated.make_ascending()
+        # then recentre by subtracting by the first interval:
+        recentred = ascending - ascending[0]
+        # positive = abs(recentred) # inverts any negative intervals to their positive inversions
+        # inverted = positive.unique().sorted()
         # inverted = recentred.flatten()   # inverts negative intervals to their correct values
         # inverted = IntervalList(list(set([~i if i < 0 else i for i in recentred]))).sorted()
-        return inverted
+        return recentred
 
     def stack(self):
         """equivalent to cumsum: returns a new IntervalList based on the successive
@@ -896,6 +909,21 @@ class IntervalList(list):
                 raise Exception(f'Reached max number of iterations while trying to sanitise interval list: {self}')
         log(f'\nFinished after {iter_num} iterations: {cur_list}')
         return cur_list
+
+    def make_ascending(self):
+        """return another version of this IntervalList where all intervals
+        have the same mod value, but are in strictly ascending order
+        by looping through and raising each one by an octave if it is smaller than the previous"""
+        new_ivs = [self[0]]
+        for iv in self[1:]:
+            if iv < new_ivs[-1]:
+                # previous interval is larger than this one
+                # so figure out how many octaves we need to raise this one by:
+                octave_diff = (new_ivs[-1] - iv).octave_span + 1
+                new_ivs.append(iv ** octave_diff)
+            else:
+                new_ivs.append(iv)
+        return IntervalList(new_ivs)
 
     def to_factors(self):
         # alternate string method, reports raised/lowered factor integers instead of major/minor/perfect degrees

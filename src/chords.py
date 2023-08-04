@@ -350,11 +350,12 @@ class AbstractChord:
                     # OR if we have no other registered chord to fall back on
                     if (not has_uninverted_name) or (best_inversion.rarity < supplied_rarity and supplied_rarity > min_inversion_rarity):
                         # adopt the inverted chord's root intervals and inversion instead
+                        original_intervals = intervals
                         intervals = best_inversion.root_intervals
                         inversion = best_inversion.inversion
                         # and one last change (bit of a kludge): if this is a Chord, intercept and change the root:
                         if isinstance(self, Chord):
-                            self.root -= intervals[inversion]
+                            self.root += intervals[inversion]
                     else:
                         # found an inversion but it was too rare to consider and we have another name to use instead
                         inversion = 0
@@ -477,7 +478,7 @@ class AbstractChord:
             return suf
         elif self.intervals in intervals_to_chord_names:
             # set_trace(context=30) # can't remember what is going on here
-            print(f' ++++ Could not find chord by factors ({self.factors}), but found it by inverted intervals: {self.intervals}')
+            log(f' ++++ Could not find chord by factors ({self.factors}), but found it by inverted intervals: {self.intervals}')
             import pdb; pdb.set_trace() # in case this ever comes up
             return intervals_to_chord_names[self.intervals] + f' (inverted from {self.root})'
         elif 5 not in self.factors:
@@ -488,8 +489,9 @@ class AbstractChord:
             # try the same for this chord's inversions? (this gets messy very fast)
 
         # try flattening intervals and seeing if that produces a chord: (i.e. parsing CGE as CEG)
-        if self.intervals.flatten() in intervals_to_chord_names:
-            return intervals_to_chord_names[self.intervals.flatten()]
+        flat_intervals = self.intervals.flatten()
+        if flat_intervals in intervals_to_chord_names:
+            return intervals_to_chord_names[flat_intervals]
         elif self.factors == _major_triad:
             return ''
         elif self.assigned_name is not None:
