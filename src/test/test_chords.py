@@ -6,6 +6,11 @@ def unit_test():
     # test inversion by factor/bass, AbstractChord->Chord initialisation, and unusual note names:
     compare(Chord('E#m7/C'), AbstractChord('m7/2').on_root('F'))
     compare(Chord('E#m7/C'), AbstractChord('m7/2').on_bass('C'))
+    # out-of-bounds inversion:
+    compare(Chord('Cmaj7/5'), Chord('Cmaj7/E'))
+    compare(Chord('Cmaj7/-1'), Chord('Cmaj7/B'))
+    # inversion of compound chords:
+    compare(Chord('CFBbEb'), Chord('C7♯9sus4(no5)')
     # test correct production of root notes/intervals and inverted notes/intervals:
     compare(Chord('Am/C').root_notes, Chord('Am').root_notes)
     compare(Chord('Am/C').root_intervals, Chord('Am').root_intervals)
