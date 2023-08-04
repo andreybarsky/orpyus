@@ -52,12 +52,14 @@ BRACKETS = { 'Interval': ['‹', '›'],
             }
 
 ### CHARACTERS are used in lists to compactly denote certain traits
-CHARACTERS = { 'true': '+',    # e.g. displayed in 'Tertian' column if a chord is tertian
-           'somewhat': '~',    # e.g. displayed in 'Tertian' column if inverted-tertian
-   'chromatic_degree': 'c',    # displayed instead of integer ScaleDegree for a non-degree (chromatic) interval
-      'unknown_chord': '?',    # displayed after root for a chord of unknown type, e.g. C? chord
-'unknown_superscript': 'ˀ',    # as unknown_chord, but used where superscripts are used (e.g. progressions)
-             }
+CHARACTERS = {   'true': '+',    # e.g. displayed in 'Tertian' column if a chord is tertian
+             'somewhat': '~',    # e.g. displayed in 'Tertian' column if inverted-tertian
+     'chromatic_degree': 'c',    # displayed instead of integer ScaleDegree for a non-degree (chromatic) interval
+        'unknown_chord': '?',    # displayed after root for a chord of unknown type, e.g. C? chord
+  'unknown_superscript': 'ˀ',    # as unknown_chord, but used where superscripts are used (e.g. progressions)
+ 'compound_slash_chord': '!',    # displayed after compound slash chords like Am/G
+       'extended_chord': 'ˣ',    # displayed after unnamed extended chords, i.e. CGE as compound Cmaj
+                   }
 
 ############# tuning settings:
 

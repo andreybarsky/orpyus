@@ -9,8 +9,12 @@ def unit_test():
     # out-of-bounds inversion:
     compare(Chord('Cmaj7/5'), Chord('Cmaj7/E'))
     compare(Chord('Cmaj7/-1'), Chord('Cmaj7/B'))
-    # inversion of compound chords:
-    compare(Chord('CFBbEb'), Chord('C7♯9sus4(no5)')
+    # some other potential failure cases:
+    compare(Chord('Am7/F'), Chord('Fmaj9'), 'enharmonic')
+    compare(Chord('ACEF'), Chord('Fmaj7/A'))
+    # including a big one: inversion of compound chords:
+    compare(Chord('CFBbEb'), Chord('C7♯9sus4(no5)'))
+
     # test correct production of root notes/intervals and inverted notes/intervals:
     compare(Chord('Am/C').root_notes, Chord('Am').root_notes)
     compare(Chord('Am/C').root_intervals, Chord('Am').root_intervals)

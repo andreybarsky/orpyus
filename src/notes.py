@@ -119,9 +119,18 @@ class Note:
     @staticmethod
     def from_cache(name=None, position=None, prefer_sharps=None):
         # efficient note init by cache of names to note objects
+
+        # get sharp preference from note name if available:
+        if (prefer_sharps is None) and isinstance(name, str):
+            if parsing.contains_sharp(name):
+                prefer_sharps = True
+            elif parsing.contains_flat(name):
+                prefer_sharps = False
+
         if name is not None:
             if isinstance(name, Note): # recast note object input to string
                 name = name.chroma
+
             if (name, prefer_sharps) in cached_notes:
                 return cached_notes[(name, prefer_sharps)]
             else:
@@ -143,10 +152,12 @@ class Note:
             raise Exception(f'Note init from cache must include one of "name" or "position"')
 
     ## private utility functions:
-    def _set_sharp_preference(self, prefer_sharps):
-        """modify sharp preference in place"""
-        self.prefer_sharps = prefer_sharps
-        self.chroma = preferred_name(self.position, prefer_sharps=self.prefer_sharps)
+
+    #### removed due to caching interaction
+    # def _set_sharp_preference(self, prefer_sharps):
+    #     """modify sharp preference in place"""
+    #     self.prefer_sharps = prefer_sharps
+    #     self.chroma = preferred_name(self.position, prefer_sharps=self.prefer_sharps)
 
     #### magic methods and note constructors:
     def __add__(self, other):
@@ -383,11 +394,12 @@ class OctaveNote(Note):
             chroma = preferred_name(position, prefer_sharps=prefer_sharps)
         return chroma, value, pitch, prefer_sharps
 
-    ## private utility function:
-    def _set_sharp_preference(self, preference):
-        """modify sharp preference in place"""
-        self.prefer_sharps = preference
-        self.chroma = preferred_name(self.position, prefer_sharps=self.prefer_sharps)
+    #### removed due to caching interaction
+    # ## private utility function:
+    # def _set_sharp_preference(self, preference):
+    #     """modify sharp preference in place"""
+    #     self.prefer_sharps = preference
+    #     self.chroma = preferred_name(self.position, prefer_sharps=self.prefer_sharps)
 
     #### operators & magic methods:
     def __add__(self, interval):
@@ -608,11 +620,11 @@ class NoteList(list):
             strip_octave = self.strip_octave
         if isinstance(note_obj, OctaveNote):
             if strip_octave:
-                return Note.from_cache(position=note_obj.position)
+                return Note.from_cache(position=note_obj.position, prefer_sharps=note_obj.prefer_sharps)
             else:
                 return OctaveNote(note_obj.name)
         elif isinstance(note_obj, Note):
-            return Note.from_cache(position=note_obj.position)
+            return Note.from_cache(position=note_obj.position, prefer_sharps=note_obj.prefer_sharps)
         else:
             raise TypeError(f'Cannot recast non-Note object: {type(note_obj)}')
 

@@ -229,40 +229,43 @@ class Key(Scale):
             # detect from tonic and quality
             prefer_sharps = self._detect_sharp_preference()
 
-        self.tonic._set_sharp_preference(prefer_sharps)
-        # by default, the Key's prefer_sharps attribute is the same as the tonic:
         self.prefer_sharps = prefer_sharps
+        # by default, the Key's prefer_sharps attribute is the same as the tonic:
+        self.tonic = Note(self.tonic.position, prefer_sharps=prefer_sharps)
+        # reinitialise note objects (to avoid caching interactions)
 
         # but in general, flat/sharp preference of a Key is decided by having one note letter per degree of the scale:
 
-        if self.is_natural or self.is_subscale:
+        if self.is_natural() or self.is_natural_pentatonic():
             # computation not needed for non-natural scales; and no idea how to handle subscales yet
             # just assign same sharp preference as tonic to every note:
-            for n in self.notes:
-                n._set_sharp_preference(prefer_sharps)
+            self.notes = NoteList([Note(n.position, prefer_sharps=prefer_sharps) for n in self.notes])
 
         else:
             # compute flat/sharp preference by assigning one note to each natural note name
             tonic_nat = self.tonic.chroma[0] # one of the few cases where note sharp preference matters
             next_nat = parsing.next_natural_note[tonic_nat]
+            new_notes = [self.tonic]
             for d in range(2,8):
                 n = self.degree_notes[d]
                 if n.name == next_nat:
                     # this is a natural note, so its sharp preference shouldn't matter,
                     # but set it to the tonic's anyway for consistency
-                    n._set_sharp_preference(prefer_sharps)
+                    n = Note(n.position, prefer_sharps=prefer_sharps)
                 else:
                     # which accidental would make this note's chroma include the next natural note?
                     if n.flat_name[0] == next_nat:
-                        n._set_sharp_preference(False)
+                        n = Note(n.position, prefer_sharps=False)
                     elif n.sharp_name[0] == next_nat:
-                        n._set_sharp_preference(True)
+                        n = Note(n.position, prefer_sharps=True)
                     else:
                         # this note needs to be a double sharp or double flat or something
                         # log(f'Found a possible case for a double-sharp or double-flat: degree {d} ({n}) in scale: {self}')
                         # fall back on same as tonic:
-                        n._set_sharp_preference(prefer_sharps)
+                        n = Note(n.position, prefer_sharps=prefer_sharps)
+                new_notes.append(n)
                 next_nat = parsing.next_natural_note[next_nat]
+            self.notes = NoteList(new_notes)
 
     def _set_key_signature(self):
         """reads the sharp and flat preference of the notes inside this Key
@@ -456,15 +459,16 @@ class Key(Scale):
             return item in self.notes
         elif type(item) is Chord:
             # chord is 'in' this Key if all of its notes are:
-            if item.root not in self.notes:
-                return False
-            else:
-                for note in item.notes:
-                    if note not in self.notes:
-                        return False
+            for note in item.notes:
+                if note not in self.notes:
+                    return False
             return True
-        elif isinstance(item, ScaleChord):
-            # ScaleChords exist on a specific degree of their scale/key:
+
+        elif isinstance(item, AbstractChord):
+            if not isinstance(item, ScaleChord):
+                raise TypeError("A Scale/Key does not know if it contains a given AbstractChord without further clarification")
+            # ScaleChords exist on a specific degree of their scale/key,
+            # so we can tell if this scale contains that chord on that degree:
             abs_chord = item.abstract()
             return self.contains_degree_chord(item.degree, abs_chord)
         elif isinstance(item, (list, tuple)):
@@ -473,6 +477,7 @@ class Key(Scale):
                 if subitem not in self:
                     return False
             return True
+
         else:
             raise TypeError(f'Key.__contains__ not defined for items of type: {type(item)}')
 
@@ -490,6 +495,7 @@ class Key(Scale):
         so this method is also inherited by all Scale subclasses"""
         from .guitar import Guitar
         Guitar(tuning).show_key(self, **kwargs)
+    on_guitar = show
 
     def play(self, *args, **kwargs):
         # plays the notes in this key (we also add an octave over root on top for resolution)
@@ -579,6 +585,9 @@ class KeyChord(Chord, ScaleChord):
         in_str = 'not ' if not self.in_key else ''
         return f'{Chord.__repr__(self)} ({in_str}in: {self.key})'
 
+    # overwrites Chord.from_cache:
+    def from_cache(self, *args, **kwargs):
+        raise TypeError('KeyChords are not cached')
 
 def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, require_roots=True,
                     display=True, return_matches=False, natural_only=False,

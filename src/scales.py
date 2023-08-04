@@ -332,7 +332,7 @@ class ScaleChord(AbstractChord):
 
     def __repr__(self):
         in_str = 'not ' if not self.in_scale else ''
-        return f'{Chord.__repr__(self)} ({in_str}in: {self.scale})'
+        return f'{AbstractChord.__repr__(self)} ({in_str}in: {self.scale})'
 
 ### Scale class that spans diatonic scales, subscales, blues scales, octatonic scales and all the rest:
 
@@ -1001,7 +1001,7 @@ class Scale:
     tertian = tertian_chord
 
     def get_chords(self, order=3, display=False, pad=False, **kwargs):
-        """returns an ordered dict of the AbstractChords built on every degree
+        """returns a ChordList of the AbstractChords built on every degree
         of this Scale"""
         scale_chords = []
         for d in self.degrees:
@@ -1039,18 +1039,17 @@ class Scale:
         return self.get_chords(order=7, display=False)
 
     def show_chords(self, order=3, display=True):
-        if display:
-            self.get_chords(order=order, display=display)
-        else:
-            return self.get_chords(order=order, display=display)
+        # just a wrapper around get_chords but with default display=True
+        return self.get_chords(order=order, display=display)
     # convenience aliases:
     harmonise = harmonize = show_chords
+    # noun accessor:
     @property
     def harmony(self):
         return self.harmonise()
 
     def get_tertian_chords(self, order=3, prefer_chromatic=False, display=False, **kwargs):
-        """returns an ordered dict of the (tertian) AbstractChords built on
+        """returns a ChordList of the (tertian) AbstractChords built on
        every degree of this Scale"""
         scale_chords = []
         for d in self.degrees:
@@ -1073,6 +1072,9 @@ class Scale:
     def show_tertian_chords(self, order=3):
         self.get_tertian_chords(order=order, display=True)
     harmonise_tertian = harmonize_tertian = show_tertians = show_tertian_chords
+    @property
+    def tertian_harmony(self):
+        return self.harmonise_tertian()
 
     def valid_chords_on(self, degree, order=None, min_order=3, max_order=4,
         min_likelihood=0.7, min_consonance=0, max_results=None, sort_by='likelihood',
@@ -1203,7 +1205,10 @@ class Scale:
                 if iv not in padded_intervals:
                     return False
             return True
-        elif type(item) is ScaleChord:
+        elif isinstance(item, AbstractChord):
+            if not isinstance(item, ScaleChord):
+                raise TypeError("""A Scale does not know if it contains a given AbstractChord;
+                                try Scale.contains_degree_chord or passing a ScaleChord object instead""")
             # a scale cannot be asked if it contains an AbstractChord without any other qualiifers,
             # but a ScaleChord contains its degree within the scale, so we wrap around
             # contains_degree_chord in this case:
