@@ -321,15 +321,43 @@ class AbstractChord:
             # sanitise interval list input, expect root to be provided:
 
             # if it is a list of ints, catch common thirds/fifths:
-            if isinstance(intervals, (tuple, list)) and check_all(intervals, 'isinstance', int):
+            if isinstance(intervals, (tuple, list)): # and check_all(intervals, 'isinstance', int):
                 sanitised_intervals = []
-                for i in intervals:
-                    if i in {3,4}: # could this be a major/minor third?
-                        sanitised_intervals.append(Interval.from_cache(i, degree=3))
-                    elif i in {6,7,8}: # could this be a dim/perf/aug fifth?
-                        sanitised_intervals.append(Interval.from_cache(i, degree=5))
-                    else:
-                        sanitised_intervals.append(i)
+                chord_tones = {3,5,7,9,11,13}
+                for iv in intervals:
+                    val = int(iv)
+                    common_degrees = Interval.from_cache(val).common_ext_degrees
+                    val_used = False
+                    for c in common_degrees:
+                        if c in chord_tones:
+                            sanitised_intervals.append(Interval.from_cache(val, degree=c))
+                            chord_tones.remove(c)
+                            val_used = True
+                            break
+                    if not val_used:
+                        sanitised_intervals.append(iv)
+                print(f'Intervals sanitised from {intervals} to {sanitised_intervals}')
+                if IntervalList(sanitised_intervals) != intervals:
+                    print(f'\n\n  and it mattered!\n\n')
+                    import ipdb; pdb.set_trace()
+
+                    # for tone in chord_tones:
+                    #     potential_tone_degrees = common_degree_intervals[tone]
+                    #     if val in potential_tone_degrees:
+                    #         sanitised_intervals.append(Interval.from_cache(val, degree=tone))
+                    #         break
+                    #
+                    # possible_values = ... {3,4}
+                    # if i in possible_values:
+                    #     proper_degree = ... 3
+                    #     sanitised_intervals.append(Interval.from_cache(i, degree=proper_degree))
+                    #
+                    # if i in {3,4}: # could this be a major/minor third?
+                    #     sanitised_intervals.append(Interval.from_cache(i, degree=3))
+                    # elif i in {6,7,8}: # could this be a dim/perf/aug fifth?
+                    #     sanitised_intervals.append(Interval.from_cache(i, degree=5))
+                    # else:
+                    #     sanitised_intervals.append(i)
                 intervals = sanitised_intervals
 
             # cast to IntervalList object, pad to canonical chord intervals form with left bass root but not upper octave root
@@ -1593,8 +1621,8 @@ chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor 
                           1: ['m7', 'maj7', 'dim', 'sus4', 'sus2', 'add9'], # maj/min7s, dim triads, and common alterations like sus2/4 and add9
                           2: ['9', 'maj9', 'm9', 'aug', '6', 'm6'],
                           3: ['dim7', 'hdim7', 'aug7', 'mmaj7', f'7{fl}5', f'7{sh}9', f'7{fl}9', f'({fl}5)'],
-                          4: ['dim9', 'dmin9', 'mmaj9', 'hdmin9', 'dimM7', 'augM7', 'augM9', f'maj13{sh}11'] + [f'{q}{d}' for q in ('', 'm', 'maj') for d in (11,13)],
-                          5: ['maj13', 'add11'] + [f'{q}{d}' for q in ('dim', 'mmaj') for d in (11,13)],
+                          4: ['dim9', 'dmin9', 'mmaj9', 'hdmin9', 'dimM7', 'augM7', 'augM9', 'maj13'] + [f'{q}{d}' for q in ('', 'm', 'maj') for d in (11,13)],
+                          5: [f'maj13{nat}11', 'add11'] + [f'{q}{d}' for q in ('dim', 'mmaj') for d in (11,13)],
                           6: [], 7: [], 8: [], 9: []}
 
 # removed no5 - handled better by incomplete chord matching
@@ -1844,9 +1872,9 @@ class ChordList(list):
             # use the quality of the chord if it is not indeterminate, otherwise use the quality of the key:
             chord_mod = c.quality if not c.quality.perfect else key.quality
             if chord_mod.major_ish:
-                numerals.append(numerals_roman[d])
+                numerals.append(parsing.numerals_roman[d])
             elif chord_mod.minor_ish:
-                numerals.append(numerals_roman[d].lower())
+                numerals.append(parsing.numerals_roman[d].lower())
             else:
                 raise Exception(f'Could not figure out whether to make numeral upper or lowercase: {d}:{c} in {key} (should never happen)')
 

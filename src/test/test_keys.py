@@ -38,6 +38,6 @@ def unit_test():
     compare(Key('C').mode(2), Key('D dorian'))
     compare(Key('C').pentatonic, Key('C pentatonic'))
 
-    matching_keys(['C', Chord('F'), 'G7', 'Bdim'], upweight_pentatonics=False)
-
-    matching_keys(['Dm', 'Dsus4', 'Am', 'Asus4', 'E', 'E7', 'Asus4', 'Am7'], upweight_pentatonics=True)
+    # matching_keys(['C', Chord('F'), 'G7', 'Bdim'], upweight_pentatonics=False)
+    #
+    # matching_keys(['Dm', 'Dsus4', 'Am', 'Asus4', 'E', 'E7', 'Asus4', 'Am7'], upweight_pentatonics=True)

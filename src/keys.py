@@ -2,8 +2,8 @@ from . import notes, parsing, _settings
 from .parsing import fl, sh, nat, dfl, dsh
 from .intervals import Interval, IntervalList
 from .notes import Note, NoteList
-from .scales import Scale, ScaleFactors, ScaleDegree, ScaleChord, NaturalMajor, NaturalMinor, parallel_scales, canonical_scale_interval_names
-from .chords import Chord, AbstractChord
+from .scales import Scale, ScaleFactors, ScaleDegree, ScaleChord, NaturalMajor, NaturalMinor, parallel_scales, canonical_scale_interval_names, all_scale_name_factors
+from .chords import Chord, AbstractChord, ChordList
 from .util import check_all, precision_recall, reverse_dict, log
 
 from collections import Counter
@@ -67,7 +67,6 @@ class Key(Scale):
             # ignore intervals/factors/root inputs
             assert tonic is None and intervals is None and name is None
             note_list = NoteList(notes)
-            assert len(note_list) == 7, f"a Key must have exactly 7 notes, but there are {len(note_list)} in: {note_list}"
             # recover intervals and tonic, and continue to init as normal:
             intervals = NoteList(notes).ascending_intervals()
             tonic = note_list[0]
@@ -89,18 +88,13 @@ class Key(Scale):
         # (this sets self.factors, self.degrees, self.intervals, self.chromatic_intervals, and their mappings
 
         # set Key-specific attributes: notes, degree_notes, etc.
+
         self.notes = NoteList([self.tonic + i for i in self.intervals])
         self.chromatic_notes = [self.tonic + iv for iv in self.chromatic_intervals]
 
-        self.degree_notes = {d: self.tonic + iv for d,iv in self.degree_intervals.items()}
-        self.factor_notes = {f: self.tonic + iv for f,iv in self.factor_intervals.items()}
-        self.interval_notes = {iv:n for n,iv in zip(self.notes, self.intervals)}
-
-        self.note_degrees = reverse_dict(self.degree_notes)
-        self.note_factors = reverse_dict(self.factor_notes)
-        self.note_intervals = reverse_dict(self.interval_notes)
-
-
+        self._set_sharp_preference() # sets tonic and notes attrs to have appropriate spelling
+        self._set_note_mappings() # sets degree_notes, factor_notes, etc. and their inverses
+        self._set_key_signature()
 
         # # used only for Keys with strange chromatic notes not built on integer degrees, like blues notes
         # if self.chromatic_intervals is not None:
@@ -126,8 +120,7 @@ class Key(Scale):
         # self.note_base_degrees = self.note_degrees
 
         # update this Key's notes to prefer sharps/flats depending on its tonic:
-        self._set_sharp_preference()
-        self._set_key_signature()
+
 
 
     ####### internal init subroutines:
@@ -230,24 +223,28 @@ class Key(Scale):
             prefer_sharps = self._detect_sharp_preference()
 
         self.prefer_sharps = prefer_sharps
-        # by default, the Key's prefer_sharps attribute is the same as the tonic:
-        self.tonic = Note(self.tonic.position, prefer_sharps=prefer_sharps)
-        # reinitialise note objects (to avoid caching interactions)
 
-        # but in general, flat/sharp preference of a Key is decided by having one note letter per degree of the scale:
+        if self.tonic.prefer_sharps != prefer_sharps:
+            # replace the tonic if it has a different sharp preference.
+            # n.b. we reinitialise note objects (to avoid caching interactions)
+            self.tonic = Note(self.tonic.position, prefer_sharps=prefer_sharps)
 
         if self.is_natural() or self.is_natural_pentatonic():
-            # computation not needed for non-natural scales; and no idea how to handle subscales yet
-            # just assign same sharp preference as tonic to every note:
-            self.notes = NoteList([Note(n.position, prefer_sharps=prefer_sharps) for n in self.notes])
+            # no complex computation needed for non-natural scales
+            # just assign same sharp preference as tonic to every note.
+            self.notes = NoteList([Note(n.position, prefer_sharps=prefer_sharps) if n.prefer_sharps!=prefer_sharps  else n  for n in self.notes ])
 
         else:
             # compute flat/sharp preference by assigning one note to each natural note name
             tonic_nat = self.tonic.chroma[0] # one of the few cases where note sharp preference matters
             next_nat = parsing.next_natural_note[tonic_nat]
-            new_notes = [self.tonic]
-            for d in range(2,8):
-                n = self.degree_notes[d]
+            new_degree_notes = [self.tonic]
+
+            which_chromatic = self.which_intervals_chromatic()
+            non_chromatic_notes = [n for i,n in enumerate(self.notes) if not which_chromatic[i]]
+
+            for d in self.degrees[1:]:
+                n = non_chromatic_notes[int(d)-1]
                 if n.name == next_nat:
                     # this is a natural note, so its sharp preference shouldn't matter,
                     # but set it to the tonic's anyway for consistency
@@ -263,9 +260,28 @@ class Key(Scale):
                         # log(f'Found a possible case for a double-sharp or double-flat: degree {d} ({n}) in scale: {self}')
                         # fall back on same as tonic:
                         n = Note(n.position, prefer_sharps=prefer_sharps)
-                new_notes.append(n)
+                new_degree_notes.append(n)
                 next_nat = parsing.next_natural_note[next_nat]
+            # combine with existing chromatic notes (which are not changed)
+            new_notes = [new_degree_notes[i]  if not which_chromatic[i]  else self.notes[i] for i in range(len(self.notes))]
             self.notes = NoteList(new_notes)
+
+    def _set_note_mappings(self):
+        """based on self.notes and self.chromatic_notes,
+        defines all the note mappings inside this Key object"""
+
+        which_chromatic = self.which_intervals_chromatic()
+        non_chromatic_notes = [n for i,n in enumerate(self.notes) if not which_chromatic[i]]
+
+        self.degree_notes = {d: n for d,n in zip(self.degrees, non_chromatic_notes)}
+        self.factor_notes = {f: n for f,n in zip(self.factors, non_chromatic_notes)}
+        self.interval_notes = {iv:n for n,iv in zip(self.notes, self.intervals)}
+        # self.degree_notes = {d: self.tonic + iv for d,iv in self.degree_intervals.items()}
+        # self.factor_notes = {f: self.tonic + iv for f,iv in self.factor_intervals.items()}
+
+        self.note_degrees = reverse_dict(self.degree_notes)
+        self.note_factors = reverse_dict(self.factor_notes)
+        self.note_intervals = reverse_dict(self.interval_notes)
 
     def _set_key_signature(self):
         """reads the sharp and flat preference of the notes inside this Key
@@ -383,11 +399,44 @@ class Key(Scale):
     #     """as Scale.subscale, but adds this key's tonic as well and initialises a Subkey instead"""
     #     return Subkey(parent_scale=self, degrees=degrees, omit=omit, chromatic_intervals=chromatic_intervals, assigned_name=name, tonic=self.tonic) # [self[s] for s in degrees]
 
+    def subscale(self, keep=None, omit=None):
+        """as Scale.subscale, but returns a Key instead (a subkey?)"""
+        # should we leave subscale as is and implement Key.subkey instead?
+        sub = Scale.subscale(self, keep=keep, omit=omit)
+        return sub.on_tonic(self.tonic)
 
-    @property
-    def pentatonic(self):
+    def get_pentatonic(self):
         """as Scale.pentatonic, but returns a Key on the same tonic"""
-        return Scale.get_pentatonic(self).on_tonic(self.tonic)
+        # check if a pentatonic scale is defined under this scale's canonical name:
+        naive_pentatonic_name = f'{self.scale_name} pentatonic'
+        if naive_pentatonic_name in all_scale_name_factors:
+            return Scale(naive_pentatonic_name).on_tonic(self.tonic)
+        else:
+            # this will already be a Key due to inheritance of compute_pentatonics:
+            return self.compute_best_pentatonic(preserve_character=True)
+
+    def compute_pentatonics(self, *args, display=True, **kwargs):
+        sorted_pentatonic_scales = Scale.compute_pentatonics(self, *args, display=False, **kwargs)
+        if display:
+            from .display import DataFrame
+            title = f'Computed pentatonic scales of {self} (in {self.tonic.chroma})'
+            pres_str = f'\n    while preserving scale character: {",".join(character.as_factors)}' if preserve_character else ''
+            print(title + pres_str)
+
+            df = DataFrame(['Subscale', 'Notes', 'Factors',  'Omit', 'Cons.'])
+            for cand in sorted_pentatonic_scales:
+                cand_iv_key = (cand.intervals, cand.chromatic_intervals if len(cand.chromatic_intervals) > 0 else None)
+                scale_name = cand.assigned_name if cand_iv_key not in canonical_scale_interval_names else canonical_scale_interval_names[cand_iv_key]
+                name = f'{self.tonic.chroma}{scale_name}'
+                pent_notes = str(cand.notes)[1:-1]
+                factors_str = str(cand.factors)[1:-1]
+                omitted = [str(f) for f in self.factors if f not in cand.factors]
+                # kept = [str(f) for f in cand.factors if f in self.factors]
+                df.append([name, pent_notes, factors_str, ','.join(omitted), round(cand.consonance,3)])
+            df.show(margin=' | ', **kwargs)
+        else:
+            sorted_pentatonic_keys = [s.on_tonic(self.tonic) for s in sorted_pentatonic_scales]
+            return {x: round(x.consonance,3) for x in sorted_pentatonic_keys}
 
     @property
     def relative_minor(self):
@@ -488,7 +537,8 @@ class Key(Scale):
             raise TypeError(f'__eq__ not defined between Key and {type(other)}')
 
     def __hash__(self):
-        return hash((self.notes, self.diatonic_intervals, self.intervals, self.chromatic_intervals))
+        """Keys hash by their Factors and their tonic"""
+        return hash((self.factors, self.tonic))
 
     def show(self, tuning='EADGBE', **kwargs):
         """just a wrapper around the Guitar.show method, which is generic to most musical classes,
@@ -589,215 +639,215 @@ class KeyChord(Chord, ScaleChord):
     def from_cache(self, *args, **kwargs):
         raise TypeError('KeyChords are not cached')
 
-def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, require_roots=True,
-                    display=True, return_matches=False, natural_only=False,
-                    upweight_first=True, upweight_last=True, upweight_chord_roots=True, upweight_key_tonics=True, upweight_pentatonics=False, # upweight_pentatonics might be broken
-                    min_recall=0.8, min_precision=0.7, min_likelihood=0.5, max_results=5):
-    """from an unordered set of chords, return a dict of candidate keys that could match those chord.
-    we make no assumptions about the chord list, except in the case of assume_tonic, where we slightly
-    privilege keys that have their tonic on the root of the starting chord in chord list."""
+# def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, require_roots=True,
+#                     display=True, return_matches=False, natural_only=False,
+#                     upweight_first=True, upweight_last=True, upweight_chord_roots=True, upweight_key_tonics=True, upweight_pentatonics=False, # upweight_pentatonics might be broken
+#                     min_recall=0.8, min_precision=0.7, min_likelihood=0.5, max_results=5):
+#     """from an unordered set of chords, return a dict of candidate keys that could match those chord.
+#     we make no assumptions about the chord list, except in the case of assume_tonic, where we slightly
+#     privilege keys that have their tonic on the root of the starting chord in chord list."""
+#
+#     # TBI: if this needs to be made faster, could we check across all Scale intervals, rather than across all Key notes?
+#
+#     if isinstance(chords, str):
+#         try:
+#             chord_names = ChordList(chords)
+#         except:
+#             # catch an edge case: have we been fed a note list as first arg?
+#             note_names = parse_out_note_names(chords, graceful_fail=True)
+#             if note_names is not False:
+#                 # reallocate args
+#                 notes = NoteList(note_names)
+#                 chords = None
+#             else:
+#                 raise ValueError(f'Could not understand matching_keys string input as a list of chords or notes: {chords}')
+#
+#     if chords is not None:
+#         if not isinstance(chords, ChordList):
+#             chords = ChordList(chords)
+#         # assert isinstance(chords, (list, tuple)), f'chord list input to matching_keys must be an iterable, but got: {type(chords)}'
+#         # chords = [Chord(c) if isinstance(c, str) else c for c in chords]
+#
+#         # assert check_all(chords, 'isinstance', Chord), f"chord list input to matching_keys must be a list of Chords (or strings that cast to Chords), but got: {[type(c) for c in chords]}"
+#
+#         # keep track of the number of times each note appears in our chord list,
+#         # which will be the item weights to our precision_recall function:
+#         note_counts = Counter()
+#
+#         for chord in chords:
+#             note_counts.update(chord.notes)
+#             if upweight_chord_roots:
+#                 # increase the weight of the root note too:
+#                 note_counts.update([chord.root])
+#
+#         # if assume_tonic:
+#         # upweight all the notes of the first and last chord
+#         first_assumed_tonic = chords[0].root
+#         last_assumed_tonic = chords[-1].root
+#         if upweight_first:
+#             note_counts.update(chords[0].notes)
+#             # and the tonic especially:
+#             note_counts.update([chords[0].notes[0]] * 2)
+#         if upweight_last:
+#             note_counts.update(chords[-1].notes)
+#             note_counts.update([chords[-1].notes[0]] * 2)
+#     elif notes is not None:
+#         # just use notes directly
+#         notes = NoteList(notes)
+#         note_counts = Counter(notes)
+#         # if assume_tonic:
+#         first_assumed_tonic = notes[0]
+#         last_assumed_tonic = notes[-1]
+#         if upweight_first:
+#             note_counts.update([notes[0]])
+#         if upweight_last:
+#             note_counts.update([notes[-1]])
+#     else:
+#         raise Exception(f'matching_keys requires one list of either: chords or notes')
+#
+#     if exclude is None:
+#         exclude = [] # but should be a list of Note objects
+#     elif exclude is not None and len(exclude) > 0:
+#         assert isinstance(exclude[0], (str, Note)), "Objects to exclude must be Notes, or strings that cast to notes"
+#         exclude = NoteList(exclude)
+#
+#     unique_notes = list(note_counts.keys())
+#
+#     # set min precision to be at least the fraction of unique notes that have been given
+#     min_precision = min([min_precision, len(unique_notes) / 7]) # at least the fraction of unique notes that have been given
+#
+#     candidates = {} # we'll build a list of Key object candidates as we go
+#     # keying candidate Key objs to (rec, prec, likelihood, consonance) tuples
+#
+#     if require_tonic:
+#         # we only try building scales with their tonic on a root or bass of a chord in the chord list
+#         if chords is not None:
+#             candidate_tonics = list(set([c.root for c in chords] + [c.bass for c in chords]))
+#         else: # or the first note in the note list
+#             candidate_tonics = [notes[0]]
+#     else:
+#         # we try building keys on any note that occurs in the chord list:
+#         candidate_tonics = unique_notes
+#
+#     if natural_only:
+#         # search only natural major and minor scales:
+#         shortlist_interval_scale_names = {NaturalMajor.intervals: 'natural major', NaturalMinor.intervals: 'natural minor'}
+#     else:
+#         # search all known scales and modes
+#         shortlist_interval_scale_names = canonical_scale_interval_names
+#
+#     for t in candidate_tonics:
+#         for (intervals, chromatic_intervals), mode_names in shortlist_interval_scale_names.items():
+#             candidate_notes = NoteList([t + i for i in intervals])
+#
+#             does_not_contain_exclusions = True
+#             for exc in exclude:
+#                 if exc in candidate_notes:
+#                     does_not_contain_exclusions = False
+#                     break
+#             if require_roots and (chords is not None):
+#                 for c in chords:
+#                     if c.root not in candidate_notes:
+#                         does_not_contain_exclusions = False
+#                         break
+#             if does_not_contain_exclusions:
+#                 # initialise candidate object:
+#                 # (this can be removed for a fast method; it's mostly for upweighting key fifths)
+#
+#                 this_cand_weights = dict(note_counts)
+#                 if upweight_key_tonics:
+#                     # count the key's tonic several times more, because it's super important
+#                     this_cand_weights.update({t: 3})
+#                 if upweight_pentatonics and len(candidate_notes) > 5:
+#                     candidate = Key(notes=candidate_notes)
+#                     # count the notes in this key's *pentatonic* scale as extra:
+#                     this_cand_weights.update({n:1 for n in candidate.pentatonic.notes})
+#
+#                 precision, recall = precision_recall(unique_notes, candidate_notes, weights=this_cand_weights)
+#
+#                 if recall >= min_recall and precision >= min_precision:
+#                     # initialise candidate if it has not been already:
+#                     if not upweight_pentatonics:
+#                         candidate = Key(notes=candidate_notes)
+#
+#                     likelihood = candidate.likelihood
+#                     # if assume_tonic:
+#                     #     # slightly upweight the likelihood of keys with tonics that are the roots of the first or last chord:
+#                     #     if candidate.tonic == first_assumed_tonic:
+#                     #         likelihood += 0.051
+#                     #     if candidate.tonic == last_assumed_tonic:
+#                     #         likelihood += 0.049
+#                     # now handled by rec/prec
+#
+#                     consonance = candidate.consonance
+#                     if likelihood >= min_likelihood:
+#                         candidates[candidate] = {'precision': round(precision, 2),
+#                                                 'likelihood': round(likelihood,2),
+#                                                     'recall': round(recall,    2),
+#                                                 'consonance': round(consonance,3)}
+#
+#
+#     # return sorted candidates dict: (note that unlike in matching_chords we sort by precision rather than recall first)
+#     sorted_cands = sorted(candidates,
+#                           key=lambda c: (candidates[c]['precision'],
+#                                          candidates[c]['likelihood'],
+#                                          candidates[c]['recall'],
+#                                          candidates[c]['consonance']),
+#                           reverse=True)[:max_results]
+#
+#
+#     if display:
+#         # print result as nice dataframe instead of returning a dict
+#         if chords is not None:
+#             title = [f"Key matches for chords: {', '.join([c.name for c in chords])} with notes: {NoteList(unique_notes)}"]
+#             if upweight_first:
+#                 title.append(f'(upweighted first chord: {chords[0].name})')
+#             if upweight_last:
+#                 title.append(f'(upweighted last chord: {chords[-1].name})')
+#             if upweight_pentatonics:
+#                 title.append('(and upweighted pentatonics)')
+#             # title.append(f'\n With note weights: {note_counts}')
+#         elif notes is not None:
+#             title = [f"Key matches for notes: {', '.join([n.name for n in notes])}"]
+#
+#         title = ' '.join(title)
+#         print(title)
+#
+#         # we'll figure out how long we need to make each 'column' by iterating through cands:
+#         key_name_parts = []
+#         note_list_parts = []
+#         for cand in sorted_cands:
+#             # break key string up for nice viewing:
+#             key_name_parts.append(cand.name)
+#             note_list_parts.append(str(cand.notes))
+#         longest_name_len = max([len(str(s)) for s in (key_name_parts + ['  key name'])])+3
+#         longest_notes_len = max([len(str(s)) for s in (note_list_parts + ['    notes'])])+3
+#
+#         left_header =f"{'  key name':{longest_name_len}} {'    notes':{longest_notes_len}}"
+#         score_parts = ['precision', 'lklihood', 'recall', 'consonance']
+#         hspace = 8
+#         right_header = ' '.join([f'{h:{hspace}}' for h in score_parts])
+#         out_list = [left_header + right_header]
+#
+#
+#         for i, cand in enumerate(sorted_cands):
+#             scores = candidates[cand]
+#             prec, lik, rec, cons = list(scores.values())
+#             name_str, notes_str = key_name_parts[i], note_list_parts[i]
+#
+#             descriptor = f'{name_str:{longest_name_len}} {notes_str:{longest_notes_len}}'
+#             scores = f' {str(prec):{hspace}} {str(lik):{hspace}}  {str(rec):{hspace}}  {cons:.03f}'
+#             out_list.append(descriptor + scores)
+#         print('\n'.join(out_list))
+#     if return_matches:
+#         return {c: candidates[c] for c in sorted_cands}
 
-    # TBI: if this needs to be made faster, could we check across all Scale intervals, rather than across all Key notes?
 
-    if isinstance(chords, str):
-        try:
-            chord_names = ChordList(chords)
-        except:
-            # catch an edge case: have we been fed a note list as first arg?
-            note_names = parse_out_note_names(chords, graceful_fail=True)
-            if note_names is not False:
-                # reallocate args
-                notes = NoteList(note_names)
-                chords = None
-            else:
-                raise ValueError(f'Could not understand matching_keys string input as a list of chords or notes: {chords}')
-
-    if chords is not None:
-        if not isinstance(chords, ChordList):
-            chords = ChordList(chords)
-        # assert isinstance(chords, (list, tuple)), f'chord list input to matching_keys must be an iterable, but got: {type(chords)}'
-        # chords = [Chord(c) if isinstance(c, str) else c for c in chords]
-
-        # assert check_all(chords, 'isinstance', Chord), f"chord list input to matching_keys must be a list of Chords (or strings that cast to Chords), but got: {[type(c) for c in chords]}"
-
-        # keep track of the number of times each note appears in our chord list,
-        # which will be the item weights to our precision_recall function:
-        note_counts = Counter()
-
-        for chord in chords:
-            note_counts.update(chord.notes)
-            if upweight_chord_roots:
-                # increase the weight of the root note too:
-                note_counts.update([chord.root])
-
-        # if assume_tonic:
-        # upweight all the notes of the first and last chord
-        first_assumed_tonic = chords[0].root
-        last_assumed_tonic = chords[-1].root
-        if upweight_first:
-            note_counts.update(chords[0].notes)
-            # and the tonic especially:
-            note_counts.update([chords[0].notes[0]] * 2)
-        if upweight_last:
-            note_counts.update(chords[-1].notes)
-            note_counts.update([chords[-1].notes[0]] * 2)
-    elif notes is not None:
-        # just use notes directly
-        notes = NoteList(notes)
-        note_counts = Counter(notes)
-        # if assume_tonic:
-        first_assumed_tonic = notes[0]
-        last_assumed_tonic = notes[-1]
-        if upweight_first:
-            note_counts.update([notes[0]])
-        if upweight_last:
-            note_counts.update([notes[-1]])
-    else:
-        raise Exception(f'matching_keys requires one list of either: chords or notes')
-
-    if exclude is None:
-        exclude = [] # but should be a list of Note objects
-    elif exclude is not None and len(exclude) > 0:
-        assert isinstance(exclude[0], (str, Note)), "Objects to exclude must be Notes, or strings that cast to notes"
-        exclude = NoteList(exclude)
-
-    unique_notes = list(note_counts.keys())
-
-    # set min precision to be at least the fraction of unique notes that have been given
-    min_precision = min([min_precision, len(unique_notes) / 7]) # at least the fraction of unique notes that have been given
-
-    candidates = {} # we'll build a list of Key object candidates as we go
-    # keying candidate Key objs to (rec, prec, likelihood, consonance) tuples
-
-    if require_tonic:
-        # we only try building scales with their tonic on a root or bass of a chord in the chord list
-        if chords is not None:
-            candidate_tonics = list(set([c.root for c in chords] + [c.bass for c in chords]))
-        else: # or the first note in the note list
-            candidate_tonics = [notes[0]]
-    else:
-        # we try building keys on any note that occurs in the chord list:
-        candidate_tonics = unique_notes
-
-    if natural_only:
-        # search only natural major and minor scales:
-        shortlist_interval_scale_names = {NaturalMajor.intervals: 'natural major', NaturalMinor.intervals: 'natural minor'}
-    else:
-        # search all known scales and modes
-        shortlist_interval_scale_names = canonical_scale_interval_names
-
-    for t in candidate_tonics:
-        for intervals, mode_names in shortlist_interval_scale_names.items():
-            candidate_notes = [t] + [t + i for i in intervals]
-
-            does_not_contain_exclusions = True
-            for exc in exclude:
-                if exc in candidate_notes:
-                    does_not_contain_exclusions = False
-                    break
-            if require_roots and (chords is not None):
-                for c in chords:
-                    if c.root not in candidate_notes:
-                        does_not_contain_exclusions = False
-                        break
-            if does_not_contain_exclusions:
-                # initialise candidate object:
-                # (this can be removed for a fast method; it's mostly for upweighting key fifths)
-
-                this_cand_weights = dict(note_counts)
-                if upweight_key_tonics:
-                    # count the key's tonic several times more, because it's super important
-                    this_cand_weights.update({t: 3})
-                if upweight_pentatonics:
-                    candidate = Key(notes=candidate_notes)
-                    # count the notes in this key's *pentatonic* scale as extra:
-                    this_cand_weights.update({n:1 for n in candidate.pentatonic.notes})
-
-                precision, recall = precision_recall(unique_notes, candidate_notes, weights=this_cand_weights)
-
-                if recall >= min_recall and precision >= min_precision:
-                    # initialise candidate if it has not been already:
-                    if not upweight_pentatonics:
-                        candidate = Key(notes=candidate_notes)
-
-                    likelihood = candidate.likelihood
-                    # if assume_tonic:
-                    #     # slightly upweight the likelihood of keys with tonics that are the roots of the first or last chord:
-                    #     if candidate.tonic == first_assumed_tonic:
-                    #         likelihood += 0.051
-                    #     if candidate.tonic == last_assumed_tonic:
-                    #         likelihood += 0.049
-                    # now handled by rec/prec
-
-                    consonance = candidate.consonance
-                    if likelihood >= min_likelihood:
-                        candidates[candidate] = {'precision': round(precision, 2),
-                                                'likelihood': round(likelihood,2),
-                                                    'recall': round(recall,    2),
-                                                'consonance': round(consonance,3)}
-
-
-    # return sorted candidates dict: (note that unlike in matching_chords we sort by precision rather than recall first)
-    sorted_cands = sorted(candidates,
-                          key=lambda c: (candidates[c]['precision'],
-                                         candidates[c]['likelihood'],
-                                         candidates[c]['recall'],
-                                         candidates[c]['consonance']),
-                          reverse=True)[:max_results]
-
-
-    if display:
-        # print result as nice dataframe instead of returning a dict
-        if chords is not None:
-            title = [f"Key matches for chords: {', '.join([c.name for c in chords])} with notes: {NoteList(unique_notes)}"]
-            if upweight_first:
-                title.append(f'(upweighted first chord: {chords[0].name})')
-            if upweight_last:
-                title.append(f'(upweighted last chord: {chords[-1].name})')
-            if upweight_pentatonics:
-                title.append('(and upweighted pentatonics)')
-            # title.append(f'\n With note weights: {note_counts}')
-        elif notes is not None:
-            title = [f"Key matches for notes: {', '.join([n.name for n in notes])}"]
-
-        title = ' '.join(title)
-        print(title)
-
-        # we'll figure out how long we need to make each 'column' by iterating through cands:
-        key_name_parts = []
-        note_list_parts = []
-        for cand in sorted_cands:
-            # break key string up for nice viewing:
-            key_name_parts.append(cand.name)
-            note_list_parts.append(str(cand.notes))
-        longest_name_len = max([len(str(s)) for s in (key_name_parts + ['  key name'])])+3
-        longest_notes_len = max([len(str(s)) for s in (note_list_parts + ['    notes'])])+3
-
-        left_header =f"{'  key name':{longest_name_len}} {'    notes':{longest_notes_len}}"
-        score_parts = ['precision', 'lklihood', 'recall', 'consonance']
-        hspace = 8
-        right_header = ' '.join([f'{h:{hspace}}' for h in score_parts])
-        out_list = [left_header + right_header]
-
-
-        for i, cand in enumerate(sorted_cands):
-            scores = candidates[cand]
-            prec, lik, rec, cons = list(scores.values())
-            name_str, notes_str = key_name_parts[i], note_list_parts[i]
-
-            descriptor = f'{name_str:{longest_name_len}} {notes_str:{longest_notes_len}}'
-            scores = f' {str(prec):{hspace}} {str(lik):{hspace}}  {str(rec):{hspace}}  {cons:.03f}'
-            out_list.append(descriptor + scores)
-        print('\n'.join(out_list))
-    if return_matches:
-        return {c: candidates[c] for c in sorted_cands}
-
-
-def most_likely_key(*args, **kwargs):
-    """wrapper around matching_keys that simply returns the single most likely Key as an object"""
-    matches = matching_keys(*args, display=False, return_matches=True, **kwargs)
-    if len(matches) == 0:
-        # re run with no minimums
-        matches = matching_keys(*args, display=False, min_recall=0, min_precision=0, min_likelihood=0, return_matches=True, **kwargs)
-    # return top match:
-    return list(matches.keys())[0]
+# def most_likely_key(*args, **kwargs):
+#     """wrapper around matching_keys that simply returns the single most likely Key as an object"""
+#     matches = matching_keys(*args, display=False, return_matches=True, **kwargs)
+#     if len(matches) == 0:
+#         # re run with no minimums
+#         matches = matching_keys(*args, display=False, min_recall=0, min_precision=0, min_likelihood=0, return_matches=True, **kwargs)
+#     # return top match:
+#     return list(matches.keys())[0]

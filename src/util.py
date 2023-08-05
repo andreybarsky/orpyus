@@ -265,7 +265,7 @@ def numeral_subscript(numerals):
     return ''.join(subscripts)
 
 class ModDict(dict):
-    def __init__(self, *args, index=0, max_key=None, raise_values=False, **kwargs):
+    def __init__(self, *args, index=0, max_key=None, raise_values=False, raise_by=None, **kwargs):
         """a special dict class with integer keys (or integer-like keys, such as ScaleDegrees)
         that modulos during its lookup if a provided index  exceeds its defined maximum key.
         arg 'index' determines the integer key associated with the first element.
@@ -287,6 +287,9 @@ class ModDict(dict):
 
         self.index = index
         self.raise_values = raise_values
+        self.raise_by = raise_by
+        # will be inferred if values are Interval or Degree objects,
+        # but otherwise this arg is needed (if raise_values is True) to determine how much to raise by
 
     def __getitem__(self, i):
         # by design we only modulo keys ABOVE max key, not below index
@@ -299,8 +302,14 @@ class ModDict(dict):
         if not self.raise_values:
             return super().__getitem__(m)
         else:
-            # raise output value by power div (i.e. increase by octave)
-            return super().__getitem__(m) ** div
+            val = super().__getitem__(m)
+            if isinstance(val, (list, tuple)):
+                # raise every item in the retrieved list/tuple of values:
+                out_vals = [self.raise_value(v, div) for v in val]
+                return out_vals
+            else:
+                # raise a lone item:
+                return self.raise_value(val,div)
 
     def __setitem__(self, x, y):
         """as dict.__setitem__, but also updates self.max_key
@@ -308,3 +317,13 @@ class ModDict(dict):
         super().__setitem__(x, y)
         if self.dynamic_max:
             self.max_key = max(list(self.keys()))
+
+    def raise_value(self, item, div):
+        ### raises a retrieved by a power of div
+        if type(item) is not int:
+            # orpyus music objects can be raised by a power to increase their octave:
+            return item ** div
+        else:
+            # for raw ints, we have to rely on the raise_by attr:
+            assert self.raise_by is not None
+            return item + (div*self.raise_by)

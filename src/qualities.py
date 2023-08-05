@@ -524,8 +524,8 @@ chord_types =  {'m': ChordModifier(make={3:-1}),
                 'hdmin11': ['hdmin9', '♮11'],  # half-diminished minor 11th
 
                 '13': ['11', '♮13'],               # dominant 13th
-               f'maj13{sh}11': ['maj11', '♯11', '♮13'],  # major 13th with a raised 11th
-                'maj13': ['maj11', '♮13'],         # major 13th WITHOUT raised 11th
+                'maj13': ['maj11', '♯11', '♮13'],  # major 13th with a raised 11th
+               f'maj13{nat}11': ['maj11', '♮13'],         # major 13th WITHOUT raised 11th
                 'dmin13': ['dmin11', '♮13'],  # diminished minor 11th
                 'hdim13': ['hdim11', '♮13'],  # half-diminished 11th
                 'hdmin13': ['hdmin11', '♮13'],  # half-diminished minor 11th

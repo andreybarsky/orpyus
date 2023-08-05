@@ -422,9 +422,16 @@ class Scale:
             # sanitise intervals so that they start with a root but do not end with an octave:
             intervals = intervals.strip().pad()
             # detect if we need to re-cast to irregular intervals:
+
+
             if len(intervals) > 7:
                 # initialise IrregularIntervals with a max_degree of whatever was given:
                 intervals = IntervalList([IrregularInterval(intervals[i].value, i+1, len(intervals)) for i in range(len(intervals))])
+            else:
+                # ensure no double accidentals and max of one interval per degree
+                if not intervals.is_sanitised():
+                    intervals = intervals.sanitise_degrees()
+
 
             factors = ScaleFactors(', '.join(intervals.pad().as_factors))
 
@@ -542,7 +549,7 @@ class Scale:
     def subscale(self, keep=None, omit=None):
         """Return a subscale derived from this scale's factors,
         specified as either a list of factors to keep or to discard"""
-        return self.__class__(factors=self.factors.subscale(keep=keep, omit=omit))
+        return Scale(factors=self.factors.subscale(keep=keep, omit=omit))
 
     def mode(self, N, sanitise=True):
         """Returns a new scale that is the Nth mode of this scale.
@@ -597,9 +604,9 @@ class Scale:
 
         if display:
             from .display import DataFrame
+            title = f'Computed pentatonic scales of {self}'
             pres_str = f'\n    while preserving scale character: {",".join(character.as_factors)}' if preserve_character else ''
-            title = f'Computed pentatonic scales of {self}{pres_str}'
-            print(title)
+            print(title + pres_str)
 
             df = DataFrame(['Subscale', 'Factors', 'Omit', 'Cons.'])
             for cand in sorted_cands:
@@ -614,8 +621,8 @@ class Scale:
         else:
             return {x: round(x.consonance,3) for x in sorted_cands}
 
-    @property
-    def pentatonic(self):
+
+    def get_pentatonic(self):
         """Returns the pentatonic subscale of this scale.
         For well-defined pentatonics like the major and minor, this is a simple lookup.
         Pentatonics of other scales are derived computationally by producing a subscale
@@ -626,6 +633,9 @@ class Scale:
             return Scale(naive_pentatonic_name)
         else:
             return self.compute_best_pentatonic(preserve_character=True)
+    @property
+    def pentatonic(self):
+        return self.get_pentatonic()
 
     @property
     def nearest_natural_scale(self):

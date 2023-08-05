@@ -1,6 +1,6 @@
 from .qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
 from .parsing import degree_names, span_names, multiple_names, num_suffixes, offset_accidentals
-from .util import rotate_list, least_common_multiple, euclidean_gcd, numeral_subscript, log
+from .util import ModDict, rotate_list, least_common_multiple, euclidean_gcd, numeral_subscript, log
 from .conversion import value_to_pitch
 from . import _settings
 import math
@@ -372,6 +372,16 @@ class Interval:
             return [4,5]
         else:
             return [self.degree]
+
+    @property
+    def common_ext_degrees(self):
+        """returns a list of the extended degrees that this interval is commonly used as.
+        usually this is only one possibility (i.e. m11 and M11 both return [9]),
+        but dim12s will return [16,17]"""
+        if self.mod == 6:
+            return [4+(self.span_size*self.octave_span),5+(self.span_size*self.octave_span)]
+        else:
+            return [self.extended_degree]
 
     @property
     def possible_degrees(self):
@@ -814,9 +824,14 @@ class IntervalList(list):
         (intended to qualify an IntervalList for casting into a ScaleFactors object)"""
         degrees = []
         for iv in self:
-            if abs(iv.offset_from_default) >= 2:
+            # check for double aug or double dim of perfect degrees
+            if (iv.degree in (4,5)) and abs(iv.offset_from_default) >= 2:
                 return False
-            degrees.append(iv.degree)
+            # check for double aug or double dim of non-perfect degrees:
+            elif not (-2 <= iv.offset_from_default <= 1):
+                return False
+            else:
+                degrees.append(iv.degree)
         if len(degrees) != len(set(degrees)):
             return False
         else:
@@ -859,13 +874,15 @@ class IntervalList(list):
                 reallocated = False
                 for offset in descending_offsets:
                     possible_new_degree = iv.degree + offset
-                    if possible_new_degree not in old_degrees:
-                        # a slot for a degree that won't be filled later
-                        new_iv = iv.re_cache(value=iv.value, degree=possible_new_degree)
-                        new_ivs.append(new_iv)
-                        new_degrees.add(new_iv.degree)
-                        reallocated = True
-                        break
+                    # only consider degrees in acceptable (2,7) range:
+                    if 2 <= possible_new_degree <= iv.max_degree:
+                        if (possible_new_degree not in old_degrees):
+                            # a slot for a degree that won't be filled later
+                            new_iv = iv.re_cache(value=iv.value, degree=possible_new_degree)
+                            new_ivs.append(new_iv)
+                            new_degrees.add(new_iv.degree)
+                            reallocated = True
+                            break
                 if not reallocated:
                     # no nearby degrees that won't be filled, so use one that
                     # might be filled later anyway (to correct on a later iteration)
@@ -978,7 +995,7 @@ Intervals = IntervalList
 # perfect_degrees = {1, 4, 5}
 
 # how many whole tones does each semitone interval correspond to (by default):
-default_interval_degrees = {
+default_interval_degrees = ModDict({
                 0: 1,          # e.g. unison (0 semitones) is degree 1
                 1:2, 2:2,      # seconds (1 or 2 semitones) are degree 2, etc.
                 3:3, 4:3,
@@ -987,12 +1004,10 @@ default_interval_degrees = {
                 7:5,
                 8:6, 9:6,
                 10:7, 11:7,
-                }
-
-
+                }, index=0, raise_values=True, raise_by=7)
 
 # and the reverse mapping
-default_degree_intervals = {
+default_degree_intervals = ModDict({
                 1: 0, # unison
                 2: 2, # maj2
                 3: 4, # maj3
@@ -1001,9 +1016,9 @@ default_degree_intervals = {
                 6: 9, # maj6
                 7: 11, # maj7
                 # 8: 12, # octave
-                }
+                }, index=1, raise_values=True, raise_by=12)
 
-allowable_interval_degrees = {
+allowable_interval_degrees = ModDict({
                 0: [1],
                 1: [2],
                 2: [2,3],
@@ -1016,11 +1031,31 @@ allowable_interval_degrees = {
                 9: [6,7],
                 10: [6,7],
                 11: [7],
-}
+                }, index=0, raise_values=True, raise_by=7)
 
-# defaults of degrees in higher octaves, just in case:
-higher_defaults = {k+(7*o):v+(12*o) for k,v in default_degree_intervals.items() for o in range(1,3)}
-default_degree_intervals.update(higher_defaults)
+common_degree_intervals = ModDict({
+                1: [0],
+                2: [1,2],
+                3: [3,4],
+                4: [5],
+                5: [7],
+                6: [8,9],
+                7: [9,10,11],
+                }, index=1, raise_values=True, raise_by=12)
+
+allowable_degree_intervals = ModDict({
+                1: [0],
+                2: [1,2],
+                3: [2,3,4,5],
+                4: [4,5,6],
+                5: [6,7,8],
+                6: [7,8,9,10],
+                7: [9,10,11],
+                }, index=1, raise_values=True, raise_by=12)
+
+# # defaults of degrees in higher octaves, just in case:
+# higher_defaults = {k+(7*o):v+(12*o) for k,v in default_degree_intervals.items() for o in range(1,3)}
+# default_degree_intervals.update(higher_defaults)
 
 
 # interval aliases:
