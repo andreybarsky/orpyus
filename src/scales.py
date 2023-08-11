@@ -118,6 +118,21 @@ class ScaleFactors(Factors):
                     del out.chromatic[deg]
         return out
 
+    def __sub__(self, other):
+        if isinstance(other, ScaleFactors):
+            if self.chromatic is not None or other.chromatic is not None:
+                # special logic to compare chromatics as well
+                factor_diff = Factors.__sub__(self, other)
+                if self.chromatic is None:
+                    chromatic_diff = Factors.__sub__(Factors(), other.chromatic)
+                elif other.chromatic is None:
+                    chromatic_diff = Factors.__sub__(self.chromatic, Factors())
+                else:
+                    chromatic_diff = Factors.__sub__(self.chromatic, other.chromatic)
+                return (factor_diff, chromatic_diff)
+        # otherwise, return a single diff object as normal
+        return Factors.__sub__(self, other)
+
     def __eq__(self, other):
         if other.__class__ is self.__class__:
             # ScaleFactors are equal if their factors and chromatic intervals are both the same:
@@ -1392,7 +1407,7 @@ class Scale:
     @property
     def rarity(self):
         """Single integer representing this Scale's rarity with respect to other scales"""
-        for r, names in scale_names_by_rarity.items():
+        for r, names in canonical_scale_names_by_rarity.items():
             if self.name in names:
                 return r
         # unregistered scales are even rarer than the most rare registered scale:
@@ -1547,16 +1562,19 @@ class Scale:
             # first, try natural major and minor comparisons
             # then the other diatonic modes
             # then the other standard scales
-            waves = [['ionian', 'aeolian'], # natural scales
-                     [names[0] for mode_idx, names in base_scale_mode_names['natural major'].items() if mode_idx not in [1,6]], # diatonic modes
-                     ['harmonic minor', 'melodic minor', 'harmonic major', 'melodic major'], # non-diatonic heptatonic scales
-                     [name for name, facs in chromatic_scale_factor_names.items() if len(facs) == 7],
-                     [name for name, facs in rare_scale_factor_names.items() if len(facs) == 7]]
+            waves = [['ionian', 'aeolian']] + [list(canonical_scale_names_by_rarity[r]) for r in (2,3,4)]
+            # [, # natural scales
+            #          [names[0] for mode_idx, names in base_scale_mode_names['natural major'].items() if mode_idx not in [1,6]], # diatonic modes
+            #          ['harmonic minor', 'melodic minor', 'harmonic major', 'melodic major'], # non-diatonic heptatonic scales
+            #          ['neapolitan minor', 'neapolitan major', 'double harmonic', 'miyako-bushi']]
+                     # [name for name, facs in chromatic_scale_factor_names.items() if len(facs) == 7],
+                     # [name for name, facs in rare_scale_factor_names.items() if len(facs) == 7]]
         elif len(self) == 5:
             # check natural pentatonics first, then all others
             natural_pentatonics = ['major pentatonic', 'minor pentatonic']
-            waves = [natural_pentatonics,
-                     [n for n in pentatonic_scale_factor_names.values() if n not in natural_pentatonics]]
+            other_pentatonics = [s for s in canonical_scale_names_by_length[5] if s not in natural_pentatonics]
+            waves = [natural_pentatonics, other_pentatonics]
+                     # [n for n in pentatonic_scale_factor_names.values() if n not in natural_pentatonics]]
         else:
             # just one wave, all scales of this length:
             waves = [canonical_scale_names_by_length[len(self)]]
@@ -1567,7 +1585,7 @@ class Scale:
                     comp_name = comp_name[0]
                 # comparison_scale = Scale(comp_name)
                 comparison_factors = all_scale_name_factors[comp_name]
-                if len(comparison_factors) == len(self.factors):
+                if comparison_factors.size == self.factors.size:
                     difference = self.factors - comparison_factors
                     # difference is a ChordModifier object, which we use if it is exactly 1 alteration:
                     if len(difference) == 1:
@@ -1666,64 +1684,30 @@ natural_scale_names = {'natural major', 'natural minor'}
 # with names as a list, where the first item in the list is taken to be the
 # 'canonical' name for that scale, with all others as valid aliases.
 
-heptatonic_scale_factor_names = { # standard scales are defined here, modes and subscales are added later:
+base_scale_factor_names = { # base scales are defined here, modes and subscales are added later:
+
+    #### heptatonic scales:
     ScaleFactors('1,  2,  3,  4,  5,  6,  7'): ['natural major', 'major'],
-    ScaleFactors('1,  2, b3,  4,  5, b6, b7'): ['natural minor', 'minor'],
+    # ScaleFactors('1,  2, b3,  4,  5, b6, b7'): ['natural minor', 'minor'],
     ScaleFactors('1,  2,  3,  4,  5, b6,  7'): ['harmonic major'],
     ScaleFactors('1,  2, b3,  4,  5, b6,  7'): ['harmonic minor'],
-    ScaleFactors('1,  2,  3,  4,  5, b6, b7'): ['melodic major'],
+    # ScaleFactors('1,  2,  3,  4,  5, b6, b7'): ['melodic major'],
     ScaleFactors('1,  2, b3,  4,  5,  6,  7'): ['melodic minor', 'jazz minor', 'melodic minor ascending'], # (ascending)
     ScaleFactors('1, b2, b3,  4,  5,  6,  7'): ['neapolitan major', 'phrygian melodic minor'],
     ScaleFactors('1, b2, b3,  4,  5, b6,  7'): ['neapolitan minor', 'phrygian harmonic minor'],
     ScaleFactors('1, b2,  3,  4,  5, b6,  7'): ['double harmonic', 'double harmonic major'],
     ScaleFactors('1, b2,bb3,  4,  5, b6,bb7'): ['miyako-bushi'],
 
-# while it's true that "melodic minor" can refer to a special scale that uses
-# the the natural minor scale when descending, but that out-of-scope for now
-    }
-heptatonic_scale_name_factors = unpack_and_reverse_dict(heptatonic_scale_factor_names)
-
-# this dict maps base scale names to dicts that map scale degrees to the modes of that base scale
-base_scale_mode_names = {
-   'natural major': {1: ['ionian', 'bilawal'], 2: ['dorian', 'kafi'], 3: ['phrygian', 'bhairavi'], 4: ['lydian', 'kalyan'],
-                     5: ['mixolydian', 'khamaj'], 6: ['aeolian', 'asavari'], 7: ['locrian']},
-   'melodic minor': {1: ['athenian'], 2: ['cappadocian', 'phrygian ♯6', 'dorian ♭2'],
-                     3: ['asgardian', 'lydian augmented'], 4: ['acoustic', 'pontikonisian', 'lydian dominant', 'overtone'],
-                     5: ['olympian', 'aeolian dominant', 'mixolydian ♭6'],
-                     6: ['sisyphean', 'aeolocrian', 'half-diminished'], 7: ['palamidian', 'altered dominant']},
-  'harmonic minor': {1: [], 2: ['locrian ♯6'], 3: ['ionian ♯5'], 4: ['ukrainian dorian', 'ukrainian minor'],
-                     5: ['phrygian dominant', 'spanish gypsy', 'egyptian'], 6: ['lydian ♯2', 'maqam mustar'], 7: ['altered diminished']},
-  'harmonic major': {1: [], 2: ['blues heptatonic', 'dorian ♭5', 'locrian ♯2♯6'], 3: ['phrygian ♭4', 'altered dominant ♯5'],
-                     4: ['lydian minor', 'lydian ♭3', 'melodic minor ♯4'], 5: ['mixolydian ♭2'],
-                     6: ['lydian augmented ♯2'], 7: ['locrian 𝄫7']},
-'neapolitan minor': {1: [], 2: ['lydian ♯6'], 3: ['mixolydian augmented'], 4: ['romani minor', 'aeolian ♯4'],
-                     5: ['locrian dominant'], 6: ['ionian ♯2'], 7: ['ultralocrian', 'altered diminished 𝄫3']},
-'neapolitan major': {1: [], 2: ['lydian augmented ♯6'], 3: ['lydian augmented dominant'], 4: ['lydian dominant ♭6'],
-                     5: ['major locrian'], 6: ['half-diminished ♭4', 'altered dominant #2'], 7: ['altered dominant 𝄫3']},
-'double harmonic':  {1: ['byzantine', 'arabic', 'gypsy major', 'flamenco', 'major phrygian', 'bhairav'],
-                     2: ['lydian ♯2 ♯6'], 3: ['ultraphrygian'], 4: ['hungarian minor', 'gypsy minor', 'egyptian minor', 'double harmonic minor'],
-                     5: ['oriental'], 6: ['ionian ♯2 ♯5'], 7: ['locrian 𝄫3 𝄫7']},
-                 }
-
-pentatonic_scale_factor_names = {
-    # natural pentatonics and their modes:
+    #### pentatonic scales:
     ScaleFactors('1,  2,  3,  5,  6'): ['major pentatonic', 'pentatonic', 'natural major pentatonic', 'ryo'], # mode 1
-    ScaleFactors('1,  2,  4,  5, b7'): ['egyptian pentatonic'], # mode 2
-    ScaleFactors('1, b3,  4, b6, b7'): ['blues minor pentatonic', 'phrygian pentatonic', 'minyo', 'man gong'], # mode 3
-    ScaleFactors('1,  2,  4,  5,  6'): ['yo', 'ritsu', 'ritusen', 'major pentatonic II'], # mode 4
-    ScaleFactors('1, b3,  4,  5, b7'): ['minor pentatonic', 'natural minor pentatonic', 'yo'], # mode 5
 
     # modes of the hirajoshi / in scale:
-    ScaleFactors('1,  2, b3,  5, b6'): ['hirajoshi'], # mode 1
-    ScaleFactors('1, b2,  4, b5, b7'): ['iwato', 'sachs hirajoshi'], # mode 2
-    ScaleFactors('1,  3,  4,  6,  7'): ['kumoi', 'kumoijoshi'], # mode 3
-    ScaleFactors('1, b2,  4,  5, b6'): ['hon kumoi', 'hon kumoijoshi', 'sakura pentatonic', 'in', 'in sen'], # mode 4
-    ScaleFactors('1,  3, #4,  5,  7'): ['amritavarshini', 'chinese', 'burrows hirajoshi'], # mode 5
+    ScaleFactors('1,  2, b3,  5, b6'): ['hirajoshi'], # base scale with 5 modes
 
     # modes of the dorian pentatonic:
-    ScaleFactors('1,  2, b3,  5,  6'): ['dorian pentatonic'], # mode 1
-    ScaleFactors('1, b2,  4,  5, b7'): ['kokinjoshi'], # mode 2
-    ScaleFactors('1, b3,  4, b5, b7'): ['minor b5 pentatonic'], # mode 5
+    ScaleFactors('1,  2, b3,  5,  6'): ['dorian pentatonic'], # base scale with modes 2 and 5
+    # ScaleFactors('1, b2,  4,  5, b7'): ['kokinjoshi'], # mode 2
+    # ScaleFactors('1, b3,  4, b5, b7'): ['minor b5 pentatonic'], # mode 5
 
     # pentatonics derived from (flattened) 9th chords:
     ScaleFactors('1,  2,  3,  5,  7'): ['blues major pentatonic', 'maj9 pentatonic', 'major 9th pentatonic'],
@@ -1737,21 +1721,16 @@ pentatonic_scale_factor_names = {
     ScaleFactors('1,  2, b3, b5,  b7'): ['half-diminished pentatonic', 'hdim9 pentatonic'],
     ScaleFactors('1, b2, b3, b5,  b7'): ['half-diminished minor pentatonic', 'hdmin9 pentatonic'],
     ScaleFactors('1, #2,  3,  5,  b7'): ['hendrix pentatonic', 'dominant 7#9 pentatonic', '7#9 pentatonic'],
-    ScaleFactors('1, b2,  3,  5,  b7'): ['dominant minor pentatonic', 'dominant 7b9 pentatonic', '7b9 pentatonic', ],
 
     # misc:
     ScaleFactors('1,  2,  4,  5,  7'): ['suspended', 'suspended pentatonic'],
     ScaleFactors('1,  3,  4,  5,  7'): ['okinawan'],
-    ScaleFactors('1, b2, b3,  5, b6'): ['balinese'], # 2nd mode of okinawan scale
+    # ScaleFactors('1, b2, b3,  5, b6'): ['balinese'], # 2nd mode of okinawan scale
     ScaleFactors('1,  2,  3,  5, b6'): ['major b6 pentatonic'],
-    }
-pentatonic_scale_name_factors = unpack_and_reverse_dict(pentatonic_scale_factor_names)
 
-chromatic_scale_factor_names = {
-    # note: while 'pentatonic' on its own redirects to major pentatonic,
-    # 'blues' on its own redirects to minor blues, by convention
+    #### scales containing chromatic intervals:
     ScaleFactors('1, b3,  4, [b5], 5, b7'): ['minor blues', 'blues', 'minor blues hexatonic'],
-    ScaleFactors('1,  2, [b3], 3,  5,  6'): ['major blues', 'major blues hexatonic'],
+    # ScaleFactors('1,  2, [b3], 3,  5,  6'): ['major blues', 'major blues hexatonic'],
     ScaleFactors('1, b2, [b3], 4,  5,  b6, [b7]'): ['sakura'],
     # ScaleFactors('1, 2, 3, 4, 5, 6, [b7],7'): ['bebop dominant'],
     # ScaleFactors('1, 2, 3, 4, 5,[b6], 6, 7'): ['bebop', 'bebop major', 'barry harris', 'major 6th diminished'],
@@ -1761,14 +1740,11 @@ chromatic_scale_factor_names = {
     ScaleFactors('1,  2,  b3,  4,  5,  b6, [6], b7, [7]'): ['full minor'],
     ScaleFactors('1,  2,   3,  4,  5,[b6],  6,[b7],  7'): ['full major'],
 
-    # chromatic scale from major:
-    ScaleFactors('1, [b2], 2,  [b3], 3, 4, [b5], 5, [b6], 6, [b7], 7'): ['chromatic major'],
-    ScaleFactors('1, [b2], 2,  b3, [3], 4, [b5], 5, b6, [6], b7, [7]'): ['chromatic minor'],
-    }
-chromatic_scale_name_factors = unpack_and_reverse_dict(chromatic_scale_factor_names)
+    # chromatic scale from major: (currently do not work with mode rotation)
+    # ScaleFactors('1, [b2], 2,  [b3], 3, 4, [b5], 5, [b6], 6, [b7], 7'): ['chromatic major'],
+    # ScaleFactors('1, [b2], 2,  b3, [3], 4, [b5], 5, b6, [6], b7, [7]'): ['chromatic minor'],
 
-# unusual scales with that ought not to be searched:
-rare_scale_factor_names = {
+    #### rare hexatonic and octatonic scales:
     # hexatonic scales:
     ScaleFactors('1,  2,  3, #4, #5, #6'): ['whole tone', 'whole-tone'],
     ScaleFactors('1,  2,  3, b5,  6, b7'): ['prometheus'],
@@ -1780,27 +1756,120 @@ rare_scale_factor_names = {
     ScaleFactors('1,  2,  3,  4,  5,  6, b7, 7'): ['bebop dominant', 'bebop dominant octatonic'],
     ScaleFactors('1,  2,  3,  4,  5, #5,  6, 7'): ['bebop', 'bebop major', 'barry harris', 'major 6th diminished', 'bebop major octatonic', 'bebop octatonic', ],
     ScaleFactors('1,  2, b3,  4,  5, #5,  6, 7'): ['bebop minor', 'bebop melodic minor', 'bebop minor octatonic', 'minor 6th diminished'],
+}
 
-    }
+base_scale_name_factors = unpack_and_reverse_dict(base_scale_factor_names)
 
-rare_scale_name_factors = unpack_and_reverse_dict(rare_scale_factor_names)
+# while it's true that "melodic minor" can refer to a special scale that uses
+# the natural minor scale when descending, that is out-of-scope for now
+
+#     }
+# heptatonic_scale_name_factors = unpack_and_reverse_dict(heptatonic_scale_factor_names)
+
+# this dict maps base scale names to dicts that map scale degrees to the modes of that base scale
+base_scale_mode_names = {
+                    # the diatonic base scale and its modes:
+   'natural major': {1: ['ionian', 'bilawal'],
+                     2: ['dorian', 'kafi'],
+                     3: ['phrygian', 'bhairavi'],
+                     4: ['lydian', 'kalyan'],
+                     5: ['mixolydian', 'khamaj'],
+                     6: ['natural minor', 'minor', 'aeolian', 'asavari',],
+                     7: ['locrian']},
+
+                     # non-diatonic heptatonic base scales and their modes:
+   'melodic minor': {1: ['athenian'],
+                     2: ['cappadocian', 'phrygian ♯6', 'dorian ♭2'],
+                     3: ['asgardian', 'lydian augmented'],
+                     4: ['acoustic', 'pontikonisian', 'lydian dominant', 'overtone'],
+                     5: ['melodic major', 'olympian', 'aeolian dominant', 'mixolydian ♭6'],
+                     6: ['sisyphean', 'aeolocrian', 'half-diminished'],
+                     7: ['palamidian', 'altered dominant']},
+  'harmonic minor': {1: [],
+                     2: ['locrian ♯6'],
+                     3: ['ionian ♯5'],
+                     4: ['ukrainian dorian', 'ukrainian minor'],
+                     5: ['phrygian dominant', 'spanish gypsy', 'egyptian'],
+                     6: ['lydian ♯2', 'maqam mustar'],
+                     7: ['altered diminished']},
+  'harmonic major': {1: [],
+                     2: ['blues heptatonic', 'dorian ♭5', 'locrian ♯2♯6'],
+                     3: ['phrygian ♭4', 'altered dominant ♯5'],
+                     4: ['lydian minor', 'lydian ♭3', 'melodic minor ♯4'],
+                     5: ['mixolydian ♭2'],
+                     6: ['lydian augmented ♯2'],
+                     7: ['locrian 𝄫7']},
+'neapolitan minor': {1: [],
+                     2: ['lydian ♯6'],
+                     3: ['mixolydian augmented'],
+                     4: ['romani minor', 'aeolian ♯4'],
+                     5: ['locrian dominant'],
+                     6: ['ionian ♯2'],
+                     7: ['ultralocrian', 'altered diminished 𝄫3']},
+'neapolitan major': {1: [],
+                     2: ['lydian augmented ♯6'],
+                     3: ['lydian augmented dominant'],
+                     4: ['lydian dominant ♭6'],
+                     5: ['major locrian'],
+                     6: ['half-diminished ♭4', 'altered dominant #2'],
+                     7: ['altered dominant 𝄫3']},
+'double harmonic':  {1: ['byzantine', 'arabic', 'gypsy major', 'flamenco', 'major phrygian', 'bhairav'],
+                     2: ['lydian ♯2 ♯6'],
+                     3: ['ultraphrygian'],
+                     4: ['hungarian minor', 'gypsy minor', 'egyptian minor', 'double harmonic minor'],
+                     5: ['oriental'],
+                     6: ['ionian ♯2 ♯5'],
+                     7: ['locrian 𝄫3 𝄫7']},
+
+                     # pentatonic base scales and their modes:
+'major pentatonic': {1: ['pentatonic', 'natural major pentatonic', 'ryo'],
+                     2: ['egyptian pentatonic'],
+                     3: ['blues minor pentatonic', 'phrygian pentatonic', 'minyo', 'man gong'],
+                     4: ['yo', 'ritsu', 'ritusen', 'major pentatonic II'],
+                     5: ['minor pentatonic', 'natural minor pentatonic']},
+       'hirajoshi': {
+                     2: ['iwato', 'sachs hirajoshi'],
+                     3: ['kumoi', 'kumoijoshi'],
+                     4: ['hon kumoi', 'hon kumoijoshi', 'sakura pentatonic', 'in', 'in sen'],
+                     5: ['amritavarshini', 'chinese', 'burrows hirajoshi']},
+
+                     # incidental/partial mode names:
+         'okinawan': {2: ['balinese']},
+'dorian pentatonic': {2: ['kokinjoshi'], 5: ['minor ♭5 pentatonic']},
+      'minor blues': {3: ['major blues']},
+  # 'chromatic major': {11: ['chromatic minor']},
+                 }
+
+# base_scale_names = list(base_scale_mode_names.keys())
+# #
+# base_scale_factor_names = {
+    # natural pentatonics and their modes:
+#     }
+# pentatonic_scale_name_factors = unpack_and_reverse_dict(pentatonic_scale_factor_names)
+#
+# chromatic_scale_factor_names = {
+    # note: while 'pentatonic' on its own redirects to major pentatonic,
+    # 'blues' on its own redirects to minor blues, by convention
+#     }
+# chromatic_scale_name_factors = unpack_and_reverse_dict(chromatic_scale_factor_names)
+#
+# # unusual scales with that ought not to be searched:
+# rare_scale_factor_names = {}
+
+# rare_scale_name_factors = unpack_and_reverse_dict(rare_scale_factor_names)
 
 base_mode_factor_names = {}
 # loop across base scale modes to build more factor mappings:
 for base_name, mode_dict in base_scale_mode_names.items():
     # retrieve the factors of a base scale:
-    base_factors = heptatonic_scale_name_factors[base_name]
+    base_factors = base_scale_name_factors[base_name]
     # loop across this scale's theoretical modes:
     for mode_num, name_list in mode_dict.items():
-        mode_factors = base_factors.mode(mode_num)
-        base_mode_factor_names[mode_factors] = name_list
+        if len(name_list) > 0:
+            mode_factors = base_factors.mode(mode_num)
+            base_mode_factor_names[mode_factors] = name_list
 
-registered_scale_name_dicts = [heptatonic_scale_factor_names,
-                               chromatic_scale_factor_names,
-                               pentatonic_scale_factor_names,
-                               base_mode_factor_names,
-                               rare_scale_factor_names,
-                              ]
+registered_scale_name_dicts = [base_scale_factor_names, base_mode_factor_names]
 
 # mapping of all canonical scale names to their respective factors:
 canonical_scale_factor_names = {}
@@ -1845,8 +1914,10 @@ canonical_scale_alias_names = unpack_and_reverse_dict(canonical_scale_name_alias
 
 # mapping of possible scale lengths to lists of scale names which have that length:
 canonical_scale_names_by_length = {}
+base_scale_names_by_length = {}
 for l in range(5,13):
     canonical_scale_names_by_length[l] = [scale_name for scale_name, factors in canonical_scale_name_factors.items() if len(factors) == l]
+    base_scale_names_by_length[l] = [scale_name for scale_name, factors in canonical_scale_name_factors.items() if len(factors) == l and scale_name in base_scale_mode_names]
 
 wordbag_scale_names = {frozenset(name.split(' ')):name for name in canonical_scale_name_factors.keys()}
 
@@ -1922,18 +1993,31 @@ for alias, canonical_name in canonical_scale_alias_names.items():
         alias_factors = canonical_scale_name_factors[canonical_name]
         all_scale_name_factors[alias] = alias_factors
 
-scale_names_by_rarity = {
-1: {'natural major', 'natural minor', 'major pentatonic', 'minor pentatonic'},
-2: {'harmonic major', 'harmonic minor', 'melodic minor', 'minor blues', 'major blues'},
+# base scale lists:
+heptatonic_base_scale_names = [n for n in base_scale_mode_names if len(all_scale_name_factors[n]) == 7]
+hexatonic_base_scale_names = [n for n in base_scale_mode_names if len(all_scale_name_factors[n]) == 6]
+pentatonic_base_scale_names = [n for n in base_scale_mode_names if len(all_scale_name_factors[n]) == 5]
+
+# define rarities for heptatonic scales:
+heptatonic_scale_names_by_rarity = {
+1: {'natural major', 'natural minor'}, #, },
+2: {'harmonic major', 'harmonic minor', 'melodic minor'}, # , 'minor blues', 'major blues'},
 3: {'melodic major', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'locrian'},
-4: {'neapolitan major', 'neapolitan minor', 'double harmonic'}}
+4: {'neapolitan major', 'neapolitan minor', 'double harmonic', 'miyako-bushi'}}
+
+# define rarities for non-heptatonics:
+canonical_scale_names_by_rarity = dict(heptatonic_scale_names_by_rarity)
+canonical_scale_names_by_rarity[1].update(['major pentatonic', 'minor pentatonic'])
+canonical_scale_names_by_rarity[2].update(['minor blues', 'major blues'])
+canonical_scale_names_by_rarity[4].update(['hirajoshi', 'iwato', 'kumoi', 'yo'])
+
 common_scale_names = set()
-for r, names in scale_names_by_rarity.items():
-    common_scale_names.update(names)
+for r, names in canonical_scale_names_by_rarity.items():
+        common_scale_names.update(names)
 
 # all remaining scales:
-scale_names_by_rarity[5] = {n for n in canonical_scale_name_factors if n not in common_scale_names and not contains_accidental(n)}
-scale_names_by_rarity[6] = {n for n in canonical_scale_name_factors if contains_accidental(n)}
+canonical_scale_names_by_rarity[5] = {n for n in canonical_scale_name_factors if n not in common_scale_names and not contains_accidental(n)}
+canonical_scale_names_by_rarity[6] = {n for n in canonical_scale_name_factors if contains_accidental(n)}
 
 
 # initialise empty caches:
@@ -1974,17 +2058,23 @@ parallel_scales.update(reverse_dict(parallel_scales))
 #     cached_pentatonics.update({c: c.pentatonic for c in common_scales})
 
 
-# which scales are modes of each other?
-base_scale_modes = {}
-for name, factors in canonical_scale_name_factors.items():
-    scale = Scale(name)
-    its_modes = scale.modes[1:]
-    registered_mode = False
-    for mode in its_modes:
-        if mode in base_scale_modes:
-            registered_mode = True
-            print(f'  -- Scale {scale.name} is a mode of {mode.name}')
-            break
-    if not registered_mode:
-        print(f'Registering {scale.name} as a base scale')
-        base_scale_modes[scale] = its_modes
+# # which scales are modes of each other?
+# base_scale_modes = {}
+# for name, factors in canonical_scale_name_factors.items():
+#     scale = Scale(name)
+#     its_modes = scale.modes[1:]
+#     registered_mode = False
+#     for m, mode in enumerate(its_modes):
+#         if mode in base_scale_modes:
+#             registered_mode = True
+#             which_mode = (len(mode)+1) - (m+1)
+#             num_suffix = num_suffixes[which_mode]
+#             base_mode_name = mode.name
+#             if base_mode_name not in base_scale_mode_names:
+#                 print(f'  ++++ {scale.name} is the {which_mode}{num_suffix} mode of {base_mode_name}')
+#             else:
+#                 print(f'  -- {scale.name} is the {which_mode}{num_suffix} mode of {base_mode_name}')
+#             break
+#     if not registered_mode:
+#         print(f'Registering {scale.name} as a base scale')
+#         base_scale_modes[scale] = its_modes

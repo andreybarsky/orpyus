@@ -3,12 +3,12 @@
 # import notes
 from .notes import Note, NoteList
 from .intervals import Interval, IntervalList, P5, default_degree_intervals
-from .util import log, precision_recall, rotate_list, check_all, reverse_dict, unpack_and_reverse_dict
+from .util import log, precision_recall, rotate_list, check_all, reverse_dict, unpack_and_reverse_dict, reduce_aliases
 from .qualities import Quality, ChordModifier, parse_chord_modifiers
 from .parsing import sh, fl, nat
 from . import notes, parsing, qualities, _settings
 
-from collections import defaultdict, UserDict
+from collections import defaultdict, UserDict, Counter
 from itertools import permutations
 
 from pdb import set_trace
@@ -162,7 +162,7 @@ class Factors(UserDict):
     def distance(self, other):
         # distance from other actors objects, to detect altered chords from their factors
         # as modifier: what must be done to RIGHT (other) to make it LEFT (self)
-        assert isinstance(other, self.__class__)
+        # assert isinstance(other, self.__class__)
         add, modify, remove  = {}, {}, []
         for degree, offset in self.items():
             if degree not in other:
@@ -180,7 +180,7 @@ class Factors(UserDict):
 
     def __sub__(self, other):
         """the - operator calculates (symmetric) distance between Factor objects"""
-        assert isinstance(other, self.__class__)
+        # assert isinstance(other, self.__class__)
         return self.distance(other)
 
     def _hashkey(self):
@@ -1753,8 +1753,12 @@ class ChordList(list):
         if len(items) == 1:
             arg = items[0]
             if isinstance(arg, str):
-                # could be a dash-separated string of chord names or something, try auto-split:
-                items = parsing.auto_split(arg, allow='°øΔ♯♭♮+𝄫𝄪#/' + ''.join(modifier_marks.values()))
+                # could be a dash-separated string of chord names or something, try auto-split
+                # but first, straighten out all subscripts/superscripts:
+                arg_unscript = [c  if c not in parsing.unscript  else parsing.unscript[c]  for c in arg]
+                arg_unscript = ''.join(arg_unscript)
+                # then auto split, but allow the kinds of symbols that occur in chord names:
+                items = parsing.auto_split(arg, allow='°øΔ♯♭♮+𝄫𝄪#/()!?')
             else:
                 assert isinstance(arg, (list, tuple)), f"Expected list or tuple of chord-like objects, but got single non-list/tuple arg: {type(arg)}"
                 items = arg
@@ -1842,6 +1846,36 @@ class ChordList(list):
         else:
             raise TypeError(f'ChordList.__add__ not defined for type: {type(other)}')
 
+    def all_notes(self):
+        """returns a NoteList of all the notes that occur in these chords, in order"""
+        notes = NoteList()
+        for chord in self:
+            notes.extend(chord.notes)
+        return notes
+
+    def unique_notes(self):
+        return self.all_notes().unique()
+
+    def note_counts(self):
+        return Counter(self.all_notes())
+
+    def weighted_notes(self, weight_factors):
+        """given a weight_factors dict that maps chord factors to multiplicative weights,
+        return a Counter object of note counts that multiplies the final results
+        by those weights."""
+        note_counts = Counter()
+        weight_factors = {f:weight_factors[f] if f in weight_factors else 1 for f in range(1,14)}
+
+        for chord in self:
+            # raw note occurence:
+            base_count = {n:1 for n in chord.notes}
+            # multiplication with factor-weightings in input dict:
+            weighted_count = {n: base_count[n] * weight_factors[f] for f,n in chord.factor_notes.items()}
+            # update output counter:
+            note_counts.update(weighted_count)
+        return note_counts
+
+
     def abstract(self):
         """returns a new ChordList that is purely the AbstractChords within this existing ChordList"""
         abs_chords = [c.abstract() if (type(c) == Chord)  else c  for c in self]
@@ -1858,42 +1892,45 @@ class ChordList(list):
             key = Key(key)
         assert isinstance(key, Key), f"key input to ChordList.root_degrees_in must be a Key or string that casts to Key, but got: {type(key)})"
         root_intervals_from_tonic = [c.root - key.tonic for c in self]
-        root_degrees = [key.interval_degrees[iv]  if iv in key  else iv.degree  for iv in root_intervals_from_tonic]
+        root_degrees = [key.interval_degrees[iv]  if iv in key.interval_degrees  else None for iv in root_intervals_from_tonic]
         return root_degrees
 
     def as_numerals_in(self, key, sep=' ', modifiers=True):
-        from src.keys import Key
-        if isinstance(key, str):
-            key = Key(key)
-        root_degrees = self.root_degrees_in(key)
-        degree_chords = zip(root_degrees, self)
-        numerals = [] # build a list of numerals, allocating case as we go
-        for d,c in degree_chords:
-            # use the quality of the chord if it is not indeterminate, otherwise use the quality of the key:
-            chord_mod = c.quality if not c.quality.perfect else key.quality
-            if chord_mod.major_ish:
-                numerals.append(parsing.numerals_roman[d])
-            elif chord_mod.minor_ish:
-                numerals.append(parsing.numerals_roman[d].lower())
-            else:
-                raise Exception(f'Could not figure out whether to make numeral upper or lowercase: {d}:{c} in {key} (should never happen)')
-
-        # numerals = [numerals_roman[d]  if c.quality.major_ish else numerals_roman[d].lower()  for d,c in degree_chords]
-        # add suffixes: (we ignore the 'm' suffix because it is denoted by lowercase instead)
-        if modifiers:
-            suffix_list = [c.get_suffix(inversion=False) if c.get_suffix() != 'm' else '' for c in self]
-            inversion_list = ['' if c.inversion==0 else f'/{c.inversion}' for c in self]
-            roman_chords_list = [f'{numerals[i]}{suffix_list[i]}{inversion_list[i]}' for i in range(len(self))]
-            # turn suffix modifiers into superscript marks etc. where possible:
-            roman_chords_list = [''.join(reduce_aliases(r, modifier_marks)) for r in roman_chords_list]
-        else:
-            roman_chords_list = [f'{numerals[i]}' for i in range(len(self))]
-        if sep is not None:
-            roman_chords_str = sep.join(roman_chords_list)
-            return roman_chords_str
-        else:
-            # just return the raw list, instead of a sep-connected string
-            return roman_chords_list
+        # this method relies a lot on progression module logic
+        # so is just a wrapper around a method from there:
+        from src.progressions import chordlist_numerals_in_key
+        return chordlist_numerals_in_key(self, key, sep=sep, modifiers=modifiers)
+        # if isinstance(key, str):
+        #     key = Key(key)
+        # root_degrees = self.root_degrees_in(key)
+        # degree_chords = zip(root_degrees, self)
+        # numerals = [] # build a list of numerals, allocating case as we go
+        # for d,c in degree_chords:
+        #     # use the quality of the chord if it is not indeterminate, otherwise use the quality of the key:
+        #     chord_mod = c.quality if not c.quality.perfect else key.quality
+        #     if chord_mod.major_ish:
+        #         numerals.append(parsing.numerals_roman[d])
+        #     elif chord_mod.minor_ish:
+        #         numerals.append(parsing.numerals_roman[d].lower())
+        #     else:
+        #         raise Exception(f'Could not figure out whether to make numeral upper or lowercase: {d}:{c} in {key} (should never happen)')
+        #
+        # # numerals = [numerals_roman[d]  if c.quality.major_ish else numerals_roman[d].lower()  for d,c in degree_chords]
+        # # add suffixes: (we ignore the 'm' suffix because it is denoted by lowercase instead)
+        # if modifiers:
+        #     suffix_list = [c.get_suffix(inversion=False) if c.get_suffix() != 'm' else '' for c in self]
+        #     inversion_list = ['' if c.inversion==0 else f'/{c.inversion}' for c in self]
+        #     roman_chords_list = [f'{numerals[i]}{suffix_list[i]}{inversion_list[i]}' for i in range(len(self))]
+        #     # turn suffix modifiers into superscript marks etc. where possible:
+        #     roman_chords_list = [''.join(reduce_aliases(r, modifier_marks)) for r in roman_chords_list]
+        # else:
+        #     roman_chords_list = [f'{numerals[i]}' for i in range(len(self))]
+        # if sep is not None:
+        #     roman_chords_str = sep.join(roman_chords_list)
+        #     return roman_chords_str
+        # else:
+        #     # just return the raw list, instead of a sep-connected string
+        #     return roman_chords_list
 
     @property
     def progression(self):
