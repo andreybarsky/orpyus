@@ -1859,7 +1859,7 @@ class ChordList(list):
     def note_counts(self):
         return Counter(self.all_notes())
 
-    def weighted_notes(self, weight_factors):
+    def weighted_note_counts(self, weight_factors):
         """given a weight_factors dict that maps chord factors to multiplicative weights,
         return a Counter object of note counts that multiplies the final results
         by those weights."""
@@ -2197,7 +2197,8 @@ def fuzzy_matching_chords(note_list, display=True,
                     weights[candidate.factor_notes[5]] = 0.5
                 # if require root, we only accept chords that share the bass note with the note_list:
                 if (not require_root) or (candidate.bass == note_list[0]):
-                    precision, recall = precision_recall(unique_notes, candidate.notes, weights=weights)
+                    scores = precision_recall(unique_notes, candidate.notes, weights=weights)
+                    precision, recall = scores['precision'], scores['recall']
                     consonance = candidate.consonance # float from ~0.4 to ~0.9, in principle
 
                     if recall >= min_recall and precision >= min_precision and likelihood >= min_likelihood:

@@ -68,8 +68,8 @@ def precision_recall(target, candidate, weights=None, return_unweighted_scores=F
                 item_weight = 1 if ((weights is None) or (item not in weights.keys())) else weights[item]
                 relevant_weight_retrieved += item_weight
 
-    raw_precision = relevant_retrieved / num_retrieved    # i.e. validity
-    raw_recall = relevant_retrieved / num_relevant        # i.e. completeness
+    raw_precision = relevant_num_retrieved / num_retrieved    # i.e. validity
+    raw_recall = relevant_num_retrieved / num_relevant        # i.e. completeness
 
     if weights is not None:
         # calculate prec/rec with respect to weighting
