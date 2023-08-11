@@ -5,12 +5,12 @@ PROFILE_INIT = True
 if PROFILE_INIT:
     profiler = cProfile.Profile()
     profiler.enable()
-from src.intervals import Interval, IntervalList
+from src.intervals import *
 from src.notes import Note, OctaveNote, NoteList
-from src.chords import AbstractChord, Chord, matching_chords
-from src.scales import Scale
-from src.keys import Key, matching_keys
-from src.progressions import ChordList, Progression, ChordProgression
+from src.chords import AbstractChord, Chord, ChordList, matching_chords
+from src.scales import Scale, ScaleFactors, ScaleDegree, ScaleChord
+from src.keys import Key, KeyChord
+from src.progressions import Progression, ChordProgression
 from src.guitar import Guitar, standard
 
 from src.test import test_util, test_parsing, test_qualities, test_intervals, test_notes, test_chords, test_scales, test_keys, test_guitar, test_display, test_progressions

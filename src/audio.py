@@ -12,6 +12,9 @@ import sounddevice as sd
 # global sampling frequency:
 fs = 44100
 
+### pyaudio for mic input?
+
+
 def show(*arrs, fix_ylim=True, fix_xlim=True, overlay=False):
     if isinstance(arrs[0], tuple):
         log(f' show detected arrs[0] as being of type: {type(arrs[0])}')

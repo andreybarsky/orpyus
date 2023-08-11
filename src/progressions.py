@@ -4,9 +4,9 @@ from .intervals import Interval
 from .chords import Chord, AbstractChord, ChordList
 from .qualities import Major, Minor, Perfect, Diminished, parse_chord_modifiers, ChordModifier
 from .scales import Scale, ScaleChord, NaturalMajor, NaturalMinor, MelodicMinor, HarmonicMinor, MelodicMajor, HarmonicMajor
-from .keys import Key, KeyChord, matching_keys, most_likely_key
+from .keys import Key, KeyChord # matching_keys, most_likely_key
 from .util import reduce_aliases, check_all, reverse_dict, log
-from .parsing import roman_numerals, numerals_roman, auto_split, superscript
+from .parsing import roman_numerals, numerals_roman, auto_split, superscript, fl, sh, nat
 from . import parsing, _settings
 
 from collections import Counter
@@ -85,19 +85,29 @@ scale_function_names = {0: "tonic", # 1st
 modifier_marks = { 'dim':  '°',
                    'hdim': 'ø', # ᶲ ?
                    'aug':  '⁺',
-                   'maj7': 'ᐞ⁷',
-                   '5':    '⁵',
-                   '7':    '⁷',
-                   'm7':   '⁷',  # a kludge; here we replace out the 'm' because it is already implied by the lower case roman numeral
-                   '9':    '⁹',
-                   'm9':   '⁹', # ditto for m9, m11, m13
-                   '11':   '¹¹',
-                   'm11':  '¹¹',
-                   '13':   '¹³',
-                   'm13':  '¹³',
-
+                   'maj':  'ᐞ',
+                   # '5':    '⁵',
+                   # '6':    '⁶',
+                   # '7':    '⁷',
+                   # 'm7':   '⁷',  # a kludge; here we replace out the 'm' because it is already implied by the lower case roman numeral
+                   # '9':    '⁹',
+                   # 'm9':   '⁹', # ditto for m9, m11, m13
+                   # '11':   '¹¹',
+                   # 'm11':  '¹¹',
+                   # '13':   '¹³',
+                   # 'm13':  '¹³',
                    'sus':  'ˢ',
-_settings.CHARACTERS['unknown_chord']: _settings.CHARACTERS['unknown_superscript'], } # '⁽ᵃ⁾'}
+                   'add':  'ᵃ',
+_settings.CHARACTERS['unknown_chord']: _settings.CHARACTERS['unknown_superscript'],
+} # '⁽ᵃ⁾'}
+
+# all numerals also get turned into modifier marks:
+modifier_marks.update({str(i): parsing.superscript_integers[i] for i in range(10)})
+# as well as some select superscriptable symbols:
+modifier_marks.update({c: parsing.superscript_symbols[c] for c in '()/+-!?'})
+# but not chord alterations: (because we can't superscript sharps/flats)
+modifier_marks.update({f'{acc}{i}' : f'{acc}{i}' for i in range(3,14) for acc in [sh, fl, nat]})
+
 
 roman_degree_chords = {}
 # render as an alias dict linking numerals to major/minor qualities:
@@ -890,6 +900,129 @@ class ChordProgression(Progression, ChordList):
 
     # def __repr__(self):
     #     return str(self)
+
+def chordlist_numerals_in_key(chordlist, key, sep=' ', modifiers=True, auto_superscript=True):
+    """given a chordlist and a key, produces the roman numerals
+    that describe those chords in that key"""
+    # recast args if needed:
+    if not isinstance(chordlist, (ChordList)):
+        chordlist = ChordList(chordlist)
+    if not isinstance(key, Key):
+        key = Key(key)
+
+    root_degrees = chordlist.root_degrees_in(key)
+    if None in root_degrees:
+        # if any of the chords start on a root that is NOT in the key,
+        # figure out alternative notations:
+        nonmatching_chord_idxs = [i for i,d in enumerate(root_degrees) if d is None]
+        root_degrees = []
+        root_degree_offsets = []
+        for i, ch in enumerate(chordlist):
+            if ch.root in key:
+                root_degree = key.note_degrees[ch.root]
+                root_degrees.append(root_degree)
+                root_degree_offsets.append(0)
+            else:
+                root_interval = ch.root - key.tonic
+                # is this a bIII or something?
+                sharpened_root_note = ch.root + 1
+                if sharpened_root_note in key:
+                    sharpened_degree = key.note_degrees[sharpened_root_note]
+                    root_degrees.append(sharpened_degree)
+                    root_degree_offsets.append(-1)
+                    continue
+
+                # this is more rare, but might come up in irregular keys:
+                flattened_root_note = ch.root - 1
+                if flattened_root_note in key:
+                    flattened_degree = key.note_degrees[flattened_root_note]
+                    root_degrees.append(flattened_degree)
+                    root_degree_offsets.append(1)
+                    continue
+
+                # otherwise, this will just be treated as a chromatic or out-of-key root
+                assumed_degree = root_interval.degree
+                root_degrees.append(assumed_degree)
+                root_degree_offsets.append(None)
+    else:
+        # all chord roots are in this key,
+        # so all offsets are 0 by definition:
+        root_degree_offsets = [0] * len(root_degrees)
+
+    chords_degrees_offsets = zip(chordlist, root_degrees, root_degree_offsets)
+    numerals = [] # build a list of numerals, allocating case as we go
+    for ch, deg, offset in chords_degrees_offsets:
+        # use the quality of the chord if it is not indeterminate, otherwise use the quality of the key:
+        chord_qual = ch.quality if not ch.quality.perfect else key.quality
+        if chord_qual.major_ish:
+            numeral = parsing.numerals_roman[deg]
+        elif chord_qual.minor_ish:
+            numeral = parsing.numerals_roman[deg].lower()
+        else:
+            raise Exception(f'Could not figure out whether to make numeral upper or lowercase: {d}:{c} in {key} (should never happen)')
+
+        # get the chord suffix, but ignore any suffix that means 'minor'
+        # because minor-ness is already communicated by the numeral's case
+        suffix = ch.suffix
+        if (len(suffix)) > 0 and (suffix[0] == 'm') and (not ch.quality.major_ish):
+            suffix = suffix[1:]
+
+        # turn suffix modifiers into superscript marks etc. where possible:
+        suffix = ''.join(reduce_aliases(suffix, modifier_marks))
+
+        # # place leading numbers in superscript:
+        # leading_numbers = [] # will be list of integer strings
+        # is_leading = False
+        # rest_index = len(suffix)
+        # for i,s in enumerate(suffix):
+        #     if s.isnumeric():
+        #         is_leading = True
+        #         leading_numbers.append(s)
+        #     else:
+        #         if is_leading:
+        #             rest_index = i # start of non-leading part of string
+        #             break
+        # # leading_numbers = ''.join(leading_numbers) # cast to str
+        # rest = suffix[rest_index:] # everything after leading numbers
+        # leading_numbers_super = ''.join([parsing.superscript[s] for s in leading_numbers])
+        # suffix = leading_numbers_super + rest
+
+        # if auto_superscript:
+        #     # replace all superscriptable characters
+
+        # get inversion as integer degree rather than bass note:
+        inv_string = '' if ch.inversion == 0 else f'/{ch.inversion}'
+
+        full_numeral = f'{numeral}{suffix}{inv_string}'
+        # finally, prefix the numeral with flat or sharp if it's not in key:
+        if offset is not None:
+            prefix = '' if offset==0 else parsing.preferred_accidentals[offset]
+            full_numeral = prefix + full_numeral
+        else:
+            # or wrap it in out-of-key brackets:
+            lb, rb = _settings.BRACKETS['non_key_chord_root']
+            full_numeral = lb + full_numeral + rb
+
+        numerals.append(full_numeral)
+
+    # numerals = [numerals_roman[d]  if c.quality.major_ish else numerals_roman[d].lower()  for d,c in degree_chords]
+    # add suffixes: (we ignore the 'm' suffix because it is denoted by lowercase instead)
+    # if modifiers:
+    #     suffix_list = [c.get_suffix(inversion=False) if c.get_suffix() != 'm' else '' for c in self]
+    #     inversion_list = ['' if c.inversion==0 else f'/{c.inversion}' for c in self]
+    #     roman_chords_list = [f'{numerals[i]}{suffix_list[i]}{inversion_list[i]}' for i in range(len(self))]
+    #     # turn suffix modifiers into superscript marks etc. where possible:
+    #     roman_chords_list = [''.join(reduce_aliases(r, modifier_marks)) for r in roman_chords_list]
+    # else:
+    #     roman_chords_list = [f'{numerals[i]}' for i in range(len(self))]
+
+    if sep is not None:
+        roman_chords_str = sep.join(numerals)
+        return roman_chords_str
+    else:
+        # just return the raw list, instead of a sep-connected string
+        return numerals
+
 
 # TODO: key recognition routine that respects progression logic,
 # i.e. looking for cadences or half cadences in the final root movement

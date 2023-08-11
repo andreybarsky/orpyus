@@ -2,7 +2,7 @@ from . import notes as notes
 from .notes import Note, OctaveNote, NoteList
 from .chords import AbstractChord, Chord, most_likely_chord, matching_chords
 from .scales import Scale
-from .keys import Key, matching_keys
+from .keys import Key # , matching_keys
 from .progressions import Progression, ChordProgression
 from . import parsing
 from .util import log, reverse_dict

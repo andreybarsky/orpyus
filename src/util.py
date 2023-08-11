@@ -35,7 +35,7 @@ def rotate_list(lst, num_steps, N=None):
     rotated_lst= [lst[i] for i in rotated_idxs]
     return rotated_lst
 
-def precision_recall(target, candidate, weights=None):
+def precision_recall(target, candidate, weights=None, return_unweighted_scores=False):
     """return a metric that can be used to determine how well <candidate> fits <target>,
     so long as both have a meaningful __contains__ method to query their members,
     and both contain the same types of objects (that have a meaningful __eq__ method).
@@ -46,32 +46,43 @@ def precision_recall(target, candidate, weights=None):
 
     # in ML parlance: the candidate is the 'retrieved' set,
     # and the target is the 'relevant' set
-    if weights is None:
-        num_retrieved = len(candidate)
-        num_relevant = len(target)
-    else: # sum of weights instead of number of items:
+    # if (return_raw_scores) or (weights is None):
+    num_retrieved = len(candidate)
+    num_relevant = len(target)
+    if weights is not None: # sum of weights instead of number of items:
         candidate_weights = [weights[c] if c in weights.keys() else 1 for c in candidate]
         target_weights = [weights[t] if t in weights.keys() else 1 for t in target]
 
-        num_retrieved = sum(candidate_weights)
-        num_relevant = sum(target_weights)
+        total_weight_retrieved = sum(candidate_weights)
+        total_weight_relevant = sum(target_weights)
 
-    relevant_retrieved = 0 # how many of target's members are in candidate (and vice-versa)
+    relevant_num_retrieved = 0 # how many of target's members are in candidate (and vice-versa)
+    relevant_weight_retrieved = 0
 
     # TBI: this naive implementation is O(n^2), could be improved if this turns out to be a bottleneck
     for item in target:
         if item in candidate:
-            item_weight = 1 if ((weights is None) or (item not in weights.keys())) else weights[item]
+            relevant_num_retrieved += 1
 
-            relevant_retrieved += item_weight
+            if weights is not None:
+                item_weight = 1 if ((weights is None) or (item not in weights.keys())) else weights[item]
+                relevant_weight_retrieved += item_weight
 
-    precision = relevant_retrieved / num_retrieved    # i.e. validity
-    recall = relevant_retrieved / num_relevant        # i.e. completeness
+    raw_precision = relevant_retrieved / num_retrieved    # i.e. validity
+    raw_recall = relevant_retrieved / num_relevant        # i.e. completeness
 
-    if precision > 1:
-        from ipdb import set_trace; set_trace(context=30)
-
-    return precision, recall
+    if weights is not None:
+        # calculate prec/rec with respect to weighting
+        weighted_precision = relevant_weight_retrieved / total_weight_retrieved
+        weighted_recall = relevant_weight_retrieved / total_weight_relevant
+        scores = {'precision': weighted_precision, 'recall': weighted_recall}
+        if return_unweighted_scores:
+            # add raw scores to dict
+            scores['unweighted precision'] = raw_precision
+            scores['unweighted recall'] = raw_recall
+    else:
+        scores = {'precision': raw_precision, 'recall': raw_recall}
+    return scores
 
 def reverse_dict(dct):
     """accepts a dict whose values and keys are both unique,
@@ -267,8 +278,9 @@ def numeral_subscript(numerals):
 class ModDict(dict):
     def __init__(self, *args, index=0, max_key=None, raise_values=False, raise_by=None, **kwargs):
         """a special dict class with integer keys (or integer-like keys, such as ScaleDegrees)
-        that modulos during its lookup if a provided index  exceeds its defined maximum key.
-        arg 'index' determines the integer key associated with the first element.
+        that modulos during its lookup if a provided index exceeds its defined maximum key.
+        arg 'index' determines the integer associated with the first key.
+            i.e. if keys are intervals index should be 0; if they are degrees, it should be 1.
         arg 'max_key' determines the highest allowable key before modulo;
             if None, it is auto-determined and dynamically updated with dict updates.
         arg 'raise_values' determines if output values are exponentiated if index exceeds max.

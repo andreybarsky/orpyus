@@ -1,5 +1,6 @@
-from ..progressions import Progression, ChordProgression, ChordList, parse_roman_numeral
+from ..progressions import Progression, ChordProgression, parse_roman_numeral
 from ..chords import Chord, AbstractChord
+from
 from .testing_tools import compare
 
 def unit_test():

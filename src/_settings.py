@@ -48,7 +48,8 @@ BRACKETS = { 'Interval': ['‹', '›'],
           'Progression': ['𝄆 ', ' 𝄇'],    #['𝄃 ', ' 𝄂'],
      'ChordProgression': ['𝄆 ', ' 𝄇'],    # ['╟', '╢'],
                'Guitar': ['〚', ' 〛'],
-  'chromatic_intervals': ['[', ']'],
+  'chromatic_intervals': ['[', ']'],  # displayed around chromatic intervals / scale factors
+   'non_key_chord_root': ['<', '>'],  # displayed around KeyChords whose root is not in the key
             }
 
 ### CHARACTERS are used in lists to compactly denote certain traits

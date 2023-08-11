@@ -470,41 +470,42 @@ def auto_split(inp, allow='', allow_numerals=True, allow_letters=True, allow_acc
 subscript_integers = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉']
 superscript_integers = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹']
 
-subscript = {   # lowercase:
-              'a': 'ₐ',  'e': 'ₑ',  'o': 'ₒ',  'x': 'ₓ',
-              'h': 'ₕ',  'k': 'ₖ',  'm': 'ₘ',  'n': 'ₙ',
-              'p': 'ₚ',  's': 'ₛ',  't': 'ₜ',  'l': 'ₗ',
-              'j': 'ⱼ',  'i': 'ᵢ',  'r': 'ᵣ',  'u': 'ᵤ',
-              'v': 'ᵥ',
+subscript_letters = {   # lowercase only:
+      'a': 'ₐ',  'e': 'ₑ',  'o': 'ₒ',  'x': 'ₓ',
+      'h': 'ₕ',  'k': 'ₖ',  'm': 'ₘ',  'n': 'ₙ',
+      'p': 'ₚ',  's': 'ₛ',  't': 'ₜ',  'l': 'ₗ',
+      'j': 'ⱼ',  'i': 'ᵢ',  'r': 'ᵣ',  'u': 'ᵤ',
+      'v': 'ᵥ', }
 
-                # symbols:
-              '+': '₊',  '-': '₋',  '=': '₌',
-              '(': '₍',  ')': '₎',
-             }
+subscript_symbols = {
+      '+': '₊',  '-': '₋',  '=': '₌',
+      '(': '₍',  ')': '₎',
+      }
 
-superscript = {  # lowercase: (nearly complete alphabet)
-               'a': 'ᵃ',  'b': 'ᵇ',  'c': 'ᶜ',  'd': 'ᵈ',  'e': 'ᵉ',
-               'f': 'ᶠ',  'g': 'ᵍ',  'h': 'ʰ',  'i': 'ⁱ',  'j': 'ʲ',
-               'k': 'ᵏ',  'l': 'ˡ',  'm': 'ᵐ',  'n': 'ⁿ',  'o': 'ᵒ',
-               'p': 'ᵖ',  'r': 'ʳ',  's': 'ˢ',  't': 'ᵗ',  'u': 'ᵘ', # note: no Q
-               'v': 'ᵛ',  'w': 'ʷ',  'x': 'ˣ',  'y': 'ʸ',  'z': 'ᶻ',
+superscript_letters = {  # lowercase: (nearly complete alphabet)
+       'a': 'ᵃ',  'b': 'ᵇ',  'c': 'ᶜ',  'd': 'ᵈ',  'e': 'ᵉ',
+       'f': 'ᶠ',  'g': 'ᵍ',  'h': 'ʰ',  'i': 'ⁱ',  'j': 'ʲ',
+       'k': 'ᵏ',  'l': 'ˡ',  'm': 'ᵐ',  'n': 'ⁿ',  'o': 'ᵒ',
+       'p': 'ᵖ',  'r': 'ʳ',  's': 'ˢ',  't': 'ᵗ',  'u': 'ᵘ', # note: no Q
+       'v': 'ᵛ',  'w': 'ʷ',  'x': 'ˣ',  'y': 'ʸ',  'z': 'ᶻ',
 
-                 # uppercase:
-               'A': 'ᴬ',  'B': 'ᴮ',  'D': 'ᴰ',  'E': 'ᴱ',
-               'G': 'ᴳ',  'H': 'ᴴ',  'I': 'ᴵ',  'J': 'ᴶ',
-               'K': 'ᴷ',  'L': 'ᴸ',  'M': 'ᴹ',  'N': 'ᴺ',
-               'O': 'ᴼ',  'P': 'ᴾ',  'R': 'ᴿ',  'T': 'ᵀ',
-               'U': 'ᵁ',  'V': 'ⱽ',  'W': 'ᵂ',  'Z': 'ᙆ',
+         # uppercase:
+       'A': 'ᴬ',  'B': 'ᴮ',  'D': 'ᴰ',  'E': 'ᴱ',
+       'G': 'ᴳ',  'H': 'ᴴ',  'I': 'ᴵ',  'J': 'ᴶ',
+       'K': 'ᴷ',  'L': 'ᴸ',  'M': 'ᴹ',  'N': 'ᴺ',
+       'O': 'ᴼ',  'P': 'ᴾ',  'R': 'ᴿ',  'T': 'ᵀ',
+       'U': 'ᵁ',  'V': 'ⱽ',  'W': 'ᵂ',  'Z': 'ᙆ',
+       }
+superscript_symbols = {
+       '+': '⁺',  '-': '⁻',  '=': '⁼',
+       '(': '⁽',  ')': '⁾',  '?': 'ˀ', '!': 'ᵎ',
+       'Δ': 'ᐞ',  '/': 'ᐟ',  '\\': 'ᐠ', '.': 'ᐧ',
+       }
 
-                 # symbols:
-               '+': '⁺',  '-': '⁻',  '=': '⁼',
-               '(': '⁽',  ')': '⁾',  '?': 'ˀ', '!': 'ᵎ',
-               'Δ': 'ᐞ',  '/': 'ᐟ',  '\\': 'ᐠ', '.': 'ᐧ',
-             }
-
-
-subscript.update({str(i): subscript_integers[i] for i in range(10)})
-superscript.update({str(i): superscript_integers[i] for i in range(10)})
+# unions of them all:
+superscript, subscript = {}, {}
+[superscript.update(s) for s in [superscript_letters, superscript_symbols, {str(i): superscript_integers[i] for i in range(10)}]]
+[subscript.update(s)   for s in [subscript_letters,   subscript_symbols,   {str(i): subscript_integers[i]   for i in range(10)}]]
 
 # reverse mapping of either:
 unscript = reverse_dict(superscript)
