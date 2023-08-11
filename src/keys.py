@@ -1,10 +1,10 @@
-from . import notes, parsing, _settings
+from . import notes, scales, parsing, _settings
 from .parsing import fl, sh, nat, dfl, dsh
 from .intervals import Interval, IntervalList
 from .notes import Note, NoteList
-from .scales import Scale, ScaleFactors, ScaleDegree, ScaleChord, NaturalMajor, NaturalMinor, parallel_scales, canonical_scale_interval_names, all_scale_name_factors
+from .scales import Scale, ScaleFactors, ScaleDegree, ScaleChord
 from .chords import Chord, AbstractChord, ChordList
-from .util import check_all, precision_recall, reverse_dict, log
+from .util import check_all, precision_recall, reverse_dict, unpack_and_reverse_dict, log
 
 from collections import Counter
 from functools import cached_property
@@ -238,32 +238,38 @@ class Key(Scale):
             # compute flat/sharp preference by assigning one note to each natural note name
             tonic_nat = self.tonic.chroma[0] # one of the few cases where note sharp preference matters
             next_nat = parsing.next_natural_note[tonic_nat]
-            new_degree_notes = [self.tonic]
+            new_notes = []
 
             which_chromatic = self.which_intervals_chromatic()
-            non_chromatic_notes = [n for i,n in enumerate(self.notes) if not which_chromatic[i]]
+            # non_chromatic_notes = [n for i,n in enumerate(self.notes) if not which_chromatic[i]]
 
-            for d in self.degrees[1:]:
-                n = non_chromatic_notes[int(d)-1]
-                if n.name == next_nat:
-                    # this is a natural note, so its sharp preference shouldn't matter,
-                    # but set it to the tonic's anyway for consistency
-                    n = Note(n.position, prefer_sharps=prefer_sharps)
-                else:
-                    # which accidental would make this note's chroma include the next natural note?
-                    if n.flat_name[0] == next_nat:
-                        n = Note(n.position, prefer_sharps=False)
-                    elif n.sharp_name[0] == next_nat:
-                        n = Note(n.position, prefer_sharps=True)
-                    else:
-                        # this note needs to be a double sharp or double flat or something
-                        # log(f'Found a possible case for a double-sharp or double-flat: degree {d} ({n}) in scale: {self}')
-                        # fall back on same as tonic:
+            # for d in self.degrees[1:]:
+            for i,n in enumerate(self.notes):
+                # n = non_chromatic_notes[int(d)-1]
+                if not which_chromatic[i]:
+                    # degree note
+                    if n.name == next_nat:
+                        # this is a natural note, so its sharp preference shouldn't matter,
+                        # but set it to the tonic's anyway for consistency
                         n = Note(n.position, prefer_sharps=prefer_sharps)
-                new_degree_notes.append(n)
-                next_nat = parsing.next_natural_note[next_nat]
+                    else:
+                        # which accidental would make this note's chroma include the next natural note?
+                        if n.flat_name[0] == next_nat:
+                            n = Note(n.position, prefer_sharps=False)
+                        elif n.sharp_name[0] == next_nat:
+                            n = Note(n.position, prefer_sharps=True)
+                        else:
+                            # this note needs to be a double sharp or double flat or something
+                            # log(f'Found a possible case for a double-sharp or double-flat: degree {d} ({n}) in scale: {self}')
+                            # fall back on same as tonic:
+                            n = Note(n.position, prefer_sharps=prefer_sharps)
+                    new_notes.append(n)
+                    next_nat = parsing.next_natural_note[next_nat]
+                else:
+                    # chromatic note, just append without changing
+                    new_notes.append(n)
             # combine with existing chromatic notes (which are not changed)
-            new_notes = [new_degree_notes[i]  if not which_chromatic[i]  else self.notes[i] for i in range(len(self.notes))]
+            # new_notes = [new_degree_notes[i]  if not which_chromatic[i]  else self.notes[i] for i in range(len(self.notes))]
             self.notes = NoteList(new_notes)
 
     def _set_note_mappings(self):
@@ -392,7 +398,7 @@ class Key(Scale):
     def modes(self):
         """the modes of a Key are the relative keys that share its notes but start on a different tonic
         i.e. modes of C major are D dorian, E phrygian, etc."""
-        return [self.mode(n) for n in range(1,8)]
+        return [self.mode(n) for n in range(1,self.order+1)]
         # return [Key(notes=Key('C').notes.rotate(i)) for i in range(1,8)]
 
     # def subscale(self, degrees=None, omit=None, chromatic_intervals=None, name=None):
@@ -409,7 +415,7 @@ class Key(Scale):
         """as Scale.pentatonic, but returns a Key on the same tonic"""
         # check if a pentatonic scale is defined under this scale's canonical name:
         naive_pentatonic_name = f'{self.scale_name} pentatonic'
-        if naive_pentatonic_name in all_scale_name_factors:
+        if naive_pentatonic_name in scales.all_scale_name_factors:
             return Scale(naive_pentatonic_name).on_tonic(self.tonic)
         else:
             # this will already be a Key due to inheritance of compute_pentatonics:
@@ -426,7 +432,7 @@ class Key(Scale):
             df = DataFrame(['Subscale', 'Notes', 'Factors',  'Omit', 'Cons.'])
             for cand in sorted_pentatonic_scales:
                 cand_iv_key = (cand.intervals, cand.chromatic_intervals if len(cand.chromatic_intervals) > 0 else None)
-                scale_name = cand.assigned_name if cand_iv_key not in canonical_scale_interval_names else canonical_scale_interval_names[cand_iv_key]
+                scale_name = cand.assigned_name if cand_iv_key not in scales.canonical_scale_interval_names else scales.canonical_scale_interval_names[cand_iv_key]
                 name = f'{self.tonic.chroma}{scale_name}'
                 pent_notes = str(cand.notes)[1:-1]
                 factors_str = str(cand.factors)[1:-1]
@@ -439,53 +445,38 @@ class Key(Scale):
             return {x: round(x.consonance,3) for x in sorted_pentatonic_keys}
 
     @property
-    def relative_minor(self):
-        # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
-        assert self.quality.major, f'{self} is not major, and therefore has no relative minor'
-        rel_tonic = notes.relative_minors[self.tonic.name]
-        if self.scale in parallel_scales:
-            return parallel_scales[self.scale].on_tonic(rel_tonic)
-        else:
-            raise Exception(f'Relative major/minor not defined for {self}')
-
-    @property
-    def relative_major(self):
-        # assert not self.minor, f'{self} is already minor, and therefore has no relative minor'
-        assert self.quality.minor, f'{self} is not minor, and therefore has no relative major'
-        rel_tonic = notes.relative_majors[self.tonic.name]
-        if self.scale in parallel_scales:
-            return parallel_scales[self.scale].on_tonic(rel_tonic)
-        else:
-            raise Exception(f'Relative major/minor not defined for {self}')
-
-
-    @property
     def relative(self):
-        if self.quality.major:
-            return self.relative_minor
-        elif self.quality.minor:
-            return self.relative_major
-        else:
-            raise Exception(f'Key of {self.name} is neither major or minor, and therefore has no relative')
+        """returns this Key's parallel scale on the tonic that forces it to have the same notes"""
+        if self.has_parallel():
+            parallel_scale_name = scales.parallel_scale_names[self.scale_name]
+            # need to figure out where to place the tonic
+            # so we want to find which mode of this scale is our parallel scale
+            # first, which of the two is the base scale:
+            if self.scale_name in scales.base_scale_names:
+                self_is_base = True
+                base_scale_name = self.scale_name
+                mode_name = parallel_scale_name
+            else:
+                self_is_base = False
+                base_scale_name = parallel_scale_name
+                mode_name = self.scale_name
+            # list the inverted mode names:
+            mode_idx_names = scales.base_scale_mode_names[base_scale_name]
+            mode_name_idxs = unpack_and_reverse_dict(mode_idx_names)
+            mode_idx_of_base = mode_name_idxs[mode_name]
+            # if the parallel is the base scale, we need to invert the mode idx:
+            if not self_is_base:
+                mode_idx_of_base = (self.order+2) - mode_idx_of_base
+            relative_tonic = self.degree_notes[mode_idx_of_base]
+            return Scale(parallel_scale_name).on_tonic(relative_tonic)
 
-    @property
-    def parallel_minor(self):
-        if not self.quality.major:
-            raise Exception(f'{self.name} is not major, and therefore has no parallel minor')
         else:
-            return self.parallel
-
-    @property
-    def parallel_major(self):
-        if not self.quality.minor:
-            raise Exception(f'{self.name} is not minor, and therefore has no parallel major')
-        else:
-            return self.parallel
+            raise Exception(f'{self.name} has no defined relative key')
 
     @property
     def parallel(self):
-        if self.scale in parallel_scales:
-            return parallel_scales[self.scale].on_tonic(self.tonic)
+        if self.has_parallel():
+            return Scale(scales.parallel_scale_names[self.scale_name]).on_tonic(self.tonic)
         else:
             raise Exception(f'Parallel major/minor not defined for {self.name}')
 
@@ -638,6 +629,116 @@ class KeyChord(Chord, ScaleChord):
     # overwrites Chord.from_cache:
     def from_cache(self, *args, **kwargs):
         raise TypeError('KeyChords are not cached')
+
+
+def matching_keys(chords=None, notes=None,
+                  exact=False, exhaustive=None, natural_only=True, modes=False,
+                  min_precision=0.9, min_recall=0, min_consonance=0, min_likelihood=0,
+                  weight_counts=True, weight_factors = {1: 2, 3: 1.5, 5: 0.5},
+                  # (by default, upweight roots and thirds, downweight fifths)
+                  sort_order=['length', 'precision', 'recall', 'likelihood', 'consonance'],
+                  display=True):
+    """Accepts either a list of chords or a list of notes.
+    Will only find a key if that key's tonic is somewhere in the input. (?)
+    weight_counts: if True, weights precision and recall by the relative frequency
+        of each note in the input list.
+    exact: if True, only returns matches with perfect precision.
+    exhaustive: if True, search all possible key tonics.
+                if False, search only key tonics corresponding to input chord roots. (or input notes)
+                if None, becomes set by default to True for notelists and False for chordlists.
+    natural_only: if True, only scores natural major and minor keys.
+    min_[precision/recall/consonance/likelihood]: minimum scores that a key must meet to count as 'matching'"""
+
+    # quietly accept a notelist as first argument:
+    if isinstance(chords, NoteList):
+        notes = chords
+        chords = None
+
+    if exhaustive is None:
+        # default behaviour: set to True for notes and False for chords
+        exhaustive = (notes is not None)
+
+    # parse input into counter-dict of notes frequencies:
+    if chords is not None:
+        assert notes is None
+        if not isinstance(chords, ChordList):
+            chords = ChordList(chords)
+            # upweighting logic goes here (TBI, method?)
+            input_note_weights = chords.weighted_note_counts(weight_factors)
+    elif notes is not None:
+        if not isinstance(notes, NoteList):
+            notes = NoteList(notes)
+            input_note_weights = Counter(notes)
+
+    if not weight_counts:
+        # set all counts to 1:
+        input_note_weights = Counter(input_note_weights.keys())
+
+    # list of notes to match:
+    input_notes = list(input_note_weights.keys())
+
+    # which scales to loop over?
+    if natural_only:
+        # just natural major (and its modes):
+        scales_to_search = ['natural major']
+    else:
+        # all base scales (and their modes):
+        scales_to_search = list(base_scale_mode_names.keys())
+
+    if exhaustive:
+        # search all specified scales on all possible tonics
+        possible_tonics = notes.chromatic_notes
+    else:
+        if chords is not None:
+            # search only the tonics that occur as chord roots:
+            possible_tonics = [ch.root for ch in chords]
+        elif notes is not None:
+            # search tonics corresponding to input notes
+            possible_tonics = notes
+
+    ###############################
+    ###### main search loop: ######
+    shortlist_scores = {}
+    for scale_name in scales_to_search:
+        scale_intervals = scales.canonical_scale_name_intervals[scale_name]
+        for tonic in possible_tonics:
+            candidate_key_notes = [tonic + iv for iv in scale_intervals]
+            ### main matching call:
+            scores = precision_recall(unique_notes, candidate_key_notes, weights=input_note_weights)
+
+            # add a candidate to shortlist if it beats the minimum prec/rec requirements:
+            if scores['precision'] >= min_precision and scores['recall'] >= min_recall:
+                print(f'Found shortlist match ({tonic.chroma} {scale_name}) with precision {prec} and recall {rec}')
+                candidate = Scale(scale_name).on_tonic(tonic)
+                # add to shortlist dict:
+                shortlist_scores[candidate] = scores
+
+    if min_likelihood > 0 or min_consonance > 0:
+        # filter out keys that do not meet minimums:
+        filtered_scores = {key:scores for key,scores in shortlist_scores.items() if ((key.consonance >= min_consonance) and (key.likelihood >= min_likelihood))}
+    else:
+        # no filtering needed
+        filtered_scores = shortlist_scores
+
+    if modes:
+        # add all parallel modes of all matching keys
+        for key, scores in filtered_scores.items():
+            key_modes = key.modes()[1:]
+            # modes have the same prec/rec scores as their base keys:
+            # (but different likelihoods and consonances)
+            mode_scores = {m:scores for m in key_modes}
+            filtered_scores[key].update(mode_scores)
+    else:
+        # just add relative modes (i.e. minor to major or vice versa) where relevant
+        for key, scores in filtered_scores.items():
+            if key.has_relative():
+                filtered_scores[key.relative] = scores
+
+
+
+
+
+
 
 # def matching_keys(chords=None, notes=None, exclude=None, require_tonic=True, require_roots=True,
 #                     display=True, return_matches=False, natural_only=False,

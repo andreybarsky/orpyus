@@ -1,4 +1,4 @@
-from ..keys import Key, matching_keys
+from ..keys import Key # , matching_keys
 from ..scales import Scale
 from ..chords import Chord
 from .testing_tools import compare
@@ -37,6 +37,17 @@ def unit_test():
     # test utility methods:
     compare(Key('C').mode(2), Key('D dorian'))
     compare(Key('C').pentatonic, Key('C pentatonic'))
+
+    # test relative keys: (surprisingly tricky)
+    compare(Key('C').relative, Key('Am'))
+    compare(Key('Am').relative, Key('C'))
+
+    compare(Key('C pent').relative, Key('Am pent'))
+    compare(Key('Am pent').relative, Key('C pent'))
+
+    compare(Key('Am blues').relative, Key('C major blues'))
+    compare(Key('C major blues').relative, Key('Am blues'))
+
 
     # matching_keys(['C', Chord('F'), 'G7', 'Bdim'], upweight_pentatonics=False)
     #

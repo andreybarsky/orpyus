@@ -634,7 +634,7 @@ class Scale:
 
     def has_parallel(self):
         """returns True if a parallel scale is defined for this one"""
-        return (self in parallel_scales)
+        return (self.scale_name in parallel_scale_names)
 
     @property
     def parallel(self):
@@ -1676,7 +1676,7 @@ class Scale:
 # 'standard' scales are: naturals, harmonic majors/minors, and melodic minor, the most commonly used in pop music
 standard_scale_names = {'natural major', 'natural minor', 'harmonic major', 'harmonic minor', 'melodic minor'}
 # 'base' scales are those not obtained by rotations of any other scales:
-base_scale_names = {'natural major', 'melodic minor', 'harmonic minor', 'harmonic major', 'neapolitan major', 'neapolitan minor', 'double harmonic'}
+# base_scale_names = {'natural major', 'melodic minor', 'harmonic minor', 'harmonic major', 'neapolitan major', 'neapolitan minor', 'double harmonic'}
 # 'natural' scales are just the natural major and minors:
 natural_scale_names = {'natural major', 'natural minor'}
 
@@ -1715,12 +1715,12 @@ base_scale_factor_names = { # base scales are defined here, modes and subscales 
     ScaleFactors('1,  2, b3,  5, b7'): ['pygmy', 'm9 pentatonic', 'minor 9th pentatonic'],
     ScaleFactors('1,  2, b3,  5,  7'): ['minor-major pentatonic', 'mmaj9 pentatonic'],
     ScaleFactors('1,  2,  3, #5, b7'): ['augmented pentatonic', 'aug9 pentatonic'],
-    ScaleFactors('1,  2,  3, #5,  7'): ['augmented major pentatonic', 'augM9 pentatonic'],
+    ScaleFactors('1,  2,  3, #5,  7'): ['augmented major pentatonic', 'augmaj9 pentatonic'],
     ScaleFactors('1,  2, b3, b5,  6'): ['diminished pentatonic', 'dim9 pentatonic'],
     ScaleFactors('1, b2, b3, b5,  6'): ['diminished minor pentatonic', 'dmin9 pentatonic', ],
     ScaleFactors('1,  2, b3, b5,  b7'): ['half-diminished pentatonic', 'hdim9 pentatonic'],
     ScaleFactors('1, b2, b3, b5,  b7'): ['half-diminished minor pentatonic', 'hdmin9 pentatonic'],
-    ScaleFactors('1, #2,  3,  5,  b7'): ['hendrix pentatonic', 'dominant 7#9 pentatonic', '7#9 pentatonic'],
+    ScaleFactors('1, #2,  3,  5,  b7'): ['hendrix pentatonic'],
 
     # misc:
     ScaleFactors('1,  2,  4,  5,  7'): ['suspended', 'suspended pentatonic'],
@@ -1759,6 +1759,7 @@ base_scale_factor_names = { # base scales are defined here, modes and subscales 
 }
 
 base_scale_name_factors = unpack_and_reverse_dict(base_scale_factor_names)
+base_scale_names = set(base_scale_name_factors.keys())
 
 # while it's true that "melodic minor" can refer to a special scale that uses
 # the natural minor scale when descending, that is out-of-scope for now
@@ -1836,7 +1837,7 @@ base_scale_mode_names = {
                      # incidental/partial mode names:
          'okinawan': {2: ['balinese']},
 'dorian pentatonic': {2: ['kokinjoshi'], 5: ['minor ♭5 pentatonic']},
-      'minor blues': {3: ['major blues']},
+      'minor blues': {2: ['major blues']},
   # 'chromatic major': {11: ['chromatic minor']},
                  }
 
@@ -2044,12 +2045,32 @@ MajorBlues = MajorBluesScale = MajBlues = Scale('major blues')
 MinorBlues = MinorBluesScale = MinBlues = Scale('minor blues')
 
 # dict mapping parallel major/minor scales:
-parallel_scales = {NaturalMajor: NaturalMinor,
-                   # HarmonicMajor: HarmonicMinor,
-                   MelodicMajor: MelodicMinor,
-                   MajorPentatonic: MinorPentatonic,
-                   MajorBlues: MinorBlues,}
+# (hardcoded since these are mostly established by convention,
+# as all modes are technically parallel)
+parallel_scale_names = {'natural major': 'natural minor',
+                        'melodic major': 'melodic minor',
+                        # natural pentatonics and blues scales are straightforward:
+                        'major pentatonic': 'minor pentatonic',
+                        'minor blues': 'major blues',
+                        # and some other scales have only one named mode, which
+                        # is a natural parallel:
+                        'okinawan': 'balinese',
+                        'dorian pentatonic': 'kokinjoshi',
+                        }
+# and for other base scales, just pick the most consonant (named) mode:
+common_base_scale_names = base_scale_names.intersection(common_scale_names)
+for name in common_base_scale_names:
+    if name not in parallel_scale_names:
+        named_modes = [m for m in Scale(name).modes[1:] if m.factors in canonical_scale_factor_names]
+        modes_by_consonance = sorted(named_modes, key=lambda x: -x.consonance)
+        if len(modes_by_consonance) > 0:
+            most_consonant_mode = modes_by_consonance[0]
+            parallel_scale_names[name] = most_consonant_mode.name
+
+# instantiate objects:
+parallel_scales = {Scale(p1): Scale(p2) for p1, p2 in parallel_scale_names.items()}
 # parallel scales are symmetric, so include the reverse mappings as well:
+parallel_scale_names.update(reverse_dict(parallel_scale_names))
 parallel_scales.update(reverse_dict(parallel_scales))
 
 # # cached scale attributes for performance:
