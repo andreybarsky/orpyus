@@ -299,6 +299,15 @@ class Interval:
         else:
             return self.re_cache(-self.value)
 
+    def swap_accidental(self):
+        """returns a new Interval of the same type as this one,
+        but with degree changed so that the accidental is swapped
+        (sharp to flat, double flat to double sharp, etc)"""
+        assert self.offset_from_default != 0, f'{self} has no accidental and cannot be swapped'
+        # add accidental value to degree: (this seems to work)
+        new_degree = self.extended_degree + self.offset_from_default
+        return self.re_cache(value=self.value, degree=new_degree)
+
     def flatten(self, octaves=1):
         """returns Interval object corresponding to this interval's mod-value and mod-degree"""
         if self.value < 0:
