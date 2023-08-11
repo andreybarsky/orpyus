@@ -15,6 +15,13 @@ import re
 # ScaleFactors are the types of Factors that apply to Scale objects:
 class ScaleFactors(Factors):
     def __init__(self, *args, chromatic=None, **kwargs):
+        """initialises a Scalefactors object, accepts arguments that would initialise
+          a dict, or a string that describes scale factors relative to major,
+          like e.g. for minor pentatonic: '1, b3, 4, 5, b7'
+        optionally, 'chromatic' arg can be provided (in the same form, as dict etc.) to describe
+          chromatic intervals that belong in a scale but are not on any of its degrees;
+          chromatic factors can also be specified directly in the input string with square brackets,
+          like e.g. for minor blues: '1, b3, 4, [b5], 5, b7'"""
         if chromatic is not None:
             # store any chromatic factors explicitly initialised along with this object:
             self.chromatic = ScaleFactors(chromatic)
@@ -188,14 +195,74 @@ class ScaleFactors(Factors):
             new_factors = ScaleFactors({k:v for k,v in self.items() if k not in omit})
         return new_factors
 
-    def mode(self, N):
+    def mode(self, N, sanitise=True):
         """returns the ScaleFactors corresponding to the Nth mode of this object"""
-        intervals = self.to_intervals()
-        mode_intervals = intervals.mode(N, preserve_degrees = (len(self) == 7))
-        # (preserve degrees for heptatonic scales,
-        # but don't worry about it for pentatonics etc.)
-        factors_str = ','.join(mode_intervals.to_factors())
-        return ScaleFactors(factors_str)
+        if N == 1:
+            return self
+        else:
+            original_intervals = self.to_intervals(chromatic=False)
+            # preserve original degrees in the case of heptatonic scales:
+            mode_intervals = original_intervals.mode(N, preserve_degrees = (len(self) == 7))
+
+            if (len(self) < 7) and (sanitise):
+                # scales that are less than heptatonic in length may need explicit sanitisation
+                mode_intervals = mode_intervals.sanitise_degrees()
+
+            factors_str = ','.join(mode_intervals.to_factors())
+            mode_factors = [iv.degree for iv in mode_intervals]
+
+            if self.chromatic is not None:
+                # chromatic intervals are ALSO shifted by a mode rotation
+                # depending on the intervals in the original list
+                # so we shift those explicitly here:
+                num_places = N-1
+                left_shift = original_intervals[num_places]
+                # the interval at the num_places index of the original intervals
+                # is how far leftward the chromatic intervals must be shifted
+
+                original_chromatic_intervals = self.chromatic.to_intervals()
+                mode_chromatic_intervals = (original_chromatic_intervals - left_shift).flatten()
+
+                # place chromatic factors on factors not used by main factors where possible:
+                sanitised_mode_chromatic_intervals = IntervalList()
+                for iv in mode_chromatic_intervals:
+                    # does this chromatic degree occur in the factors:
+                    if iv.degree in mode_factors:
+                        # does the degree of the swapped-sign degree also occur in the factors?
+                        try:
+                            alternative_iv = iv.swap_accidental()
+                            if alternative_iv.degree not in mode_factors:
+                                # if not, prefer this swapped one instead
+                                preferred_iv = alternative_iv
+                                # sanitised_mode_chromatic_intervals.append(alternative_iv)
+                            else:
+                                # if BOTH exist, prefer the flat:
+                                # (this is somewhat a kludge to ensure blues scale modes work as intended)
+                                preferred_iv = iv if iv.offset_from_default < 0 else alternative_iv # pick the one that is flat
+                                if (iv.degree, alternative_iv.degree) in [(4,5), (5,4)] and log.verbose:
+                                    import ipdb; ipdb.set_trace()
+                                pass
+                                # sanitised_mode_chromatic_intervals.append(preferred_iv)
+                        except:
+                            # this interval can't be swapped, so just keep it
+                            preferred_iv = iv
+                    else:
+                        preferred_iv = iv
+                    sanitised_mode_chromatic_intervals.append(preferred_iv)
+
+
+                chromatic_factors_str = ','.join(sanitised_mode_chromatic_intervals.to_factors())
+
+
+
+                # kludge to ensure mode-matching works properly for minor/major blues etc.
+                # if a #4 is the only chromatic note, and both a
+
+            else:
+                chromatic_factors_str = None
+
+            factors_obj = ScaleFactors(factors_str, chromatic=chromatic_factors_str)
+            return factors_obj
 
 
 
@@ -348,6 +415,7 @@ class Scale:
         # and .chromatic_intervals is a plain list of the chromatic (or 'passing') intervals, like blues notes
         self.factors, self.factor_intervals = self._parse_input( name, intervals, factors, alterations, chromatic_intervals, mode)
 
+        # chromatic intervals, if supplied,  get rolled into the self.factors object:
         if self.factors.chromatic is not None:
             self.chromatic_intervals = self.factors.chromatic.as_intervals
         else:
@@ -444,7 +512,7 @@ class Scale:
                     chromatic_intervals = factors.chromatic.as_intervals
             # compute intervals from factors: (if we don't need to do so later)
             if alterations is None or len(alterations) == 0:
-                intervals = factors.to_intervals()
+                intervals = factors.to_intervals(chromatic=False)
         else:
             raise Exception('Scale init must be given one of: name, intervals, or factors')
 
@@ -460,29 +528,41 @@ class Scale:
 
         # chromatic intervals are specifically those intervals that are NOT on scale factors:
         if chromatic_intervals is not None:
+            print(f'Detected chromatic intervals as provided: {chromatic_intervals}')
+            if len(chromatic_intervals) > 0:
+                import ipdb; ipdb.set_trace()
             if not isinstance(chromatic_intervals, IntervalList):
                 chromatic_intervals = IntervalList(chromatic_intervals)
+            chromatic_str = ''.join(chromatic_intervals.as_factors)
+            # reinitialise factors obj with chromatics:
+            factors = ScaleFactors(dict(factors), chromatic=chromatic_str)
+
         else:
             chromatic_intervals = IntervalList([]) # chromatic_intervals is always an empty list if not set (not None)
 
         if mode != 1:
             # we want to the mode of whatever's been produced by names/intervals/factors
             assert (type(mode) is int and mode > 0), "Mode arg to Scale init must be a positive integer"
+            # reassign factors to the mode of whatever they were:
+            # (this handles chromatic factors etc. internally)
+            factors = factors.mode(mode)
+
             # so we rotate the unstacked intervals and restack them: (an IntervalList method exists for this)
-            new_intervals = intervals.mode(mode)
-            # intervals = new_intervals
-            # then recompute factors:
-            factors = ScaleFactors(', '.join(new_intervals.pad(left=True, right=False).as_factors))
-            if len(chromatic_intervals) > 0:
-                # currently this intervals var doesn't include the chromatic intervals,
-                # which are ALSO shifted by a mode rotation
-                # so we shift those explicitly here:
-                num_places = mode-1
-                # the interval at the num_places index of the original intervals
-                # is how far leftward the chromatic intervals must be shifted:
-                left_shift = intervals[num_places]
-                chromatic_intervals = (chromatic_intervals - left_shift).flatten()
-                factors.chromatic = ScaleFactors(chromatic_intervals.as_factors)
+            # new_intervals = intervals.mode(mode)
+            # # intervals = new_intervals
+            # # then recompute factors:
+            # factors = ScaleFactors(', '.join(new_intervals.pad(left=True, right=False).as_factors))
+            # if len(chromatic_intervals) > 0:
+            #     # currently this intervals var doesn't include the chromatic intervals,
+            #     # which are ALSO shifted by a mode rotation
+            #     # so we shift those explicitly here:
+            #     num_places = mode-1
+            #     # the interval at the num_places index of the original intervals
+            #     # is how far leftward the chromatic intervals must be shifted:
+            #     left_shift = intervals[num_places]
+            #     chromatic_intervals = (chromatic_intervals - left_shift).flatten()
+
+        # factors.chromatic = ScaleFactors(chromatic_intervals.as_factors)
 
         # now factors and intervals have necessarily been set, both including the tonic,
         # including any alterations and modal rotations that needed to be applied
@@ -537,6 +617,10 @@ class Scale:
 
     ###### scale production methods (and related subroutines):
 
+    def has_parallel(self):
+        """returns True if a parallel scale is defined for this one"""
+        return (self in parallel_scales)
+
     @property
     def parallel(self):
         """returns the parallel minor or major or a natural major or minor scale,
@@ -554,23 +638,39 @@ class Scale:
     def mode(self, N, sanitise=True):
         """Returns a new scale that is the Nth mode of this scale.
         (where mode 1 is identical to the existing scale)"""
-        non_chromatic_intervals = IntervalList([iv for iv in self.intervals if iv not in self.chromatic_intervals])
-        new_intervals = non_chromatic_intervals.mode(N, preserve_degrees = (self.order==7))
-        if (len(self) < 7) and (sanitise):
-            # scales that are less than heptatonic in length may need explicit sanitisation
-            new_intervals = new_intervals.sanitise_degrees()
+        if N == 1:
+            return Scale(self)
+        else:
+            # scale rotation logic is fully handled by the logic in
+            # the ScaleFactors rotation method, including chromatics etc:
+            mode_factors = self.factors.mode(N)
+            return Scale(factors=mode_factors)
 
-        # shift chromatic intervals as well:
-        num_places = N-1
-        # the interval at the num_places index of the original intervals
-        # is how far leftward the chromatic intervals must be shifted:
-        left_shift = non_chromatic_intervals[num_places]
-        new_chromatic_intervals = (self.chromatic_intervals - left_shift).flatten()
-        return Scale(intervals=new_intervals, chromatic_intervals = new_chromatic_intervals)
+            # non_chromatic_intervals = IntervalList([iv for iv in self.intervals if iv not in self.chromatic_intervals])
+            # new_intervals = non_chromatic_intervals.mode(N, preserve_degrees = (self.order==7))
+            # if (len(self) < 7) and (sanitise):
+            #     # scales that are less than heptatonic in length may need explicit sanitisation
+            #     new_intervals = new_intervals.sanitise_degrees()
+            #
+            # if len(self.chromatic_intervals) > 0:
+            #     # shift chromatic intervals as well:
+            #     num_places = N-1
+            #     # the interval at the num_places index of the original intervals
+            #     # is how far leftward the chromatic intervals must be shifted:
+            #     left_shift = non_chromatic_intervals[num_places]
+            #     new_chromatic_intervals = (self.chromatic_intervals - left_shift).flatten()
+            #     import ipdb; ipdb.set_trace()
+            # else:
+            #     new_chromatic_intervals = None
+            # return Scale(intervals=new_intervals, chromatic_intervals = new_chromatic_intervals)
 
     # return all the modes of this scale, starting from wherever it is:
     def get_modes(self):
-        return [self.mode(m) for m in range(1,self.order+1)]
+        if self.order < 8:
+            return [self.mode(m) for m in range(1,self.order+1)]
+        else:
+            # special exception for octatonic scales, which are too hard to mode (for now):
+            return [self]
     @property
     def modes(self):
         return self.get_modes()
@@ -1375,15 +1475,16 @@ class Scale:
         elif len(self) != len(other):
             return False # trivial case 2
         else:
-            for mode_num in range(2, self.order+1):
-                try: # modal rotations don't always produce clean results, so abandon an effort if it errors out
-                    mode_scale = self.mode(mode_num)
-                    if mode_scale.factors == other.factors:
-                        return True
-                except:
-                    raise Exception('Mode rotation failed unexpectedly')
-            # checked all of this scale's modes and didn't find a hit
-            return False
+            return self in other.modes
+            # for mode_num in range(2, self.order+1):
+            #     try: # modal rotations don't always produce clean results, so abandon an effort if it errors out
+            #         mode_scale = self.mode(mode_num)
+            #         if mode_scale.factors == other.factors:
+            #             return True
+            #     except:
+            #         raise Exception('Mode rotation failed unexpectedly')
+            # # checked all of this scale's modes and didn't find a hit
+            # return False
 
     ### audio/guitar-related methods:
 
@@ -1652,9 +1753,9 @@ chromatic_scale_factor_names = {
     ScaleFactors('1, b3,  4, [b5], 5, b7'): ['minor blues', 'blues', 'minor blues hexatonic'],
     ScaleFactors('1,  2, [b3], 3,  5,  6'): ['major blues', 'major blues hexatonic'],
     ScaleFactors('1, b2, [b3], 4,  5,  b6, [b7]'): ['sakura'],
-    ScaleFactors('1, 2, 3, 4, 5, 6, [b7],7'): ['bebop dominant'],
-    ScaleFactors('1, 2, 3, 4, 5,[b6], 6, 7'): ['bebop', 'bebop major', 'barry harris', 'major 6th diminished'],
-    ScaleFactors('1, 2,b3, 4, 5,[b6], 6, 7'): ['bebop minor', 'bebop melodic minor', 'minor 6th diminished'],
+    # ScaleFactors('1, 2, 3, 4, 5, 6, [b7],7'): ['bebop dominant'],
+    # ScaleFactors('1, 2, 3, 4, 5,[b6], 6, 7'): ['bebop', 'bebop major', 'barry harris', 'major 6th diminished'],
+    # ScaleFactors('1, 2,b3, 4, 5,[b6], 6, 7'): ['bebop minor', 'bebop melodic minor', 'minor 6th diminished'],
 
     # natural-melodic-harmonic hybrids:
     ScaleFactors('1,  2,  b3,  4,  5,  b6, [6], b7, [7]'): ['full minor'],
@@ -1673,12 +1774,12 @@ rare_scale_factor_names = {
     ScaleFactors('1,  2,  3, b5,  6, b7'): ['prometheus'],
     ScaleFactors('1, b2, b3, #4,  5, b7'): ['tritone'],
 
-    # octatonic scales:
-    ScaleFactors('1,  2, b3,  4, b5, b6,  6,  7'): ['diminished', 'whole-half'],
-    ScaleFactors('1, b2, b3, b4, b5,  5,  6, b7'): ['half-whole'],
-    ScaleFactors('1,  2,  3,  4,  5,  6, b7, 7'): ['bebop dominant octatonic'],
-    ScaleFactors('1,  2,  3,  4,  5, #5,  6, 7'): ['bebop major octatonic', 'major 6th diminished octatonic', 'bebop octatonic', 'barry harris octatonic'],
-    ScaleFactors('1,  2, b3,  4,  5, #5,  6, 7'): ['bebop minor octatonic', 'bebop melodic minor octatonic', 'minor 6th diminished octatonic'],
+    # octatonic scales: (these get parsed with IrregularInterval members)
+    ScaleFactors('1,  2, b3,  4, b5, b6,  6,  7'): ['diminished', 'whole-half', 'wholehalf', 'whole half'],
+    ScaleFactors('1, b2, b3, b4, b5,  5,  6, b7'): ['half-whole', 'halfwhole', 'half whole'],
+    ScaleFactors('1,  2,  3,  4,  5,  6, b7, 7'): ['bebop dominant', 'bebop dominant octatonic'],
+    ScaleFactors('1,  2,  3,  4,  5, #5,  6, 7'): ['bebop', 'bebop major', 'barry harris', 'major 6th diminished', 'bebop major octatonic', 'bebop octatonic', ],
+    ScaleFactors('1,  2, b3,  4,  5, #5,  6, 7'): ['bebop minor', 'bebop melodic minor', 'bebop minor octatonic', 'minor 6th diminished'],
 
     }
 
@@ -1743,7 +1844,9 @@ canonical_scale_name_intervals = reverse_dict(canonical_scale_interval_names)
 canonical_scale_alias_names = unpack_and_reverse_dict(canonical_scale_name_aliases, include_keys=True)
 
 # mapping of possible scale lengths to lists of scale names which have that length:
-# canonical_scale_names_by_length = {l: [scale for scale, factors in canonical_scale_name_factors if len(factors) == l] for l in range(5,9)}
+canonical_scale_names_by_length = {}
+for l in range(5,13):
+    canonical_scale_names_by_length[l] = [scale_name for scale_name, factors in canonical_scale_name_factors.items() if len(factors) == l]
 
 wordbag_scale_names = {frozenset(name.split(' ')):name for name in canonical_scale_name_factors.keys()}
 
@@ -1858,7 +1961,7 @@ MinorBlues = MinorBluesScale = MinBlues = Scale('minor blues')
 
 # dict mapping parallel major/minor scales:
 parallel_scales = {NaturalMajor: NaturalMinor,
-                   HarmonicMajor: HarmonicMinor,
+                   # HarmonicMajor: HarmonicMinor,
                    MelodicMajor: MelodicMinor,
                    MajorPentatonic: MinorPentatonic,
                    MajorBlues: MinorBlues,}
@@ -1869,3 +1972,19 @@ parallel_scales.update(reverse_dict(parallel_scales))
 # if _settings.PRE_CACHE_SCALES:
 #     cached_consonances.update({c: c.consonance for c in (common_scales + common_subscales)})
 #     cached_pentatonics.update({c: c.pentatonic for c in common_scales})
+
+
+# which scales are modes of each other?
+base_scale_modes = {}
+for name, factors in canonical_scale_name_factors.items():
+    scale = Scale(name)
+    its_modes = scale.modes[1:]
+    registered_mode = False
+    for mode in its_modes:
+        if mode in base_scale_modes:
+            registered_mode = True
+            print(f'  -- Scale {scale.name} is a mode of {mode.name}')
+            break
+    if not registered_mode:
+        print(f'Registering {scale.name} as a base scale')
+        base_scale_modes[scale] = its_modes
