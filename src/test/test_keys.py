@@ -41,10 +41,8 @@ def unit_test():
     # test relative keys: (surprisingly tricky)
     compare(Key('C').relative, Key('Am'))
     compare(Key('Am').relative, Key('C'))
-
     compare(Key('C pent').relative, Key('Am pent'))
     compare(Key('Am pent').relative, Key('C pent'))
-
     compare(Key('Am blues').relative, Key('C major blues'))
     compare(Key('C major blues').relative, Key('Am blues'))
 

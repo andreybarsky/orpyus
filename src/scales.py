@@ -1408,7 +1408,7 @@ class Scale:
     def rarity(self):
         """Single integer representing this Scale's rarity with respect to other scales"""
         for r, names in canonical_scale_names_by_rarity.items():
-            if self.name in names:
+            if self.scale_name in names:
                 return r
         # unregistered scales are even rarer than the most rare registered scale:
         return r + 1

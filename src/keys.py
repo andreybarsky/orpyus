@@ -1,7 +1,7 @@
 from . import notes, scales, parsing, _settings
 from .parsing import fl, sh, nat, dfl, dsh
 from .intervals import Interval, IntervalList
-from .notes import Note, NoteList
+from .notes import Note, NoteList, chromatic_notes
 from .scales import Scale, ScaleFactors, ScaleDegree, ScaleChord
 from .chords import Chord, AbstractChord, ChordList
 from .util import check_all, precision_recall, reverse_dict, unpack_and_reverse_dict, log
@@ -633,21 +633,30 @@ class KeyChord(Chord, ScaleChord):
 
 def matching_keys(chords=None, notes=None,
                   exact=False, exhaustive=None, natural_only=True, modes=False,
-                  min_precision=0.9, min_recall=0, min_consonance=0, min_likelihood=0,
+                  min_precision=0, min_recall=0.9, min_consonance=0, min_likelihood=0,
                   weight_counts=True, weight_factors = {1: 2, 3: 1.5, 5: 0.5},
                   # (by default, upweight roots and thirds, downweight fifths)
-                  sort_order=['length', 'precision', 'recall', 'likelihood', 'consonance'],
-                  display=True):
+                  sort_order=['length', 'recall', 'likelihood', 'consonance', 'precision'],
+                  display=True, max_results=None, **kwargs):
     """Accepts either a list of chords or a list of notes.
     Will only find a key if that key's tonic is somewhere in the input. (?)
-    weight_counts: if True, weights precision and recall by the relative frequency
-        of each note in the input list.
     exact: if True, only returns matches with perfect precision.
     exhaustive: if True, search all possible key tonics.
-                if False, search only key tonics corresponding to input chord roots. (or input notes)
-                if None, becomes set by default to True for notelists and False for chordlists.
+        if False, search only key tonics corresponding to input chord roots. (or input notes)
+        if None, becomes set by default to True for notelists and False for chordlists.
     natural_only: if True, only scores natural major and minor keys.
-    min_[precision/recall/consonance/likelihood]: minimum scores that a key must meet to count as 'matching'"""
+    modes: if True, returns all named modes of all matches.
+        if False, only returns base keys and their relative keys.
+    min_[precision/recall/consonance/likelihood]: minimum scores that a key must meet
+        to count as 'matching'
+    weight_counts: if True, weights precision and recall by the relative frequency
+        of each note in the input list.
+    weight_factors: a dict that determines how much to weight each chord factor by.
+        (only used if function is called with chords, not notes)
+    sort_order: list of strings that must strictly include all 5 default values, but in any order.
+        controls the order in which the function output gets sorted.
+    display: if True, prints a dataframe of the results.
+        if False, returns a dict of results as {keys: scores} instead."""
 
     # quietly accept a notelist as first argument:
     if isinstance(chords, NoteList):
@@ -663,12 +672,11 @@ def matching_keys(chords=None, notes=None,
         assert notes is None
         if not isinstance(chords, ChordList):
             chords = ChordList(chords)
-            # upweighting logic goes here (TBI, method?)
-            input_note_weights = chords.weighted_note_counts(weight_factors)
+        input_note_weights = chords.weighted_note_counts(weight_factors)
     elif notes is not None:
         if not isinstance(notes, NoteList):
             notes = NoteList(notes)
-            input_note_weights = Counter(notes)
+        input_note_weights = Counter(notes)
 
     if not weight_counts:
         # set all counts to 1:
@@ -687,7 +695,7 @@ def matching_keys(chords=None, notes=None,
 
     if exhaustive:
         # search all specified scales on all possible tonics
-        possible_tonics = notes.chromatic_notes
+        possible_tonics = chromatic_notes
     else:
         if chords is not None:
             # search only the tonics that occur as chord roots:
@@ -700,15 +708,17 @@ def matching_keys(chords=None, notes=None,
     ###### main search loop: ######
     shortlist_scores = {}
     for scale_name in scales_to_search:
-        scale_intervals = scales.canonical_scale_name_intervals[scale_name]
+        scale_intervals, chrom_intervals = scales.canonical_scale_name_intervals[scale_name]
         for tonic in possible_tonics:
             candidate_key_notes = [tonic + iv for iv in scale_intervals]
+            candidate_chrom_notes = [tonic + iv for iv in chrom_intervals] if chrom_intervals is not None else []
+            candidate_notes = candidate_key_notes + candidate_chrom_notes
             ### main matching call:
-            scores = precision_recall(unique_notes, candidate_key_notes, weights=input_note_weights)
+            scores = precision_recall(input_notes, candidate_notes, weights=input_note_weights, return_unweighted_scores=True)
 
             # add a candidate to shortlist if it beats the minimum prec/rec requirements:
             if scores['precision'] >= min_precision and scores['recall'] >= min_recall:
-                print(f'Found shortlist match ({tonic.chroma} {scale_name}) with precision {prec} and recall {rec}')
+                log(f'Found shortlist match ({tonic.chroma} {scale_name}) with precision {scores["precision"]:.2f} and recall {scores["recall"]:.2f}')
                 candidate = Scale(scale_name).on_tonic(tonic)
                 # add to shortlist dict:
                 shortlist_scores[candidate] = scores
@@ -721,22 +731,50 @@ def matching_keys(chords=None, notes=None,
         filtered_scores = shortlist_scores
 
     if modes:
-        # add all parallel modes of all matching keys
+        # add all (named) parallel modes of all matching keys
+        mode_scores = {}
         for key, scores in filtered_scores.items():
-            key_modes = key.modes()[1:]
+            key_modes = [m for m in key.modes[1:] if m.factors in scales.canonical_scale_factor_names]
             # modes have the same prec/rec scores as their base keys:
             # (but different likelihoods and consonances)
-            mode_scores = {m:scores for m in key_modes}
-            filtered_scores[key].update(mode_scores)
+            mode_scores.update({m:scores for m in key_modes})
+        filtered_scores.update(mode_scores)
+
     else:
+        relative_scores = {}
         # just add relative modes (i.e. minor to major or vice versa) where relevant
         for key, scores in filtered_scores.items():
-            if key.has_relative():
-                filtered_scores[key.relative] = scores
+            if key.has_parallel():
+                relative_scores[key.relative] = scores
+        filtered_scores.update(relative_scores)
 
+    # sort matches according to desired order:
+    sort_funcs = {'length': lambda x: len(x),
+                 'precision': lambda x: -filtered_scores[x]['precision'],
+                 'recall': lambda x: -filtered_scores[x]['recall'],
+                 'likelihood': lambda x: -x.likelihood,
+                 'consonance': lambda x: -x.consonance}
+    ordered_funcs = [sort_funcs[s] for s in sort_order]
+    master_sort_func = lambda x: tuple([f(x) for f in ordered_funcs])
+    sorted_keys = sorted(filtered_scores.keys(), key=master_sort_func)
+    sorted_scores = {k: filtered_scores[k] for k in sorted_keys}
 
+    if not display:
+        return sorted_scores
+    else:
+        from src.display import DataFrame
 
-
+        df = DataFrame(['Key', '', 'Notes', '', 'Rec.', 'Prec.', 'Likl.', 'Cons.'])
+        for cand, scores in sorted_scores.items():
+            # scores = candidate_chords[cand]
+            lik, cons = cand.likelihood, cand.consonance
+            rec, prec = scores['recall'], scores['precision']
+            # take right bracket off the notelist and add it as its own column:
+            lb, rb = cand.notes._brackets
+            # use chord.__repr__ method to preserve dots over notes: (and strip out note markers)
+            notes_str = (f'{cand.__repr__()}'.split(rb)[0]).split(lb)[-1].replace(Note._marker, '')
+            df.append([f'{cand._marker} {cand.name}', lb, notes_str, rb, f'{rec:.2f}', f'{prec:.2f}', f'{lik:.2f}', f'{cons:.3f}'])
+        df.show(max_rows=max_results, margin=' ', **kwargs)
 
 
 
