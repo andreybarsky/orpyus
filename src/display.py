@@ -321,7 +321,7 @@ class DataFrame:
         header_row = [f'{self.column_names[i]:{widths[i] + combi_chars_per_header[i]}}' for i in range(self.num_columns)]
         printed_rows.append(margin.join(header_row))
         if header_border:
-            total_width = sum(widths) + (self.num_columns-1)*margin_size - sum(combi_chars_per_header)
+            total_width = sum(widths) + (self.num_columns-1)*margin_size # - sum(combi_chars_per_header)
             printed_rows.append('='*total_width)
         # make rows:
         for row in self.row_data[:max_rows]:

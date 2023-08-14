@@ -595,7 +595,7 @@ relative_co5_distances = IntervalList([0, 5, 2, 3, 4, 1, 6, 1, 4, 3, 2, 5])
 
 def matching_keys(chords=None, notes=None,
                   exact=False, exhaustive=None, modes=False, scale_lengths=[7],
-                  min_precision=0, min_recall=0.9, min_likelihood=0, min_consonance=0,
+                  min_precision=0, min_recall=0.95, min_likelihood=0.7, min_consonance=0,
                   chord_factor_weights = {1: 2, 3: 1.5, 5: 0.5}, weight_counts=True,
                   scale_factor_weights = {1: 2, 4: 1.5, 5: 1.5},
                   # (by default, upweight roots and thirds, downweight fifths)
@@ -675,11 +675,28 @@ def matching_keys(chords=None, notes=None,
         scale_name = scale.name
         scale_intervals, chrom_intervals = scales.canonical_scale_name_intervals[scale_name]
         for tonic in possible_tonics:
-            candidate_key_notes = [tonic + iv for iv in scale_intervals]
+            candidate_key_notes = [tonic + iv for iv in scale_intervals] # equiv. to degree_notes (from 0, not 1)
+
+            ### determine weights for the notes in this key:
+            scale_scale = len(chords) if chords is not None else 1 # i.e. how much to weight the scale weights relative to the chord weights
+            key_weights = Counter({n: 1*scale_scale for n in candidate_key_notes})
+            # scale_degree_weights = [scale.degree_factors[d+1] for d,n in enumerate(candidate_key_notes)
+            factors = [scale.degree_factors[d+1] for d in range(len(candidate_key_notes))]
+
+            scale_note_weights = {n:scale_factor_weights[factors[i]] if factors[i] in scale_factor_weights  else 1  for i,n in enumerate(candidate_key_notes)}
+            for n,w in scale_note_weights.items():
+                key_weights[n] *= w
+            # now add input weights on top:
+            print(f' Key weights for candidate: {tonic.name} {scale_name}')
+            print(key_weights)
+
+            key_weights.update(input_note_weights)
+
+
             candidate_chrom_notes = [tonic + iv for iv in chrom_intervals] if chrom_intervals is not None else []
             candidate_notes = candidate_key_notes + candidate_chrom_notes
             ### main matching call:
-            scores = precision_recall(input_notes, candidate_notes, weights=input_note_weights, return_unweighted_scores=True)
+            scores = precision_recall(input_notes, candidate_notes, weights=key_weights, return_unweighted_scores=True)
 
             # add a candidate to shortlist if it beats the minimum prec/rec requirements:
             if scores['precision'] >= min_precision and scores['recall'] >= min_recall:
@@ -703,14 +720,16 @@ def matching_keys(chords=None, notes=None,
             # modes have the same prec/rec scores as their base keys:
             # (but different likelihoods and consonances)
             mode_scores.update({m:scores for m in key_modes})
+        filtered_mode_scores = {key:scores for key,scores in mode_scores.items() if ((key.consonance >= min_consonance) and (key.likelihood >= min_likelihood))}
         filtered_scores.update(mode_scores)
 
     else:
         relative_scores = {}
         # just add relative modes (i.e. minor to major or vice versa) where relevant
         for key, scores in filtered_scores.items():
-            if key.has_parallel():
-                relative_scores[key.relative] = scores
+            if key.is_natural() and key.has_parallel():
+                if key.relative.likelihood >= min_likelihood and key.relative.consonance >= min_consonance:
+                    relative_scores[key.relative] = scores
         filtered_scores.update(relative_scores)
 
     # sort matches according to desired order:
@@ -732,7 +751,8 @@ def matching_keys(chords=None, notes=None,
         # title:
         if chords is not None:
             print(f'Matching keys for chords: {chords}')
-            chord_table(chords, ['chord', 'border', 'null', 'notes'])
+            if verbose:
+                chord_table(chords, ['chord', 'border', 'null', 'notes'])
             print('')
         elif notes is not None:
             print(f'Matching keys for notes: {notes}')
