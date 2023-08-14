@@ -958,8 +958,6 @@ class Chord(AbstractChord):
 
             root = note_list[0]
 
-            if log.verbose:
-                import pdb; pdb.set_trace()
         else:
             self.ignore_interval_degrees = False # interval degrees matter for init
 
@@ -1220,8 +1218,6 @@ class Chord(AbstractChord):
         requires an already-initialised self.root_notes (without the extra bass),
         and sets root_notes and root_intervals to appropriate new values."""
         full_notes = self.root_notes + NoteList([slash_bass])
-        if log.verbose:
-            import ipdb; ipdb.set_trace()
         asc_intervals = full_notes.ascending_intervals()
         inversion = len(full_notes)-1 # final inversion by definition (bc the slash note is on bottom)
         inversion_degree = asc_intervals[-1].extended_degree
@@ -1581,6 +1577,8 @@ class Chord(AbstractChord):
         """outputs list of notes in this chord,
         with diacritic dotes to indicate notes outside the starting octave"""
         notes_str = [] # notes are annotated with accent marks depending on which octave they're in (with respect to root)
+        up1, up2, down1, down2 = [_settings.DIACRITICS[d] for d in ['octave_above', '2_octaves_above', 'octave_below', '2_octaves_below']]
+
         for i, n in zip(self.intervals, self.notes):
             assert (self.bass + i) == n, f'bass ({self.bass}) + interval ({i}) should be {n}, but is {self.bass + i}'
             if markers:
@@ -1591,15 +1589,15 @@ class Chord(AbstractChord):
                 start_idx = 1
             nl, na = this_note_str[:start_idx], this_note_str[start_idx:] # note letter and accidental (so we can put the dot over the letter)
             if i < -12:
-                notes_str.append(f'{nl}\u0324{na}') # lower diaresis
+                notes_str.append(f'{nl}{down2}{na}') # lower diaresis
             elif i < 0:
-                notes_str.append(f'{nl}\u0323{na}') # lower dot
+                notes_str.append(f'{nl}{down1}{na}') # lower dot
             elif i < 12:
                 notes_str.append(this_note_str)
             elif i < 24:
-                notes_str.append(f'{nl}\u0307{na}') # upper dot
+                notes_str.append(f'{nl}{up1}{na}') # upper dot
             else:
-                notes_str.append(f'{nl}\u0308{na}') # upper diaresis
+                notes_str.append(f'{nl}{up2}{na}') # upper diaresis
         notes_str = sep.join(notes_str)
         return notes_str
 
@@ -1859,21 +1857,41 @@ class ChordList(list):
     def note_counts(self):
         return Counter(self.all_notes())
 
-    def weighted_note_counts(self, weight_factors):
+    def weighted_note_counts(self, weight_factors, ignore_counts=False):
         """given a weight_factors dict that maps chord factors to multiplicative weights,
         return a Counter object of note counts that multiplies the final results
-        by those weights."""
-        note_counts = Counter()
+        by those weights.
+        if ignore_counts, the Counter accounts only for the MAX weight of each
+            note that occurs, instead of a weighted total proportional to occurrence frequency."""
+
+        # fill weights dict with 1s where not defined:
         weight_factors = {f:weight_factors[f] if f in weight_factors else 1 for f in range(1,14)}
 
+        if not ignore_counts:
+            # update output by note occurrence frequency
+            note_counts = Counter()
+            result_dict = note_counts
+        else:
+            # will just set dict values to the highest observation
+            note_maxes = {n:1 for n in self.unique_notes()}
+            result_dict = note_maxes
+
         for chord in self:
-            # raw note occurence:
-            base_count = {n:1 for n in chord.notes}
-            # multiplication with factor-weightings in input dict:
-            weighted_count = {n: base_count[n] * weight_factors[f] for f,n in chord.factor_notes.items()}
-            # update output counter:
-            note_counts.update(weighted_count)
-        return note_counts
+            if not ignore_counts:
+                # raw note occurence:
+                base_count = {n:1 for n in chord.notes}
+                # multiplication with factor-weightings in input dict:
+                weighted_count = {n: base_count[n] * weight_factors[f] for f,n in chord.factor_notes.items()}
+                # update output counter:
+                result_dict.update(weighted_count)
+            else:
+                for f,n in chord.factor_notes.items():
+                    observed_weight = weight_factors[f]
+                    if result_dict[n] < observed_weight:
+                        # update to new max
+                        result_dict[n] = observed_weight
+
+        return result_dict
 
 
     def abstract(self):
@@ -1936,6 +1954,11 @@ class ChordList(list):
     def progression(self):
         from src.progressions import ChordProgression
         return ChordProgression(self)
+
+    def matching_keys(self, *args, **kwargs):
+        """just a wrapper around keys.matching_keys of this ChordList"""
+        from src.keys import matching_keys
+        return matching_keys(chords=self, *args, **kwargs)
 
     def find_key(self, natural_only=False, verbose=True):
         """wraps around matching_keys but additionally uses cadence information to distinguish between competing candidates"""

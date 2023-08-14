@@ -802,6 +802,12 @@ class NoteList(list):
         from . import chords
         return chords.most_likely_chord(self, *args, **kwargs)
 
+    def matching_keys(self, *args, **kwargs):
+        """wrapper for keys.matching_keys function: displays or returns
+        a listing of the possible keys that fit these (unordered) notes"""
+        from src.keys import matching_keys
+        return matching_keys(notes=self, *args, **kwargs)
+
     def _waves(self, duration, octave, type, falloff=False):
         wave_notes = self.force_octave(start_octave=octave)
         print(f'  -synthesising notes: {wave_notes}')

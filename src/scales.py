@@ -382,7 +382,7 @@ class ScaleDegree(int):
 
     def __str__(self):
         # ScaleDegree shows as integer char combined with caret above:
-        degree_str = f'{self.degree}\u0311'
+        degree_str = f'{self.degree}{self._diacritic}'
         if self.extended_degree != self.degree:
             # clarify that this is a compound degree:
             degree_str += f'({self.extended_degree})'
@@ -393,6 +393,8 @@ class ScaleDegree(int):
 
     def __repr__(self):
         return str(self)
+
+    _diacritic = _settings.DIACRITICS['scale_degree']
 
 
 class ScaleChord(AbstractChord):
@@ -590,7 +592,23 @@ class Scale:
         """takes a string denoting a scale name and returns its canonical form if it exists,
         along with a list of Modifier objects as alterations if any were detected"""
         # step 0: fast exact check, see if the provided name exists as a canonical name or alias:
-        scale_name = scale_name.lower() if len(scale_name) > 1 else scale_name # cast to lowercase unless single character (e.g. 'M')
+
+
+        # make scale name lowercase:
+        if len(scale_name) > 1 and scale_name != scale_name.lower():
+            # kludge: most scale names are case-insensitive, but a few important markers are case-sensitive
+            # like the accidental natural char 'N'
+            # so we intercept these chars before lowercasing and reinstate them afterward:
+            case_sensitive_chars = 'N'
+            sub_chars = '$' # just case insensitive dummy chars that don't occur in scale names
+            # intercept:
+            for char,sub in zip(case_sensitive_chars, sub_chars):
+                scale_name = scale_name.replace(char,sub)
+            scale_name = scale_name.lower()
+            # reinstate:
+            for char,sub in zip(case_sensitive_chars, sub_chars):
+                scale_name = scale_name.replace(sub,char)
+
         if scale_name in canonical_scale_name_factors:
             log(f'Fast name check found "{scale_name}" as an existing canonical name')
             return scale_name, []
@@ -697,25 +715,32 @@ class Scale:
     def compute_pentatonics(self, display=True, preserve_character=True, preserve_quality=False, **kwargs):
         """Given this scale and its degree-intervals,
         find the size-5 subset of its degree-intervals that maximises pairwise consonance"""
-        assert self.order > 5, "Cannot compute pentatonics of a scale with order 5 or less"
-        candidates = {}
-        if preserve_character:
-            character = self.character
-            possible_degrees_to_exclude = [d for d, iv in self.degree_intervals.items() if ((d != 1) and (iv not in character))]
-        else:
-            possible_degrees_to_exclude = [d for d, iv in self.degree_intervals.items() if d != 1]
 
-        if preserve_quality:
-            ... # preserve the (major or minor) third in this scale if it has one?
+        if self.order > 5:
+            # compute allowable subscales and rank them by consonance
+            candidates = {}
+            if preserve_character:
+                character = self.character
+                possible_degrees_to_exclude = [d for d, iv in self.degree_intervals.items() if ((d != 1) and (iv not in character))]
+            else:
+                possible_degrees_to_exclude = [d for d, iv in self.degree_intervals.items() if d != 1]
 
-        for deg1 in possible_degrees_to_exclude:
-            other_degrees_to_exclude = [d for d in possible_degrees_to_exclude if (d not in {1, deg1} and d > deg1)]
-            for deg2 in other_degrees_to_exclude:
-                remaining_degrees = [d for d in self.degree_intervals.keys() if d not in {deg1, deg2}]
-                subscale_candidate = self.subscale(keep=remaining_degrees)
-                subscale_candidate.assigned_name = f'{self.name} omit({int(deg1)},{int(deg2)})'
-                candidates[subscale_candidate] = subscale_candidate.consonance
-        sorted_cands = sorted(candidates.keys(), key = lambda x: (x.consonance), reverse=True)
+            if preserve_quality:
+                ... # preserve the (major or minor) third in this scale if it has one?
+
+            for deg1 in possible_degrees_to_exclude:
+                other_degrees_to_exclude = [d for d in possible_degrees_to_exclude if (d not in {1, deg1} and d > deg1)]
+                for deg2 in other_degrees_to_exclude:
+                    remaining_degrees = [d for d in self.degree_intervals.keys() if d not in {deg1, deg2}]
+                    subscale_candidate = self.subscale(keep=remaining_degrees)
+                    subscale_candidate.assigned_name = f'{self.name} omit({int(deg1)},{int(deg2)})'
+                    candidates[subscale_candidate] = subscale_candidate.consonance
+            sorted_cands = sorted(candidates.keys(), key = lambda x: (x.consonance), reverse=True)
+
+        elif self.order <= 5:
+            # the pentatonic of this scale is itself
+            sorted_cands =  {self: self.consonance}
+
 
         if display:
             from .display import DataFrame
@@ -802,7 +827,7 @@ class Scale:
     @property
     def neighbouring_scale_names(self):
         return self.get_neighbouring_scale_names()
-    def get_neighbouring_scale_names(self):
+    def get_neighbouring_scale_names(self, ignore_chromatic=True):
         """return a list of registered Scale objects that differ from this one by only a semitone"""
         neighbours = []
         for f in self.factors:
@@ -819,7 +844,10 @@ class Scale:
                     new_factor_dct = dict(self.factors)
                     new_factor_dct[f] = v
                     try:
-                        new_factors = ScaleFactors(new_factor_dct)
+                        if ignore_chromatic:
+                            new_factors = ScaleFactors(new_factor_dct)
+                        else:
+                            new_factors = ScaleFactors(new_factor_dct, chromatic=self.factors.chromatic)
                         if new_factors in canonical_scale_factor_names:
                             neighbour_name = canonical_scale_factor_names[new_factors]
                             neighbours.append(new_factors)
@@ -833,9 +861,9 @@ class Scale:
     @property
     def neighbouring_scales(self):
         return self.get_neighbouring_scales()
-    def get_neighbouring_scales(self):
+    def get_neighbouring_scales(self, *args, **kwargs):
         """as get_neighbouring_scale_names, but initialises and returns Scale objects"""
-        neighbour_names = self.get_neighbouring_scale_names()
+        neighbour_names = self.get_neighbouring_scale_names(*args, **kwargs)
         return [Scale(n) for n in neighbour_names]
 
 
@@ -1559,10 +1587,10 @@ class Scale:
         alteration of some existing scale"""
         # diatonic case:
         if len(self) == 7:
-            # first, try natural major and minor comparisons
-            # then the other diatonic modes
-            # then the other standard scales
-            waves = [['ionian', 'aeolian']] + [list(canonical_scale_names_by_rarity[r]) for r in (2,3,4)]
+            # compare alterations to commonly registered scales,
+            # in rough order of rarity:
+            waves = [['ionian', 'aeolian']] + \
+                     + [list(canonical_scale_names_by_rarity[r]) for r in (2,3,4)]
             # [, # natural scales
             #          [names[0] for mode_idx, names in base_scale_mode_names['natural major'].items() if mode_idx not in [1,6]], # diatonic modes
             #          ['harmonic minor', 'melodic minor', 'harmonic major', 'melodic major'], # non-diatonic heptatonic scales
@@ -2059,9 +2087,16 @@ parallel_scale_names = {'natural major': 'natural minor',
                         }
 # and for other base scales, just pick the most consonant (named) mode:
 common_base_scale_names = base_scale_names.intersection(common_scale_names)
-for name in common_base_scale_names:
+
+# this list is important: it's the scales that get searched for matching_keys
+common_base_scales = [Scale(n) for n in common_base_scale_names]
+
+common_modes = [Scale(n) for n in common_scale_names if n not in common_base_scale_names]
+common_scales = common_base_scales + common_modes
+
+for name, scale in zip(common_base_scale_names, common_base_scales):
     if name not in parallel_scale_names:
-        named_modes = [m for m in Scale(name).modes[1:] if m.factors in canonical_scale_factor_names]
+        named_modes = [m for m in scale.modes[1:] if m.factors in canonical_scale_factor_names]
         modes_by_consonance = sorted(named_modes, key=lambda x: -x.consonance)
         if len(modes_by_consonance) > 0:
             most_consonant_mode = modes_by_consonance[0]
@@ -2073,29 +2108,7 @@ parallel_scales = {Scale(p1): Scale(p2) for p1, p2 in parallel_scale_names.items
 parallel_scale_names.update(reverse_dict(parallel_scale_names))
 parallel_scales.update(reverse_dict(parallel_scales))
 
-# # cached scale attributes for performance:
-# if _settings.PRE_CACHE_SCALES:
-#     cached_consonances.update({c: c.consonance for c in (common_scales + common_subscales)})
-#     cached_pentatonics.update({c: c.pentatonic for c in common_scales})
-
-
-# # which scales are modes of each other?
-# base_scale_modes = {}
-# for name, factors in canonical_scale_name_factors.items():
-#     scale = Scale(name)
-#     its_modes = scale.modes[1:]
-#     registered_mode = False
-#     for m, mode in enumerate(its_modes):
-#         if mode in base_scale_modes:
-#             registered_mode = True
-#             which_mode = (len(mode)+1) - (m+1)
-#             num_suffix = num_suffixes[which_mode]
-#             base_mode_name = mode.name
-#             if base_mode_name not in base_scale_mode_names:
-#                 print(f'  ++++ {scale.name} is the {which_mode}{num_suffix} mode of {base_mode_name}')
-#             else:
-#                 print(f'  -- {scale.name} is the {which_mode}{num_suffix} mode of {base_mode_name}')
-#             break
-#     if not registered_mode:
-#         print(f'Registering {scale.name} as a base scale')
-#         base_scale_modes[scale] = its_modes
+# cached scale attributes for performance:
+if _settings.PRE_CACHE_SCALES:
+    cached_consonances.update({c: c.consonance for c in common_base_scales})
+    cached_pentatonics.update({c: c.pentatonic for c in common_base_scales})

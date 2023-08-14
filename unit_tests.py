@@ -79,9 +79,9 @@ def profile(func):
 #         ipdb.set_trace()
 
 # cProfile kludge to show higher time precision:
-def precise_time(x):
-    return f"%14.{DECIMAL_PRECISION}f" % x
-pstats.f8 = precise_time
+# def precise_time(x):
+#     return f"%14.{DECIMAL_PRECISION}f" % x
+# pstats.f8 = precise_time
 
 if PROFILE_EACH:
     run_all_tests()
@@ -95,4 +95,4 @@ else:
     profiler.disable()
     stats = pstats.Stats(profiler).sort_stats('tottime')
     print('='*20 + '\nPROFILING:\n' + '='*20)
-    stats.print_stats(10)
+    stats.print_stats(20)

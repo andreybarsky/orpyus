@@ -301,10 +301,12 @@ class DataFrame:
         """return the max str size in each column, up to a specified row"""
         widths = []
 
+        combi_chars_per_header = [sum([char in self._combi_chars for char in colname]) if type(colname)==str else 0  for colname in self.column_names]
 
         for col_num, col in self.column_data.items():
-            col_strs = [str(c) for c in col[:up_to_row]]
-            str_lens = [len(s) for s in col_strs] + [len(self.column_names[col_num])]
+            cell_strs = [str(c) for c in col[:up_to_row]]
+            combi_chars_per_cell = [sum([char in self._combi_chars for char in cell]) if type(cell)==str else 0  for cell in cell_strs]
+            str_lens = [len(s)-combi_chars_per_cell[i] for i,s in enumerate(cell_strs)] + [len(self.column_names[col_num]) - combi_chars_per_header[col_num]]
             widths.append(max(str_lens))
         return widths
 
@@ -313,20 +315,25 @@ class DataFrame:
         printed_rows = []
         widths = self.column_widths(up_to_row=max_rows)
         # must account for combining diacritics explicitly:
-        combi_chars = set(_settings.DIACRITICS.values())
+
         # make header:
-        header_row = [f'{self.column_names[i]:{widths[i]}}' for i in range(self.num_columns)]
+        combi_chars_per_header = [sum([char in self._combi_chars for char in colname]) if type(colname)==str else 0  for colname in self.column_names]
+        header_row = [f'{self.column_names[i]:{widths[i] + combi_chars_per_header[i]}}' for i in range(self.num_columns)]
         printed_rows.append(margin.join(header_row))
         if header_border:
-            total_width = sum(widths) + (self.num_columns-1)*margin_size
+            total_width = sum(widths) + (self.num_columns-1)*margin_size - sum(combi_chars_per_header)
             printed_rows.append('='*total_width)
         # make rows:
         for row in self.row_data[:max_rows]:
-            combi_chars_per_cell = [sum([char in combi_chars for char in cell]) if type(cell)==str else 0  for cell in row]
+            combi_chars_per_cell = [sum([char in self._combi_chars for char in cell]) if type(cell)==str else 0  for cell in row]
             this_row = [f'{str(row[i]):{widths[i] + combi_chars_per_cell[i]}}' for i in range(self.num_columns)]
             printed_rows.append(margin.join(this_row))
         # finally, print result:
+        # import ipdb; ipdb.set_trace()
+
         print('\n'.join(printed_rows))
+
+    _combi_chars = set(_settings.DIACRITICS.values())
 
 def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
                 parent_scale=None, parent_degree=None, # can parent_degree be 'idx'?
@@ -344,6 +351,7 @@ def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
                              'rec': ['Rec.'],
                             'prec': ['Prec.'],
                             'null': [''],
+                          'border': ['']
                       }
 
     for col_name in columns:
@@ -438,6 +446,8 @@ def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
                 df_row.append(chord_scores['precision'])
             elif col_name == 'null':
                 df_row.append('')
+            elif col_name == 'border':
+                df_row.append('|')
 
         df.append(df_row)
 

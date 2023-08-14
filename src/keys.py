@@ -10,36 +10,6 @@ from collections import Counter
 from functools import cached_property
 from pdb import set_trace
 
-# natural notes in order of which are flattened/sharpened in a key signature:
-flat_order = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
-sharp_order = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
-
-# # circle of 5ths in both directions as linked lists:
-# co5s_clockwise = {Note('C')+(7*i) : Note('C')+(7*(i+1)) for i in range(12)}
-# co5s_counterclockwise = {Note('C')-(7*i) : Note('C')-(7*(i+1)) for i in range(12)}
-
-
-relative_co5_distances = IntervalList([0, 5, 2, 3, 4, 1, 6, 1, 4, 3, 2, 5])
-# this list looks funny, but it's the circle-of-fifths distance for each key with tonic
-# N+i, with respect to the key that has tonic N.
-# e.g. co5_distance between E and D is based on the interval between E and D,
-# i.e. Note('E') - Note('D'), which is 2, or Note('D') - Note('E'), which is 10
-# so the co5_distance is relative_co5_distances[2] (or [10]), which either way is 2.
-# this works for any diatonic key, and is just a property of how the notes are arranged
-
-# # build co5 distance between key tonics:
-# co5_distances = {}
-# for n_left in notes.chromatic_notes:
-#     for n_right in notes.chromatic_notes:
-#         num_steps = 0
-#         clockwise_n = Note(n_left)
-#         counterclockwise_n = Note(n_left)
-#         while (clockwise_n != n_right) and (counterclockwise_n != n_right):
-#             clockwise_n += 7
-#             counterclockwise_n -= 7
-#             num_steps += 1
-#         co5_distances[(n_left, n_right)] = num_steps
-
 class Key(Scale):
     """a Scale that is also rooted on a tonic, and therefore associated with a set of notes"""
     # def __init__(self, scale_name=None, intervals=None, tonic=None, notes=None, mode=1, chromatic_intervals=None, chromatic_notes=None, stacked=True, alias=None):
@@ -95,32 +65,6 @@ class Key(Scale):
         self._set_sharp_preference() # sets tonic and notes attrs to have appropriate spelling
         self._set_note_mappings() # sets degree_notes, factor_notes, etc. and their inverses
         self._set_key_signature()
-
-        # # used only for Keys with strange chromatic notes not built on integer degrees, like blues notes
-        # if self.chromatic_intervals is not None:
-        #     self.chromatic_notes = NoteList([self.tonic + i for i in self.chromatic_intervals])
-        #     self.diatonic_notes = NoteList([self.tonic + i for i in self.diatonic_intervals.pad()])
-        # else:
-        #     self.chromatic_notes = None
-        #     self.diatonic_notes = self.notes
-
-        # # we don't store the unison interval in the Scale.interval attr, because of mode rotation
-        # # so we pad them here:
-        # padded_intervals = [Interval(0)] + self.diatonic_intervals
-        # self.note_intervals = {self.notes[i]: padded_intervals[i] for i in range(7)}
-        # self.interval_notes = reverse_dict(self.note_intervals)
-        # # self.interval_notes = {padded_intervals[i]: self.notes[i] for i in range(7)}
-        #
-        # self.degree_notes = {d: self.notes[d-1] for d in range(1,8)}
-        # self.note_degrees = reverse_dict(self.degree_notes)
-        # # self.note_degrees = {self.notes[d-1]: d for d in range(1,8)}
-        #
-        # # these are the same for Key objects, but may differ for Subkeys:
-        # self.base_degree_notes = self.degree_notes
-        # self.note_base_degrees = self.note_degrees
-
-        # update this Key's notes to prefer sharps/flats depending on its tonic:
-
 
 
     ####### internal init subroutines:
@@ -235,16 +179,18 @@ class Key(Scale):
             self.notes = NoteList([Note(n.position, prefer_sharps=prefer_sharps) if n.prefer_sharps!=prefer_sharps  else n  for n in self.notes ])
 
         else:
-            # compute flat/sharp preference by assigning one note to each natural note name
+            # compute flat/sharp preference of individual notes
+            # by assigning one note to each natural note name
+
             tonic_nat = self.tonic.chroma[0] # one of the few cases where note sharp preference matters
             next_nat = parsing.next_natural_note[tonic_nat]
-            new_notes = []
+            new_notes = [self.tonic]
 
             which_chromatic = self.which_intervals_chromatic()
             # non_chromatic_notes = [n for i,n in enumerate(self.notes) if not which_chromatic[i]]
 
             # for d in self.degrees[1:]:
-            for i,n in enumerate(self.notes):
+            for i,n in enumerate(self.notes[1:]):
                 # n = non_chromatic_notes[int(d)-1]
                 if not which_chromatic[i]:
                     # degree note
@@ -260,7 +206,8 @@ class Key(Scale):
                             n = Note(n.position, prefer_sharps=True)
                         else:
                             # this note needs to be a double sharp or double flat or something
-                            # log(f'Found a possible case for a double-sharp or double-flat: degree {d} ({n}) in scale: {self}')
+                            log(f'Found a possible case for a double-sharp or double-flat: note {i+2} ({n}) of {self}')
+                            log(f'  because neither its sharp name ({n.sharp_name}) or its flat name ({n.flat_name}) starts with the desired natural note: {next_nat}')
                             # fall back on same as tonic:
                             n = Note(n.position, prefer_sharps=prefer_sharps)
                     new_notes.append(n)
@@ -631,13 +578,29 @@ class KeyChord(Chord, ScaleChord):
         raise TypeError('KeyChords are not cached')
 
 
+
+# natural notes in order of which are flattened/sharpened in a key signature:
+flat_order = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
+sharp_order = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
+
+relative_co5_distances = IntervalList([0, 5, 2, 3, 4, 1, 6, 1, 4, 3, 2, 5])
+# this list looks funny, but it's the circle-of-fifths distance for each key with tonic
+# N+i, with respect to the key that has tonic N.
+# e.g. co5_distance between E and D is based on the interval between E and D,
+# i.e. Note('E') - Note('D'), which is 2, or Note('D') - Note('E'), which is 10
+# so the co5_distance is relative_co5_distances[2] (or [10]), which either way is 2.
+# this works for any diatonic key, and is just a property of how the notes are arranged
+
+
+
 def matching_keys(chords=None, notes=None,
-                  exact=False, exhaustive=None, natural_only=True, modes=False,
-                  min_precision=0, min_recall=0.9, min_consonance=0, min_likelihood=0,
-                  weight_counts=True, weight_factors = {1: 2, 3: 1.5, 5: 0.5},
+                  exact=False, exhaustive=None, modes=False, scale_lengths=[7],
+                  min_precision=0, min_recall=0.9, min_likelihood=0, min_consonance=0,
+                  chord_factor_weights = {1: 2, 3: 1.5, 5: 0.5}, weight_counts=True,
+                  scale_factor_weights = {1: 2, 4: 1.5, 5: 1.5},
                   # (by default, upweight roots and thirds, downweight fifths)
                   sort_order=['length', 'recall', 'likelihood', 'consonance', 'precision'],
-                  display=True, max_results=None, **kwargs):
+                  display=True, max_results=None, verbose=log.verbose, **kwargs):
     """Accepts either a list of chords or a list of notes.
     Will only find a key if that key's tonic is somewhere in the input. (?)
     exact: if True, only returns matches with perfect precision.
@@ -651,8 +614,9 @@ def matching_keys(chords=None, notes=None,
         to count as 'matching'
     weight_counts: if True, weights precision and recall by the relative frequency
         of each note in the input list.
-    weight_factors: a dict that determines how much to weight each chord factor by.
+    chord_factor_weights: a dict that determines how much to weight each input chord factor by.
         (only used if function is called with chords, not notes)
+    scale_factor_weights: as above, but determines how much to weight candidate scale degrees.
     sort_order: list of strings that must strictly include all 5 default values, but in any order.
         controls the order in which the function output gets sorted.
     display: if True, prints a dataframe of the results.
@@ -672,26 +636,26 @@ def matching_keys(chords=None, notes=None,
         assert notes is None
         if not isinstance(chords, ChordList):
             chords = ChordList(chords)
-        input_note_weights = chords.weighted_note_counts(weight_factors)
+        # compute weighted notes wrt provided factor weights (and ignoring frequency counts if asked)
+        input_note_weights = chords.weighted_note_counts(chord_factor_weights, ignore_counts=(not weight_counts))
     elif notes is not None:
         if not isinstance(notes, NoteList):
             notes = NoteList(notes)
         input_note_weights = Counter(notes)
 
-    if not weight_counts:
-        # set all counts to 1:
-        input_note_weights = Counter(input_note_weights.keys())
-
     # list of notes to match:
     input_notes = list(input_note_weights.keys())
 
-    # which scales to loop over?
-    if natural_only:
-        # just natural major (and its modes):
-        scales_to_search = ['natural major']
-    else:
-        # all base scales (and their modes):
-        scales_to_search = list(base_scale_mode_names.keys())
+    # loop over all common base scales,
+    # (and, by extension, their modes)
+    # provided they exceed minimum scale scores:
+    scales_to_search = [s for s in scales.common_base_scales if s.likelihood >= min_likelihood and s.consonance >= min_consonance]
+
+    # restrict search to scales only of certain lengths
+    if scale_lengths is not None:
+        if isinstance(scale_lengths, int): # catch single int arg
+            scale_lengths = [scale_lengths]
+        scales_to_search = [s for s in scales_to_search if len(s) in scale_lengths]
 
     if exhaustive:
         # search all specified scales on all possible tonics
@@ -707,7 +671,8 @@ def matching_keys(chords=None, notes=None,
     ###############################
     ###### main search loop: ######
     shortlist_scores = {}
-    for scale_name in scales_to_search:
+    for scale in scales_to_search:
+        scale_name = scale.name
         scale_intervals, chrom_intervals = scales.canonical_scale_name_intervals[scale_name]
         for tonic in possible_tonics:
             candidate_key_notes = [tonic + iv for iv in scale_intervals]
@@ -762,18 +727,44 @@ def matching_keys(chords=None, notes=None,
     if not display:
         return sorted_scores
     else:
-        from src.display import DataFrame
+        from src.display import DataFrame, chord_table
 
-        df = DataFrame(['Key', '', 'Notes', '', 'Rec.', 'Prec.', 'Likl.', 'Cons.'])
+        # title:
+        if chords is not None:
+            print(f'Matching keys for chords: {chords}')
+            chord_table(chords, ['chord', 'border', 'null', 'notes'])
+            print('')
+        elif notes is not None:
+            print(f'Matching keys for notes: {notes}')
+        if verbose:
+            note_weights_str = ',  '.join([f'{n.name}: {w:.1f}' for n,w in input_note_weights.items()])
+            print(f'Note weights:\n  {note_weights_str}')
+
+        nlb, nrb = _settings.BRACKETS['NoteList']
+
+        # show degrees as columns
+        longest_scale_len = max([len(s) for s in sorted_scores])
+        scale_degrees = [ScaleDegree(n) for n in range(1, longest_scale_len+1)]
+        degs_str = '  '.join([f'{str(d)}' for d in scale_degrees])
+
+        df = DataFrame(['Key', '', degs_str, '', 'Miss.', 'Rec.', 'Prec.', 'Likl.', 'Cons.'])
         for cand, scores in sorted_scores.items():
             # scores = candidate_chords[cand]
             lik, cons = cand.likelihood, cand.consonance
             rec, prec = scores['recall'], scores['precision']
-            # take right bracket off the notelist and add it as its own column:
-            lb, rb = cand.notes._brackets
-            # use chord.__repr__ method to preserve dots over notes: (and strip out note markers)
-            notes_str = (f'{cand.__repr__()}'.split(rb)[0]).split(lb)[-1].replace(Note._marker, '')
-            df.append([f'{cand._marker} {cand.name}', lb, notes_str, rb, f'{rec:.2f}', f'{prec:.2f}', f'{lik:.2f}', f'{cons:.3f}'])
+            # # take right bracket off the notelist and add it as its own column:
+            # lb, rb = cand.notes._brackets
+            # display notes, but mark the ones that aren't in the input:
+            out = _settings.DIACRITICS['note_not_in_input']
+            cand_note_in_input = [(n in input_notes) for n in cand.notes]
+            cand_notes_strs = [f'{n.name:2}' if cand_note_in_input[i] else f"{''.join([f'{nc}{out}' for nc in n.name]):{2+len(n.name)}}" for i,n in enumerate(cand.notes)]
+            notes_str = ' '.join(cand_notes_strs)
+            missing_notes = [n for n in input_notes if n not in cand.notes]
+            missing_notes_str = ' '.join([f'{n.name:2}' for n in missing_notes]) if len(missing_notes) > 0 else ''
+            # notes_str = (f'{cand.__repr__()}'.split(rb)[0]).split(lb)[-1].replace(Note._marker, '')
+            df.append([f'{cand._marker} {cand.name}', ' '+nlb,
+                        notes_str, nrb[-1], missing_notes_str,
+                        f'{rec:.2f}', f'{prec:.2f}', f'{lik:.2f}', f'{cons:.3f}'])
         df.show(max_rows=max_results, margin=' ', **kwargs)
 
 

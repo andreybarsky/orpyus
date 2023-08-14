@@ -53,7 +53,8 @@ BRACKETS = { 'Interval': ['‹', '›'],
             }
 
 ### DIACRITICS are used to mark certain chord and note names like brackets, but more compactly
-DIACRITICS = { ### displayed in the notelists of chords:
+DIACRITICS = { 'scale_degree': '\u0311',
+               ### displayed in the notelists of chords:
                'octave_above': '\u0307', # dot above
                'octave_below': '\u0323', # dot below
                '2_octaves_above': '\u0308', # 2 dots above (diaresis)
