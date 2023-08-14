@@ -52,6 +52,17 @@ BRACKETS = { 'Interval': ['‹', '›'],
    'non_key_chord_root': ['<', '>'],  # displayed around KeyChords whose root is not in the key
             }
 
+### DIACRITICS are used to mark certain chord and note names like brackets, but more compactly
+DIACRITICS = { ### displayed in the notelists of chords:
+               'octave_above': '\u0307', # dot above
+               'octave_below': '\u0323', # dot below
+               '2_octaves_above': '\u0308', # 2 dots above (diaresis)
+               '2_octaves_below': '\u0324', # 2 dots below
+               ### displayed in matching_keys and similar functions:
+               'note_not_in_input': '\u0332', # underline
+               }
+
+
 ### CHARACTERS are used in lists to compactly denote certain traits
 CHARACTERS = {   'true': '+',    # e.g. displayed in 'Tertian' column if a chord is tertian
              'somewhat': '~',    # e.g. displayed in 'Tertian' column if inverted-tertian
@@ -61,6 +72,8 @@ CHARACTERS = {   'true': '+',    # e.g. displayed in 'Tertian' column if a chord
  'compound_slash_chord': '!',    # displayed after compound slash chords like Am/G
        'extended_chord': 'ˣ',    # displayed after unnamed extended chords, i.e. CGE as compound Cmaj
                    }
+
+
 
 ############# tuning settings:
 

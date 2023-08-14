@@ -312,7 +312,8 @@ class DataFrame:
         margin_size = len(margin)
         printed_rows = []
         widths = self.column_widths(up_to_row=max_rows)
-        combi_chars = {"\u0324", "\u0323", "\u0307", "\u0308"} # a kludge: we have to count combining characters separately for chord notelist formatting
+        # must account for combining diacritics explicitly:
+        combi_chars = set(_settings.DIACRITICS.values())
         # make header:
         header_row = [f'{self.column_names[i]:{widths[i]}}' for i in range(self.num_columns)]
         printed_rows.append(margin.join(header_row))
@@ -342,6 +343,7 @@ def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
                             'cons': ['Cons.'],
                              'rec': ['Rec.'],
                             'prec': ['Prec.'],
+                            'null': [''],
                       }
 
     for col_name in columns:
@@ -434,6 +436,8 @@ def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
                 df_row.append(chord_scores['recall'])
             elif col_name == 'prec':
                 df_row.append(chord_scores['precision'])
+            elif col_name == 'null':
+                df_row.append('')
 
         df.append(df_row)
 
