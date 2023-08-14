@@ -394,7 +394,7 @@ class ScaleDegree(int):
     def __repr__(self):
         return str(self)
 
-    _diacritic = _settings.DIACRITICS['scale_degree']
+    _diacritic = _settings.DIACRITICS['ScaleDegree']
 
 
 class ScaleChord(AbstractChord):
