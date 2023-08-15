@@ -448,8 +448,8 @@ class Scale:
         self.num_degrees = len(self.factors)
         self.degrees = [ScaleDegree(d, num_degrees = self.num_degrees) for d in range(1, self.num_degrees+1)]
         self.degree_intervals = ModDict({d: self.factor_intervals[f] for d,f in zip(self.degrees, self.factors)}, index=1, raise_values=True)
-        self.interval_degrees = reverse_mod_dict(self.degree_intervals, index=0, raise_values=True)
-        self.interval_factors = reverse_mod_dict(self.factor_intervals, index=0, raise_values=True)
+        self.interval_degrees = reverse_mod_dict(self.degree_intervals, index=0, max_key=11, raise_values=True)
+        self.interval_factors = reverse_mod_dict(self.factor_intervals, index=0, max_key=11, raise_values=True)
 
         self.factor_degrees = ModDict({f:d for f,d in zip(self.factors, self.degrees)}, index=1, raise_values=True)
         self.degree_factors = ModDict({d:f for d,f in zip(self.degrees, self.factors)}, index=1, max_key=self.num_degrees)
@@ -564,21 +564,6 @@ class Scale:
             # (this handles chromatic factors etc. internally)
             factors = factors.mode(mode)
 
-            # so we rotate the unstacked intervals and restack them: (an IntervalList method exists for this)
-            # new_intervals = intervals.mode(mode)
-            # # intervals = new_intervals
-            # # then recompute factors:
-            # factors = ScaleFactors(', '.join(new_intervals.pad(left=True, right=False).as_factors))
-            # if len(chromatic_intervals) > 0:
-            #     # currently this intervals var doesn't include the chromatic intervals,
-            #     # which are ALSO shifted by a mode rotation
-            #     # so we shift those explicitly here:
-            #     num_places = mode-1
-            #     # the interval at the num_places index of the original intervals
-            #     # is how far leftward the chromatic intervals must be shifted:
-            #     left_shift = intervals[num_places]
-            #     chromatic_intervals = (chromatic_intervals - left_shift).flatten()
-
         # factors.chromatic = ScaleFactors(chromatic_intervals.as_factors)
 
         # now factors and intervals have necessarily been set, both including the tonic,
@@ -592,7 +577,6 @@ class Scale:
         """takes a string denoting a scale name and returns its canonical form if it exists,
         along with a list of Modifier objects as alterations if any were detected"""
         # step 0: fast exact check, see if the provided name exists as a canonical name or alias:
-
 
         # make scale name lowercase:
         if len(scale_name) > 1 and scale_name != scale_name.lower():
@@ -647,6 +631,25 @@ class Scale:
             return canonical_scale_name, alterations
         else:
             raise ValueError(f'{scale_name} re-parsed as {reduced_name_words} but could not find a corresponding scale by that name')
+
+    @cached_property
+    def fractional_interval_degrees(self):
+        """returns the mapping of NON-scale intervals to fractional degree numbers.
+        covers the full 12-interval span for heptatonic scales, but not guaranteed
+        to do so for smaller scales like pentatonics."""
+        non_scale_intervals = [Interval(v) for v in range(1,12) if v not in self.interval_degrees]
+        fractional_interval_degrees = {}
+        for iv in non_scale_intervals:
+            if (iv-1).mod in self.interval_degrees and (iv+1).mod in self.interval_degrees:
+                degree_below = int(self.interval_degrees[iv-1])
+                frac_degree = round(degree_below + 0.5, 1)
+                fractional_interval_degrees[iv] = frac_degree
+        return ModDict(fractional_interval_degrees, index=0, max_key=11, raise_values=True)
+
+    @cached_property
+    def fractional_degree_intervals(self):
+        """reverse mapping of self.fractional_interval_degrees"""
+        return reverse_mod_dict(self.fractional_interval_degrees, index=1, max_key=7, raise_values=True)
 
     ###### scale production methods (and related subroutines):
 
@@ -1444,7 +1447,18 @@ class Scale:
     @property
     def likelihood(self):
         # inverse of rarity
-        return round(1.0 - (0.1 * self.rarity), 1)
+        return self.rarity_to_likelihood(self.rarity)
+        # return round(1.0 - (0.1 * self.rarity), 1)
+
+    @staticmethod
+    def rarity_to_likelihood(rarity):
+        # the publically-accessible calculation for the likelihood calculation
+        return round(1.0 - (0.1 * rarity), 1)
+
+    @staticmethod
+    def likelihood_to_rarity(likelihood):
+        # vice versa
+        return int(round((1.0 - likelihood) * 10, 1))
 
     def is_subscale_of(self, other):
         """returns True if this scale's intervals all occur in the intervals
@@ -2089,10 +2103,10 @@ parallel_scale_names = {'natural major': 'natural minor',
 common_base_scale_names = base_scale_names.intersection(common_scale_names)
 
 # this list is important: it's the scales that get searched for matching_keys
-common_base_scales = [Scale(n) for n in common_base_scale_names]
+common_base_scales = set([Scale(n) for n in common_base_scale_names])
 
-common_modes = [Scale(n) for n in common_scale_names if n not in common_base_scale_names]
-common_scales = common_base_scales + common_modes
+common_modes = set([Scale(n) for n in common_scale_names if n not in common_base_scale_names])
+common_scales = set(list(common_base_scales) + list(common_modes))
 
 for name, scale in zip(common_base_scale_names, common_base_scales):
     if name not in parallel_scale_names:
