@@ -306,7 +306,7 @@ class ModDict(dict):
     def __getitem__(self, i):
         # by design we only modulo keys ABOVE max key, not below index
         if i > self.max_key:
-            div, m = (divmod(i - self.index, self.max_key))
+            div, m = (divmod(i - self.index, self.max_key + (1-self.index)))
             m += self.index
         else:
             div, m = 0, i
