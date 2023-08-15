@@ -332,10 +332,14 @@ class ModDict(dict):
 
     def raise_value(self, item, div):
         ### raises a retrieved by a power of div
-        if type(item) is not int:
+        if type(item) not in (int, float):
             # orpyus music objects can be raised by a power to increase their octave:
             return item ** div
         else:
-            # for raw ints, we have to rely on the raise_by attr:
+            # for raw numbers, we have to rely on the raise_by attr:
             assert self.raise_by is not None
             return item + (div*self.raise_by)
+
+    def __repr__(self):
+        # like dict.__repr__, just indicates that this is a mod dict:
+        return f'M[{self.index}/{self.max_key}].' + super().__repr__()

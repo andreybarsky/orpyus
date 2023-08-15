@@ -12,7 +12,6 @@ from . import _settings
 
 import math
 
-
 # relative values (positions within scale) with respect to C major, starting with 0=C:
 # parsing.note_positions = {note_name:i for i, note_name in enumerate(note_names['generic'])}
 # parsing.note_positions.update({note_name:i for i, note_name in enumerate(note_names['flat'])})
@@ -23,7 +22,7 @@ import math
 # parsing.note_positions.update({note_name:i for i, note_name in enumerate(note_names['natural_unicode'])})
 
 # get note name string from position in octave:
-def preferred_name(pos, prefer_sharps=False):
+def preferred_name(pos, prefer_sharps=_settings.DEFAULT_SHARPS):
     """Gets the note name for a specific position according to preferred sharp/flat notation,
     or just the natural note name if a a white note"""
     # if we've accidentally been given an Interval object for position, we quietly parse it:
@@ -98,7 +97,7 @@ class Note:
                 elif parsing.is_flat_ish(name[1:]):  # len(name) == 2 and
                     prefer_sharps = False
                 else: # fallback on global default
-                    prefer_sharps = False
+                    prefer_sharps = _settings.DEFAULT_SHARPS
             else:
                 prefer_sharps = prefer_sharps
 
@@ -110,7 +109,7 @@ class Note:
             name = preferred_name(position, prefer_sharps=prefer_sharps)
         elif position is not None:
             if prefer_sharps is None:
-                prefer_sharps = False # default
+                prefer_sharps = _settings.DEFAULT_SHARPS # global default
 
             # log(f'Initialising Note with position: {position}')
             name = preferred_name(position, prefer_sharps=prefer_sharps)
@@ -371,7 +370,7 @@ class OctaveNote(Note):
                 elif parsing.is_flat_ish(name[1:-1]):  # len(name) == 2 and
                     prefer_sharps = False
                 else: # fallback on global default
-                    prefer_sharps = False
+                    prefer_sharps = _settings.DEFAULT_SHARPS
             else:
                 prefer_sharps = prefer_sharps
 
@@ -486,7 +485,7 @@ class OctaveNote(Note):
 
     ## polymorphic note getters:
     @staticmethod
-    def get_note_name(inp, prefer_sharps=False):
+    def get_note_name(inp, prefer_sharps=_settings.DEFAULT_SHARPS):
         """Takes an input as either value (int) or pitch (float),
         returns appropriate OctaveNote name, e.g. F#4"""
         ### parse input as either value or pitch, retrieve coresponding note name

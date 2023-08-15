@@ -310,7 +310,7 @@ class DataFrame:
             widths.append(max(str_lens))
         return widths
 
-    def show(self, margin=' ', header_border=True, max_rows=None):
+    def show(self, margin=' ', header_border=True, max_rows=None, **kwargs):
         margin_size = len(margin)
         printed_rows = []
         widths = self.column_widths(up_to_row=max_rows)

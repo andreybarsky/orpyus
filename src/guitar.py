@@ -51,20 +51,22 @@ class Guitar: ### TBI: allow ukelele tunings?
             self.tuned_strings = [String(s) for s in tuned_strings]
             self.tuning = ''.join([s.chroma for s in self.tuned_strings])
 
-        # open strings are relative to capo instead of to the neck:
-        self.open_strings = [s + self.capo for s in self.tuned_strings]
-
         self.verbose = verbose # for debugging
 
-    def add_capo(self, capo):
-        self.capo = capo
-        self.open_strings = [s + self.capo for s in self.tuned_strings]
-        print(self)
+    # open strings are relative to capo instead of to the neck:
+    @property
+    def open_strings(self):
+        return [s + self.capo for s in self.tuned_strings]
 
-    def remove_capo(self):
-        self.capo = 0
-        self.open_strings = [s + self.capo for s in self.tuned_strings]
-        print(self)
+    # def add_capo(self, capo):
+    #     self.capo = capo
+    #
+    #     print(self)
+    #
+    # def remove_capo(self):
+    #     self.capo = 0
+    #     self.open_strings = [s + self.capo for s in self.tuned_strings]
+    #     print(self)
 
 
     def distance_from_standard(self):
@@ -96,7 +98,7 @@ class Guitar: ### TBI: allow ukelele tunings?
         notes.play(*args, duration=3, **kwargs)
 
     ### TBI: distinguish between fretting from neck and fretting from capo
-    def fret(self, frets, from_capo=False):
+    def fret(self, frets, from_capo=True):
         """simulates plucking each string according to the listed fret diagram, gets the
         resulting notes, and returns them as a NoteList."""
         string_notes = []

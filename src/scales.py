@@ -401,7 +401,7 @@ class ScaleChord(AbstractChord):
     """AbstractChord that lives in a Scale, and understands a few things about
     harmony within the scale as well as its relative position inside it.
     Used inside Progression class."""
-    def __init__(self, *args, scale, degree=None, factor=None, **kwargs):
+    def __init__(self, *args, scale, degree=None, factor=None, _init_abs=True, **kwargs):
         """as AbstractChord, except for the additional required args:
         scale: a Scale object, or string that casts to Scale
             denoting the scale this chord lives in.
@@ -416,10 +416,12 @@ class ScaleChord(AbstractChord):
         factor: an integer denoting which factor of the scale this chord sits on.
                 (the difference is meaningful only for non-heptatonic scales)"""
 
+        # initialise everything else as AbstractChord: (if not being inherited by KeyChord)
+        if _init_abs:
+            AbstractChord.__init__(self, *args, **kwargs)
+
         if not isinstance(scale, Scale):
             scale = Scale(scale)
-        if not isinstance(degree, ScaleDegree):
-            degree = ScaleDegree.from_scale(scale, degree)
 
         self.scale = scale
 
@@ -438,6 +440,7 @@ class ScaleChord(AbstractChord):
                 upper, lower = ceil(degree), floor(degree)
                 assert degree != upper and degree != lower # i.e. not a float equal to an integer
                 self.scale_degree = round(lower + 0.5, 1) # ensure strict half-integer to 1d.p.
+                self.scale_factor = []
                 self.root_in_scale = False
                 self.in_scale = False
         elif factor is not None:
@@ -446,8 +449,7 @@ class ScaleChord(AbstractChord):
             self.scale_factor = factor
             self.scale_degree = scale.factor_degrees[factor]
 
-        # initialise everything else as AbstractChord:
-        AbstractChord.__init__(self, *args, **kwargs)
+
 
         if self.root_in_scale:
             self.in_scale = scale.contains_degree_chord(degree, self)
@@ -456,7 +458,7 @@ class ScaleChord(AbstractChord):
     def numeral(self):
         return self.get_numeral()
 
-    def get_numeral(self, related_scale_marks=True):
+    def get_numeral(self, modifiers=True, related_scale_marks=True):
         """returns the roman numeral associated with this ScaleChord
         with respect to its Scale and its degree within it"""
 
@@ -467,7 +469,7 @@ class ScaleChord(AbstractChord):
 
             if sharp_factor in self.scale.factors:
                 # this can be called a flat degree
-                prefix, root_factor = fl, sharp_factor
+                root_prefix, root_factor = fl, sharp_factor
             elif flat_factor in self.scale.factors:
                 # the rarer sharp degree
                 root_prefix, root_factor = sh, flat_factor
@@ -481,12 +483,12 @@ class ScaleChord(AbstractChord):
             # root in scale, so no prefix needed
             root_prefix, root_factor = '', self.scale_factor
 
-        rel_mark = ''
-        if (related_scale_marks) and (not self.in_scale) and (self.root_in_scale):
+        rel_mark, diacritic = '', None
+        if (related_scale_marks) and (not self.in_scale):
             # mark a chord as not in its scale,
             # but indicate if it belongs to other closely related scales:
             if self.scale == NaturalMajor:
-                related_scale_marks = {NaturalMinor: 'ᵖ', # i.e. parallel minor
+                related_scale_marks = {NaturalMinor: '', # i.e. parallel minor
                                        HarmonicMajor: 'ʰ',
                                        MelodicMajor:  'ᵐ',
                                        Lydian:        'ˡʸ',
@@ -494,7 +496,7 @@ class ScaleChord(AbstractChord):
                                        # dominant/subdominant keys?
 
             elif self.scale == NaturalMinor:
-                related_scale_marks = {NaturalMajor: 'ᵖ', # i.e. parallel minor
+                related_scale_marks = {NaturalMajor: '', # i.e. parallel minor
                                        HarmonicMinor: 'ʰ',
                                        MelodicMinor:  'ᵐ',
                                        Dorian: 'ᵈᵒ',
@@ -507,34 +509,45 @@ class ScaleChord(AbstractChord):
             for rel_scale, mark in related_scale_marks.items():
                 if self in rel_scale:
                     rel_mark = mark
+                    diacritic = _settings.DIACRITICS['chord_in_related_scale']
                     break
+            if rel_mark == '':
+                # chord is out-of-scale and not in any related scale
+                diacritic = _settings.DIACRITICS['chord_not_in_scale']
 
         # next, decide whether the numeral should be upper or lowercase:
         if self.quality.major_ish:
-            numeral = parsing.numerals_roman[self.scale_factor].upper()
+            numeral = parsing.numerals_roman[root_factor].upper()
         elif self.quality.minor_ish:
-            numeral = parsing.numerals_roman[self.scale_factor].lower()
+            numeral = parsing.numerals_roman[root_factor].lower()
         else:
             # chords of ambiguous quality (sus chords etc) use the scale's quality:
             if self.scale.quality.minor_ish:
-                numeral = parsing.numerals_roman[self.scale_factor].lower()
+                numeral = parsing.numerals_roman[root_factor].lower()
             else: # falling back on uppercase if even the SCALE is ambiguous:
-                numeral = parsing.numerals_roman[self.scale_factor].upper()
+                numeral = parsing.numerals_roman[root_factor].upper()
 
         # get the chord suffix, but ignore any suffix that means 'minor'
         # because minor-ness is already communicated by the numeral's case
-        chord_suffix = self.suffix
-        if (len(chord_suffix)) > 0 and (chord_suffix[0] == 'm') and (not self.quality.major_ish):
-            chord_suffix = chord_suffix[1:]
+        if modifiers:
+            chord_suffix = self.suffix
+            if (len(chord_suffix)) > 0 and (chord_suffix[0] == 'm') and (not self.quality.major_ish):
+                chord_suffix = chord_suffix[1:]
 
-        # turn suffix modifiers into superscript marks etc. where possible:
-        chord_suffix = ''.join(reduce_aliases(chord_suffix, parsing.modifier_marks))
-
-        # get inversion as integer degree rather than bass note:
-        inv_string = '' if self.inversion == 0 else f'/{self.inversion}'
+            # turn suffix modifiers into superscript marks etc. where possible:
+            chord_suffix = ''.join(reduce_aliases(chord_suffix, parsing.modifier_marks))
+            # get inversion as integer degree rather than bass note:
+            inv_string = '' if self.inversion == 0 else f'/{self.inversion}'
+        else:
+            chord_suffix, inv_string = ''
 
         # finally, compose full numeral:
-        full_numeral = rel_mark + root_prefix + numeral + chord_suffix + inv_string
+        chord_name = root_prefix + numeral + chord_suffix + inv_string
+        if diacritic is not None:
+            # underline chord name part of this numeral to illustrate out-of-scale etc.:
+            chord_name = ''.join([ char + diacritic for char in chord_name])
+        full_numeral = rel_mark + chord_name
+
 
         return full_numeral
 
@@ -1512,7 +1525,7 @@ class Scale:
         root_interval = self.degree_intervals[degree]
         intervals_from_root = IntervalList([root_interval + iv for iv in abs_chord.intervals])
         # call __contains__ on resulting iv list:
-        return intervals_from_root in self
+        return intervals_from_root.flatten() in self
 
     # scales hash according to their factors and their chromatic intervals:
     def __hash__(self):
