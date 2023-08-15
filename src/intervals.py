@@ -349,7 +349,12 @@ class Interval:
             raise TypeError('Intervals can only be compared to integers or other Intervals')
 
     def __le__(self, other):
-        return other >= self
+        if isinstance(other, Interval):
+            return self.value <= other.value
+        elif isinstance(other, int):
+            return self.value <= other
+        else:
+            raise TypeError('Intervals can only be compared to integers or other Intervals')
 
     def __lt__(self, other):
         if isinstance(other, Interval):
@@ -359,8 +364,13 @@ class Interval:
         else:
             raise TypeError('Intervals can only be compared to integers or other Intervals')
 
-    # def __gt__(self, other):
-    #     return self > other
+    def __gt__(self, other):
+        if isinstance(other, Interval):
+            return self.value > other.value
+        elif isinstance(other, int):
+            return self.value > other
+        else:
+            raise TypeError('Intervals can only be compared to integers or other Intervals')
 
     def __int__(self):
         return self.value
