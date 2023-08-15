@@ -4,7 +4,7 @@ from .util import reverse_dict, unpack_and_reverse_dict, log
 from . import _settings
 import string
 
-######################################## accidentals
+################### accidentals
 
 # map semitone offset values to accidental character aliases:
 offset_accidentals = {-2: ['𝄫', '♭♭', 'bb'],
@@ -70,7 +70,7 @@ def cast_accidental(acc, max_len=1):
         return None
 
 
-######################################## note names
+################### note names
 generic_note_names = ['C', f'C{sh} / D{fl}', 'D', f'D{sh} / E{fl}', 'E', 'F', f'F{sh} / G{fl}', 'G', f'G{sh} / A{fl}', 'A', f'A{sh} / B{fl}', 'B']
 natural_note_names = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
 next_natural_note = {natural_note_names[i-1]:natural_note_names[i] for i in range(1,7)}
@@ -111,56 +111,53 @@ common_note_names = set(preferred_note_names[fl] + preferred_note_names[sh])
 
 
 
-#
-# note_names = {  # all the notes ordered from C to B, under various aliases
-#
-#   'flat':         ['C',  'Db', 'D',  'Eb', 'E',  'F',  'Gb', 'G',  'Ab', 'A',  'Bb', 'B'  ],
-#   'sharp':        ['C',  'C#', 'D',  'D#', 'E',  'F',  'F#', 'G',  'G#', 'A',  'A#', 'B'  ],
-#   'very flat':    ['C',  'Db', 'D',  'Eb', 'Fb', 'F',  'Gb', 'G',  'Ab', 'A',  'Bb', 'Cb' ],  # for key signatures with 7 flats
-#   'very sharp':   ['B#', 'C#', 'D',  'D#', 'E',  'E#', 'F#', 'G',  'G#', 'A',  'A#', 'B'  ],  # or 7 sharps
-#   'double flat':  ['Dbb','Db', 'Ebb','Eb', 'Fb', 'Gbb','Gb', 'Abb','Ab', 'Bbb','Bb', 'Cbb'],
-#   'double sharp': ['B#', 'B##', 'C##','D#', 'D##','E#','E##',]
-#
-# }
+################### subscript and superscript mappings:
 
-# note_names
-#
-# # detect unicode notes too:
-# note_names_flat_unicode = [n.replace('b', '♭') for n in note_names_flat]
-# note_names_sharp_unicode = [n.replace('#', '♯') for n in note_names_sharp]
-# note_names_very_flat_unicode = [n.replace('b', '♭') for n in note_names_very_flat]
-# note_names_very_sharp_unicode = [n.replace('#', '♯') for n in note_names_very_sharp]
-# note_names_natural_unicode = [n + '♮' if len(n)== 1 else n for n in note_names]
-#
-# valid_note_names = set(note_names + note_names_flat + note_names_sharp +
-#                        note_names_flat_unicode + note_names_sharp_unicode +
-#                        note_names_very_flat + note_names_very_sharp +
-#                        note_names_very_flat_unicode + note_names_very_sharp_unicode +
-#                        note_names_natural_unicode)
-#
-# note_names = {'generic':            note_names,
-#               'flat':               note_names_flat,
-#               'very_flat':          note_names_very_flat,
-#               'very_flat_unicode':  note_names_very_flat_unicode,
-#               'flat_unicode':       note_names_flat_unicode,
-#               'sharp':              note_names_sharp,
-#               'very_sharp':         note_names_very_sharp,
-#               'sharp_unicode':      note_names_sharp_unicode,
-#               'very_sharp_unicode': note_names_very_sharp_unicode,
-#               'natural_unicode':    note_names_natural_unicode,
-#               }
-#               # 'valid':              valid_note_names}
-#
-#
-# # map any note name to its position:
-#
-# note_positions = {}
-# for note_list in note_names.values():
-#     note_positions.update({note_name:i for i, note_name in enumerate(note_list)})
-#
+subscript_integers = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉']
+superscript_integers = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹']
 
+subscript_letters = {   # lowercase only:
+      'a': 'ₐ',  'e': 'ₑ',  'o': 'ₒ',  'x': 'ₓ',
+      'h': 'ₕ',  'k': 'ₖ',  'm': 'ₘ',  'n': 'ₙ',
+      'p': 'ₚ',  's': 'ₛ',  't': 'ₜ',  'l': 'ₗ',
+      'j': 'ⱼ',  'i': 'ᵢ',  'r': 'ᵣ',  'u': 'ᵤ',
+      'v': 'ᵥ', }
 
-######################################## natural language names for numerical interval/scale degrees
+subscript_symbols = {
+      '+': '₊',  '-': '₋',  '=': '₌',
+      '(': '₍',  ')': '₎',
+      }
+
+superscript_letters = {  # lowercase: (nearly complete alphabet)
+       'a': 'ᵃ',  'b': 'ᵇ',  'c': 'ᶜ',  'd': 'ᵈ',  'e': 'ᵉ',
+       'f': 'ᶠ',  'g': 'ᵍ',  'h': 'ʰ',  'i': 'ⁱ',  'j': 'ʲ',
+       'k': 'ᵏ',  'l': 'ˡ',  'm': 'ᵐ',  'n': 'ⁿ',  'o': 'ᵒ',
+       'p': 'ᵖ',  'r': 'ʳ',  's': 'ˢ',  't': 'ᵗ',  'u': 'ᵘ', # note: no Q
+       'v': 'ᵛ',  'w': 'ʷ',  'x': 'ˣ',  'y': 'ʸ',  'z': 'ᶻ',
+
+         # uppercase:
+       'A': 'ᴬ',  'B': 'ᴮ',  'D': 'ᴰ',  'E': 'ᴱ',
+       'G': 'ᴳ',  'H': 'ᴴ',  'I': 'ᴵ',  'J': 'ᴶ',
+       'K': 'ᴷ',  'L': 'ᴸ',  'M': 'ᴹ',  'N': 'ᴺ',
+       'O': 'ᴼ',  'P': 'ᴾ',  'R': 'ᴿ',  'T': 'ᵀ',
+       'U': 'ᵁ',  'V': 'ⱽ',  'W': 'ᵂ',  'Z': 'ᙆ',
+       }
+superscript_symbols = {
+       '+': '⁺',  '-': '⁻',  '=': '⁼',
+       '(': '⁽',  ')': '⁾',  '?': 'ˀ', '!': 'ᵎ',
+       'Δ': 'ᐞ',  '/': 'ᐟ',  '\\': 'ᐠ', '.': 'ᐧ',
+       }
+
+# unions of them all:
+superscript, subscript = {}, {}
+[superscript.update(s) for s in [superscript_letters, superscript_symbols, {str(i): superscript_integers[i] for i in range(10)}]]
+[subscript.update(s)   for s in [subscript_letters,   subscript_symbols,   {str(i): subscript_integers[i]   for i in range(10)}]]
+
+# reverse mapping of either:
+unscript = reverse_dict(superscript)
+unscript.update(reverse_dict(subscript))
+
+################### natural language names for numerical interval/scale degrees
 
 num_suffixes = defaultdict(lambda: 'th', {1: 'st', 2: 'nd', 3: 'rd'})
 for tens in range(20,100,10):
@@ -168,9 +165,6 @@ for tens in range(20,100,10):
     num_suffixes[tens+1] = 'st'
     num_suffixes[tens+2] = 'nd'
     num_suffixes[tens+3] = 'rd'
-
-numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII'}
-roman_numerals = reverse_dict(numerals_roman)
 
 degree_names = {1: 'unison',  2: 'second', 3: 'third',
                 4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh', 8: 'eighth',
@@ -189,7 +183,27 @@ span_names = {5: 'pentave', 6: 'sexave', 7: 'septave', 8: 'octave',
 # but we do use 'nonave' in the context of octatonic scales and so on
 
 
-#### note name parsing functions:
+################### roman numeral handling: (and associated lookups)
+
+numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII'}
+roman_numerals = reverse_dict(numerals_roman)
+
+# superscript modifiers used specifically in roman numeral chord notation:
+modifier_marks = { 'dim':  '°', 'hdim': 'ø', # ᶲ ?
+                   'aug':  '⁺',  'maj':  'ᐞ',
+                   'sus':  'ˢ',  'add':  'ᵃ',
+_settings.CHARACTERS['unknown_chord']: _settings.CHARACTERS['unknown_superscript'],
+} # '⁽ᵃ⁾'}
+
+# all numerals also get turned into modifier marks:
+modifier_marks.update({str(i): parsing.superscript_integers[i] for i in range(10)})
+# as well as some select superscriptable symbols:
+modifier_marks.update({c: parsing.superscript_symbols[c] for c in '/+-!?'})
+# but not chord alterations: (because we can't superscript sharps/flats)
+modifier_marks.update({f'{acc}{i}' : f'{acc}{i}' for i in range(3,14) for acc in [sh, fl, nat]})
+
+
+################### note name parsing functions:
 
 def is_valid_note_name(name: str, case_sensitive=True):
     """returns True if string can be cast to a Note,
@@ -201,28 +215,7 @@ def is_valid_note_name(name: str, case_sensitive=True):
         # given e.g. lowercase 'c' or 'eb', or 'bbb', which are all valid if not case_sensitive
         name = name[0].upper() + name[1:].lower()
     return name in note_positions
-    #
-    # if len(name) == 1:
-    #     if not case_sensitive:
-    #         return name.upper() in valid_note_names
-    #     else:
-    #         return name in valid_note_names
-    # elif len(name) == 2:
-    #     if not case_sensitive:
-    #         # force to upper+lower case, in case we've been given e.g. 'eb', still valid
-    #         name2 = name[0].upper() + name[1].lower()
-    #     else:
-    #         name2 = name[:2]
-    #     return name2 in valid_note_names
-    # elif len(name) == 3:
-    #     if not case_sensitive:
-    #         # force 'ebb' to 'Ebb', still valid
-    #         name3 = name[0].upper() + name[1:3].lower()
-    #     else:
-    #         name3 = name[:3]
-    #     return name3 in valid_note_names
-    # else:
-    #     return False
+
 
 def begins_with_valid_note_name(name: str):
     """checks if a string contains a valid note name in its first two characters.
@@ -332,31 +325,6 @@ def parse_octavenote_name(name, case_sensitive=True):
     if is_valid_note_name(note_name):
         return note_name, octave
 
-    # if (len(name) > 1) and is_accidental(name[1]): # check for accidental
-    #     # check string validity:
-    #     accidental = parse_accidental(name[1])
-    #     note_name = note_letter + accidental
-    #     assert note_name in valid_note_names, f"Invalid note name: {note_letter}"
-    #
-    #     if len(name) == 2: # default to 4th octave if not specified
-    #         octave = 4
-    #     elif len(name) == 3:
-    #         octave = int(name[2])
-    #     else:
-    #         raise ValueError(f'Provided note name is too long: {name}')
-    # else: # assume natural note
-    #     # check string validity:
-    #     assert note_letter in valid_note_names, f"Invalid note name: {note_letter}"
-    #     note_name = note_letter
-    #
-    #     if len(name) == 1: # default to 4th octave if not specified
-    #         octave = 4
-    #     elif len(name) == 2:
-    #         octave = int(name[1])
-    #     else:
-    #         raise ValueError(f'Provided note name is too long: {name}')
-    # return note_name, octave
-
 
 def is_alteration(string):
     """returns True if a string is a valid chord/scale alteration, like #5 or b11,
@@ -463,50 +431,3 @@ def auto_split(inp, allow='', allow_numerals=True, allow_letters=True, allow_acc
         # strip whitespace in addition: in case our sep is something like ', '
         splits = [s.strip() for s in splits]
         return splits
-
-
-### subscript and superscript mappings:
-
-subscript_integers = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉']
-superscript_integers = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹']
-
-subscript_letters = {   # lowercase only:
-      'a': 'ₐ',  'e': 'ₑ',  'o': 'ₒ',  'x': 'ₓ',
-      'h': 'ₕ',  'k': 'ₖ',  'm': 'ₘ',  'n': 'ₙ',
-      'p': 'ₚ',  's': 'ₛ',  't': 'ₜ',  'l': 'ₗ',
-      'j': 'ⱼ',  'i': 'ᵢ',  'r': 'ᵣ',  'u': 'ᵤ',
-      'v': 'ᵥ', }
-
-subscript_symbols = {
-      '+': '₊',  '-': '₋',  '=': '₌',
-      '(': '₍',  ')': '₎',
-      }
-
-superscript_letters = {  # lowercase: (nearly complete alphabet)
-       'a': 'ᵃ',  'b': 'ᵇ',  'c': 'ᶜ',  'd': 'ᵈ',  'e': 'ᵉ',
-       'f': 'ᶠ',  'g': 'ᵍ',  'h': 'ʰ',  'i': 'ⁱ',  'j': 'ʲ',
-       'k': 'ᵏ',  'l': 'ˡ',  'm': 'ᵐ',  'n': 'ⁿ',  'o': 'ᵒ',
-       'p': 'ᵖ',  'r': 'ʳ',  's': 'ˢ',  't': 'ᵗ',  'u': 'ᵘ', # note: no Q
-       'v': 'ᵛ',  'w': 'ʷ',  'x': 'ˣ',  'y': 'ʸ',  'z': 'ᶻ',
-
-         # uppercase:
-       'A': 'ᴬ',  'B': 'ᴮ',  'D': 'ᴰ',  'E': 'ᴱ',
-       'G': 'ᴳ',  'H': 'ᴴ',  'I': 'ᴵ',  'J': 'ᴶ',
-       'K': 'ᴷ',  'L': 'ᴸ',  'M': 'ᴹ',  'N': 'ᴺ',
-       'O': 'ᴼ',  'P': 'ᴾ',  'R': 'ᴿ',  'T': 'ᵀ',
-       'U': 'ᵁ',  'V': 'ⱽ',  'W': 'ᵂ',  'Z': 'ᙆ',
-       }
-superscript_symbols = {
-       '+': '⁺',  '-': '⁻',  '=': '⁼',
-       '(': '⁽',  ')': '⁾',  '?': 'ˀ', '!': 'ᵎ',
-       'Δ': 'ᐞ',  '/': 'ᐟ',  '\\': 'ᐠ', '.': 'ᐧ',
-       }
-
-# unions of them all:
-superscript, subscript = {}, {}
-[superscript.update(s) for s in [superscript_letters, superscript_symbols, {str(i): superscript_integers[i] for i in range(10)}]]
-[subscript.update(s)   for s in [subscript_letters,   subscript_symbols,   {str(i): subscript_integers[i]   for i in range(10)}]]
-
-# reverse mapping of either:
-unscript = reverse_dict(superscript)
-unscript.update(reverse_dict(subscript))
