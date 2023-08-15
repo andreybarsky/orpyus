@@ -4,7 +4,7 @@ from .intervals import Interval, IntervalList
 from .notes import Note, NoteList, chromatic_notes
 from .scales import Scale, ScaleFactors, ScaleDegree, ScaleChord
 from .chords import Chord, AbstractChord, ChordList
-from .util import check_all, precision_recall, reverse_dict, unpack_and_reverse_dict, log
+from .util import ModDict, check_all, precision_recall, reverse_dict, unpack_and_reverse_dict, log
 
 from collections import Counter
 from functools import cached_property
@@ -226,9 +226,9 @@ class Key(Scale):
         which_chromatic = self.which_intervals_chromatic()
         non_chromatic_notes = [n for i,n in enumerate(self.notes) if not which_chromatic[i]]
 
-        self.degree_notes = {d: n for d,n in zip(self.degrees, non_chromatic_notes)}
-        self.factor_notes = {f: n for f,n in zip(self.factors, non_chromatic_notes)}
-        self.interval_notes = {iv:n for n,iv in zip(self.notes, self.intervals)}
+        self.degree_notes = ModDict({d: n for d,n in zip(self.degrees, non_chromatic_notes)}, index=1, raise_values=False)
+        self.factor_notes = ModDict({f: n for f,n in zip(self.factors, non_chromatic_notes)}, index=1, raise_values=False)
+        self.interval_notes = ModDict({iv:n for iv,n in zip(self.intervals, self.notes)}, index=0, max_key=11, raise_values=False)
         # self.degree_notes = {d: self.tonic + iv for d,iv in self.degree_intervals.items()}
         # self.factor_notes = {f: self.tonic + iv for f,iv in self.factor_intervals.items()}
 
@@ -257,6 +257,17 @@ class Key(Scale):
         sharp_str = ' '.join([f'{n}{sh}' for n in sharp_order if f'{n}{sh}' in self.notes])
         self.key_signature_str = f'{flat_str} {sharp_str}'
 
+
+    @cached_property
+    def fractional_degree_notes(self):
+        """as Scale.fractional_degree_intervals, but maps to the notes of this key"""
+        frac_deg_notes = {d: Note.from_cache(self.tonic+iv, prefer_sharps=self.tonic.prefer_sharps) for d,iv in self.fractional_degree_intervals.items()}
+        return ModDict(frac_deg_notes, index=1, max_key=7, raise_values=False)
+
+    @cached_property
+    def fractional_note_degrees(self):
+        return reverse_dict(self.fractional_degree_notes)
+
     @cached_property
     def scale_name(self):
         """a Key's scale_name is whatever name it would get as a Scale"""
@@ -271,6 +282,17 @@ class Key(Scale):
     def members(self):
         # a Key's members are its notes
         return self.notes
+
+    ### convenience accessors for important tones: (analogous to self.tonic)
+    @property
+    def dominant(self):
+        return self.factor_notes[5]
+    @property
+    def subdominant(self):
+        return self.factor_notes[4]
+    @property
+    def leading_tone(self):
+        return self.factor_notes[7]
 
     def get_chord(self, degree, order=3):
         """overwrites Scale.get_chord, returns a Chord object instead of an AbstractChord"""
@@ -323,7 +345,7 @@ class Key(Scale):
         return self.clockwise(-value)
 
     def mode(self, N):
-        """as Scale.mode, but returns Keys with transposed tonics too.
+        """as Scale.mode, but returns a Key with transposed tonics too.
         so that the modes of C major are D dorian, E phrygian, etc."""
         # mod the rotation value into our factor range:
         N = ((N-1) % self.order) + 1
@@ -457,7 +479,7 @@ class Key(Scale):
             # ScaleChords exist on a specific degree of their scale/key,
             # so we can tell if this scale contains that chord on that degree:
             abs_chord = item.abstract()
-            return self.contains_degree_chord(item.degree, abs_chord)
+            return self.contains_degree_chord(item.scale_degree, abs_chord)
         elif isinstance(item, (list, tuple)):
             # check if each individual item in an iterable is contained here:
             for subitem in item:
@@ -540,8 +562,8 @@ class Key(Scale):
 class KeyChord(Chord, ScaleChord):
     """As ScaleChord, but lives in a Key instead of a Scale,
     and therefore inherits from Chord instead of AbstractChord"""
-    def __init__(self, *args, key, degree=None, degree_on_bass=True, **kwargs):
-        # initialise as chord:
+    def __init__(self, *args, key, degree=None, factor=None, degree_on_bass=True, **kwargs):
+        # initialise as Chord:
         Chord.__init__(self, *args, **kwargs)
 
         # if True, inverted chords are treated as having
@@ -551,19 +573,23 @@ class KeyChord(Chord, ScaleChord):
 
         if not isinstance(key, Key):
             key = Key(key)
-        if degree is None:
+
+        if degree is None and factor is None:
             # auto-infer degree from this chord's root (or bass)
             deg_note = self.root if not degree_on_bass else self.bass
-            degree = key.note_degrees[deg_note]
-        if not isinstance(degree, ScaleDegree):
-            degree = ScaleDegree.from_scale(key.scale, degree)
+            if deg_note in key.note_degrees:
+                degree = key.note_degrees[deg_note]
+            else:
+                degree = key.fractional_note_degrees[deg_note]
+
+
         self.key = key
-        self.scale = key.scale
-        self.degree = degree
+        # and then as ScaleChord: (without the associated abs_chord init)
+        ScaleChord.__init__(self, scale=self.key.scale,
+                            degree=degree, factor=factor, _init_abs=False)
 
         # flag whether this chord belongs in the key/scale specified:
         self.in_key = self in self.key
-        self.in_scale = self.scale.contains_degree_chord(degree, self)
 
         # KeyChord inherits its key's sharp preference unless explicitly overwritten:
         if 'prefer_sharps' not in kwargs:
@@ -593,25 +619,28 @@ relative_co5_distances = IntervalList([0, 5, 2, 3, 4, 1, 6, 1, 4, 3, 2, 5])
 
 
 
-def matching_keys(chords=None, notes=None,
+def matching_keys(chords=None, notes=None, tonic=None,
                   exact=False, exhaustive=None, modes=False, scale_lengths=[7],
-                  min_precision=0, min_recall=0.95, min_likelihood=0.7, min_consonance=0,
-                  chord_factor_weights = {1: 2, 3: 1.5, 5: 0.5}, weight_counts=True,
+                  min_precision=0, min_recall=0.9,
+                  min_likelihood=0.7, max_rarity=None, min_consonance=0,
+                  chord_factor_weights = {1: 1.1}, weight_counts=False,
                   scale_factor_weights = {1: 2, 4: 1.5, 5: 1.5},
                   # (by default, upweight roots and thirds, downweight fifths)
                   sort_order=['length', 'recall', 'likelihood', 'consonance', 'precision'],
                   display=True, max_results=None, verbose=log.verbose, **kwargs):
     """Accepts either a list of chords or a list of notes.
-    Will only find a key if that key's tonic is somewhere in the input. (?)
     exact: if True, only returns matches with perfect precision.
     exhaustive: if True, search all possible key tonics.
         if False, search only key tonics corresponding to input chord roots. (or input notes)
         if None, becomes set by default to True for notelists and False for chordlists.
+    tonic: default None, but can be set to a note (or list of notes) to restrict searches
+        to keys only with that tonic. (overrides 'exhaustive')
     natural_only: if True, only scores natural major and minor keys.
     modes: if True, returns all named modes of all matches.
         if False, only returns base keys and their relative keys.
     min_[precision/recall/consonance/likelihood]: minimum scores that a key must meet
         to count as 'matching'
+    max_rarity: inverse of min_likelihood. default None, but overrides min_likelihood if set.
     weight_counts: if True, weights precision and recall by the relative frequency
         of each note in the input list.
     chord_factor_weights: a dict that determines how much to weight each input chord factor by.
@@ -631,6 +660,10 @@ def matching_keys(chords=None, notes=None,
         # default behaviour: set to True for notes and False for chords
         exhaustive = (notes is not None)
 
+    if max_rarity is not None:
+        # translate rarity integer to likelihood score
+        min_likelihood = Scale.rarity_to_likelihood(max_rarity)
+
     # parse input into counter-dict of notes frequencies:
     if chords is not None:
         assert notes is None
@@ -643,21 +676,48 @@ def matching_keys(chords=None, notes=None,
             notes = NoteList(notes)
         input_note_weights = Counter(notes)
 
+    # print(f' Input note weights: {input_note_weights}')
+
     # list of notes to match:
     input_notes = list(input_note_weights.keys())
 
-    # loop over all common base scales,
-    # (and, by extension, their modes)
+
+    #### LIST OF SCALES TO SEARCH
+    # loop over all common base scales (and, by extension, their modes if desired)
     # provided they exceed minimum scale scores:
     scales_to_search = [s for s in scales.common_base_scales if s.likelihood >= min_likelihood and s.consonance >= min_consonance]
+    if not modes:
+        # only include modes if they are common:
+        scales_to_search.extend([m for m in scales.common_modes  if m.likelihood >= min_likelihood and m.consonance >= min_consonance])
 
+    #### SCALE LENGTH RESTRICTION
     # restrict search to scales only of certain lengths
     if scale_lengths is not None:
         if isinstance(scale_lengths, int): # catch single int arg
             scale_lengths = [scale_lengths]
         scales_to_search = [s for s in scales_to_search if len(s) in scale_lengths]
 
-    if exhaustive:
+    #### TONIC RESTRICTION
+    if tonic is not None:
+        # set explicit tonics only
+        possible_tonics = NoteList(tonic)
+
+        # if we want modes, this also requires we modify scales_to_search
+        # as e.g. D phrygian dominant will never appear if the possible
+        # tonics include only D, because that is a mode of harmonic minor,
+        # and we would search harmonic minor only on D (which would only
+        # account for the fit of A phrygian dominant)
+
+        if modes:
+            # so here, we explicitly add the modes of desired base scales to
+            # the search list, which is a bit combinatorially explosive but
+            # balanced out by a restricted set of tonics to search
+            uncommon_modes = []
+            for s in scales_to_search:
+                scale_modes = [m for m in s.modes if m not in common_scales]
+                uncommon_modes.extend(scale_modes)
+
+    elif exhaustive:
         # search all specified scales on all possible tonics
         possible_tonics = chromatic_notes
     else:
@@ -674,34 +734,37 @@ def matching_keys(chords=None, notes=None,
     for scale in scales_to_search:
         scale_name = scale.name
         scale_intervals, chrom_intervals = scales.canonical_scale_name_intervals[scale_name]
-        for tonic in possible_tonics:
-            candidate_key_notes = [tonic + iv for iv in scale_intervals] # equiv. to degree_notes (from 0, not 1)
+        for key_tonic in possible_tonics:
+            candidate_key_notes = [key_tonic + iv for iv in scale_intervals] # equiv. to degree_notes (from 0, not 1)
 
             ### determine weights for the notes in this key:
-            scale_scale = len(chords) if chords is not None else 1 # i.e. how much to weight the scale weights relative to the chord weights
+            scale_scale = len(chords)**0.5 if chords is not None else 1 # i.e. how much to weight the scale weights relative to the chord weights
             key_weights = Counter({n: 1*scale_scale for n in candidate_key_notes})
             # scale_degree_weights = [scale.degree_factors[d+1] for d,n in enumerate(candidate_key_notes)
             factors = [scale.degree_factors[d+1] for d in range(len(candidate_key_notes))]
 
             scale_note_weights = {n:scale_factor_weights[factors[i]] if factors[i] in scale_factor_weights  else 1  for i,n in enumerate(candidate_key_notes)}
             for n,w in scale_note_weights.items():
-                key_weights[n] *= w
+                key_weights[n] = round(key_weights[n] * w, 2)
             # now add input weights on top:
-            print(f' Key weights for candidate: {tonic.name} {scale_name}')
-            print(key_weights)
+            # print(f' Key weights for candidate: {key_tonic.name} {scale_name}')
+            # print(key_weights)
 
             key_weights.update(input_note_weights)
+            # print(f'  Updated by input note weights to:')
+            # print('  ' + str(key_weights))
 
 
-            candidate_chrom_notes = [tonic + iv for iv in chrom_intervals] if chrom_intervals is not None else []
+
+            candidate_chrom_notes = [key_tonic + iv for iv in chrom_intervals] if chrom_intervals is not None else []
             candidate_notes = candidate_key_notes + candidate_chrom_notes
             ### main matching call:
             scores = precision_recall(input_notes, candidate_notes, weights=key_weights, return_unweighted_scores=True)
 
             # add a candidate to shortlist if it beats the minimum prec/rec requirements:
             if scores['precision'] >= min_precision and scores['recall'] >= min_recall:
-                log(f'Found shortlist match ({tonic.chroma} {scale_name}) with precision {scores["precision"]:.2f} and recall {scores["recall"]:.2f}')
-                candidate = Scale(scale_name).on_tonic(tonic)
+                log(f'Found shortlist match ({key_tonic.chroma} {scale_name}) with precision {scores["precision"]:.2f} and recall {scores["recall"]:.2f}')
+                candidate = Scale(scale_name).on_tonic(key_tonic)
                 # add to shortlist dict:
                 shortlist_scores[candidate] = scores
 
@@ -712,8 +775,9 @@ def matching_keys(chords=None, notes=None,
         # no filtering needed
         filtered_scores = shortlist_scores
 
-    if modes:
+    if modes is True and tonic is None:
         # add all (named) parallel modes of all matching keys
+        # (though this behaviour is not necessary if a strict tonic requirement was set)
         mode_scores = {}
         for key, scores in filtered_scores.items():
             key_modes = [m for m in key.modes[1:] if m.factors in scales.canonical_scale_factor_names]
@@ -724,20 +788,22 @@ def matching_keys(chords=None, notes=None,
         filtered_scores.update(mode_scores)
 
     else:
-        relative_scores = {}
-        # just add relative modes (i.e. minor to major or vice versa) where relevant
-        for key, scores in filtered_scores.items():
-            if key.is_natural() and key.has_parallel():
-                if key.relative.likelihood >= min_likelihood and key.relative.consonance >= min_consonance:
-                    relative_scores[key.relative] = scores
-        filtered_scores.update(relative_scores)
+        pass # modes are only included if they are common
+        # relative_scores = {}
+        # # just add relative modes (i.e. minor to major or vice versa) where relevant
+        # for key, scores in filtered_scores.items():
+        #     if key.is_natural() and key.has_parallel():
+        #         if key.relative.likelihood >= min_likelihood and key.relative.consonance >= min_consonance:
+        #             relative_scores[key.relative] = scores
+        # filtered_scores.update(relative_scores)
 
     # sort matches according to desired order:
     sort_funcs = {'length': lambda x: len(x),
-                 'precision': lambda x: -filtered_scores[x]['precision'],
-                 'recall': lambda x: -filtered_scores[x]['recall'],
+                 'precision': lambda x: -round(filtered_scores[x]['precision'],2),
+                 'recall': lambda x: -round(filtered_scores[x]['recall'],2),
                  'likelihood': lambda x: -x.likelihood,
                  'consonance': lambda x: -x.consonance}
+                 # note we round prec and rec to 2d.p. to allow 'soft' tiebreaks by likl/cons
     ordered_funcs = [sort_funcs[s] for s in sort_order]
     master_sort_func = lambda x: tuple([f(x) for f in ordered_funcs])
     sorted_keys = sorted(filtered_scores.keys(), key=master_sort_func)

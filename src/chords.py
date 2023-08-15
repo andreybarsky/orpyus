@@ -699,8 +699,15 @@ class AbstractChord:
         return inversions
 
     def on_root(self, root_note):
-        """constructs a Chord object from this AbstractChord with respect to a desired root"""
+        """constructs a Chord object from this AbstractChord with respect to a
+            desired root"""
         return Chord(root=root_note, factors=self.factors, inversion=self.inversion)
+
+    def in_scale(self, scale, degree=None, factor=None):
+        """constructs a ScaleChord from this AbstractChord on a desired degree or
+            factor of a desired Scale"""
+        from src.scales import ScaleChord
+        return ScaleChord(factors=self.factors, inversion=self.inversion, scale=scale, degree=degree, factor=factor)
 
     def on_bass(self, bass_note):
         """constructs an inverted Chord object from this inverted AbstractChord with respect to a desired bass"""
@@ -1910,7 +1917,21 @@ class ChordList(list):
             key = Key(key)
         assert isinstance(key, Key), f"key input to ChordList.root_degrees_in must be a Key or string that casts to Key, but got: {type(key)})"
         root_intervals_from_tonic = [c.root - key.tonic for c in self]
-        root_degrees = [key.interval_degrees[iv]  if iv in key.interval_degrees  else None for iv in root_intervals_from_tonic]
+        root_degrees = []
+        for iv in root_intervals_from_tonic:
+            if iv in key.interval_degrees:
+                root_degrees.append(key.interval_degrees[iv])
+            else:
+                # interpret as fractional degree
+                upper_iv, lower_iv = iv+1, iv-1
+                if lower_iv in key.interval_degrees:
+                    frac_degree = round(int(key.interval_degrees[lower_iv]) + 0.5, 1)
+                elif upper_iv in key.interval_degrees:
+                    frac_degree = round(int(key.interval_degrees[upper_iv]) - 0.5, 1)
+                else:
+                    frac_degree = None
+                root_degrees.append(frac_degree)
+        # root_degrees = [key.interval_degrees[iv]  if iv in key.interval_degrees  else None for iv in root_intervals_from_tonic]
         return root_degrees
 
     def as_numerals_in(self, key, sep=' ', modifiers=True):
@@ -2182,6 +2203,22 @@ def fuzzy_matching_chords(note_list, display=True,
         print(f'{note_list} does not appear to be a valid list of notes')
         raise e
 
+    # determine whether to prefer sharps or flats:
+    input_sharps, input_flats = 0,0
+    for n in note_list:
+        if parsing.is_flat(n.chroma[-1]):
+            input_flats += 1
+        elif parsing.is_sharp(n.chroma[-1]):
+            input_sharps += 1
+    if input_sharps == input_flats:
+        # tiebreak on global default:
+        prefer_sharps = _settings.DEFAULT_SHARPS
+        print(f'Decided to prefer sharps: {prefer_sharps}')
+    else:
+        prefer_sharps = input_sharps > input_flats
+        print(f'Decided to prefer sharps: {prefer_sharps}')
+
+
     candidates = {} # we'll build a list of Chord object candidates as we go
     # keying candidate chord objs to (rec, prec, likelihood, consonance) tuples
 
@@ -2199,7 +2236,7 @@ def fuzzy_matching_chords(note_list, display=True,
             for chord_name in names_to_try:
                 # init chord more efficiently than by name:
                 cand_factors = chord_names_to_factors[chord_name]
-                candidate = Chord(factors=cand_factors, root=n)
+                candidate = Chord(factors=cand_factors, root=n, prefer_sharps=prefer_sharps)
 
                 likelihood = candidate.likelihood # float from 0.3 to 1.0
 
