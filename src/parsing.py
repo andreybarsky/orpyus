@@ -185,7 +185,9 @@ span_names = {5: 'pentave', 6: 'sexave', 7: 'septave', 8: 'octave',
 
 ################### roman numeral handling: (and associated lookups)
 
-numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII'}
+numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV',
+                  5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', # for octatonic scales
+                  9: 'IX', 10: 'X', 11: 'XI', 12: 'XII'} # for who knows
 roman_numerals = reverse_dict(numerals_roman)
 
 # superscript modifiers used specifically in roman numeral chord notation:
@@ -196,9 +198,9 @@ _settings.CHARACTERS['unknown_chord']: _settings.CHARACTERS['unknown_superscript
 } # '⁽ᵃ⁾'}
 
 # all numerals also get turned into modifier marks:
-modifier_marks.update({str(i): parsing.superscript_integers[i] for i in range(10)})
+modifier_marks.update({str(i): superscript_integers[i] for i in range(10)})
 # as well as some select superscriptable symbols:
-modifier_marks.update({c: parsing.superscript_symbols[c] for c in '/+-!?'})
+modifier_marks.update({c: superscript_symbols[c] for c in '/+-!?'})
 # but not chord alterations: (because we can't superscript sharps/flats)
 modifier_marks.update({f'{acc}{i}' : f'{acc}{i}' for i in range(3,14) for acc in [sh, fl, nat]})
 

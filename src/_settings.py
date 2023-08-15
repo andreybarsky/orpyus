@@ -7,7 +7,7 @@
 ### the tonic of a key has an informed sharp/flat preference based on the
 ### circle of fifths, and the chords of that key inherit this preference, but
 ### in the simple case of "Note('C') + 1", this setting determines the result.
-DEFAULT_SHARPS = False
+DEFAULT_SHARPS = True
 
 ### PREFER_UNICODE_ACCIDENTALS controls whether the default behaviour
 ### when printing sharp and flat signs are the normal keyboard-typable
@@ -61,6 +61,7 @@ DIACRITICS = { 'ScaleDegree': '\u0311', # caret above integer (a common conventi
                '2_octaves_below': '\u0324', # 2 dots below
                ### displayed in matching_keys and similar functions:
                'note_not_in_input': '\u0332', # underline
+               'chord_not_in_scale': '\u0332', # as above
                }
 
 

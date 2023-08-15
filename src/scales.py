@@ -3,9 +3,9 @@ from .intervals import *
 from .util import ModDict, rotate_list, reverse_dict, reverse_mod_dict, unpack_and_reverse_dict, numeral_subscript, reduce_aliases, check_all, log
 from .chords import Factors, AbstractChord, Chord, ChordList, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
 from .qualities import ChordModifier, Quality
-from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental
+from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental, sh, fl
 from .display import chord_table
-from . import notes, _settings
+from . import notes, _settings, parsing
 from math import floor, ceil
 import re
 
@@ -399,20 +399,145 @@ class ScaleDegree(int):
 
 class ScaleChord(AbstractChord):
     """AbstractChord that lives in a Scale, and understands a few things about
-    harmony within the scale as well as its relative position inside it"""
-    def __init__(self, *args, scale, degree, **kwargs):
+    harmony within the scale as well as its relative position inside it.
+    Used inside Progression class."""
+    def __init__(self, *args, scale, degree=None, factor=None, **kwargs):
+        """as AbstractChord, except for the additional required args:
+        scale: a Scale object, or string that casts to Scale
+            denoting the scale this chord lives in.
+
+        and one of:
+
+        degree: an integer or ScaleDegree, denoting which degree of the above scale
+            this chord sits on.
+            can also be a float (like 2.5), denoting a fractional degree,
+            indicating a chord whose root is not on a scale degree.
+            (like a bIII chord in major scale)
+        factor: an integer denoting which factor of the scale this chord sits on.
+                (the difference is meaningful only for non-heptatonic scales)"""
+
         if not isinstance(scale, Scale):
             scale = Scale(scale)
         if not isinstance(degree, ScaleDegree):
             degree = ScaleDegree.from_scale(scale, degree)
 
         self.scale = scale
-        self.degree = degree
+
+        if degree is not None:
+            assert factor is None, f"ScaleChord received clashing factor/degree args"
+            if isinstance(degree, ScaleDegree):
+                self.scale_degree = degree
+                self.scale_factor = scale.degree_factors[degree]
+                self.root_in_scale = True
+            elif isinstance(degree, int):
+                self.scale_degree = ScaleDegree.of_scale(self.scale, degree)
+                self.scale_factor = scale.degree_factors[degree]
+                self.root_in_scale = True
+            elif isinstance(degree, float):
+                # fractional degree whose root is out-of-scale
+                upper, lower = ceil(degree), floor(degree)
+                assert degree != upper and degree != lower # i.e. not a float equal to an integer
+                self.scale_degree = round(lower + 0.5, 1) # ensure strict half-integer to 1d.p.
+                self.root_in_scale = False
+                self.in_scale = False
+        elif factor is not None:
+            assert degree is None, f"ScaleChord received clashing factor/degree args"
+            assert isinstance(factor, int), f"ScaleChord only understands integer factors, not {type(factor)}"
+            self.scale_factor = factor
+            self.scale_degree = scale.factor_degrees[factor]
 
         # initialise everything else as AbstractChord:
         AbstractChord.__init__(self, *args, **kwargs)
 
-        self.in_scale = scale.contains_degree_chord(degree, self)
+        if self.root_in_scale:
+            self.in_scale = scale.contains_degree_chord(degree, self)
+
+    @property
+    def numeral(self):
+        return self.get_numeral()
+
+    def get_numeral(self, related_scale_marks=True):
+        """returns the roman numeral associated with this ScaleChord
+        with respect to its Scale and its degree within it"""
+
+        # first: is this a bIII or similar?
+        if not self.root_in_scale:
+            sharp_degree, flat_degree = ceil(self.scale_degree), floor(self.scale_degree)
+            sharp_factor, flat_factor = self.scale.degree_factors[sharp_degree], self.scale.degree_factors[flat_degree]
+
+            if sharp_factor in self.scale.factors:
+                # this can be called a flat degree
+                prefix, root_factor = fl, sharp_factor
+            elif flat_factor in self.scale.factors:
+                # the rarer sharp degree
+                root_prefix, root_factor = sh, flat_factor
+            else:
+                # this chord's root is not even adjacent to any scale factor
+                # so it gets called a chromatic / out-of-scale chord
+                lb, rb = _settings.BRACKETS['non_key_chord_root']
+                raise Exception('this should never actually occur')
+
+        else:
+            # root in scale, so no prefix needed
+            root_prefix, root_factor = '', self.scale_factor
+
+        rel_mark = ''
+        if (related_scale_marks) and (not self.in_scale) and (self.root_in_scale):
+            # mark a chord as not in its scale,
+            # but indicate if it belongs to other closely related scales:
+            if self.scale == NaturalMajor:
+                related_scale_marks = {NaturalMinor: 'ᵖ', # i.e. parallel minor
+                                       HarmonicMajor: 'ʰ',
+                                       MelodicMajor:  'ᵐ',
+                                       Lydian:        'ˡʸ',
+                                       Mixolydian:    'ᵐˣ', }
+                                       # dominant/subdominant keys?
+
+            elif self.scale == NaturalMinor:
+                related_scale_marks = {NaturalMajor: 'ᵖ', # i.e. parallel minor
+                                       HarmonicMinor: 'ʰ',
+                                       MelodicMinor:  'ᵐ',
+                                       Dorian: 'ᵈᵒ',
+                                       Phrygian: 'ᵖʰ',
+                                       }
+            else:
+                # just report the parallel scale
+                if self.scale.has_parallel():
+                    related_scale_marks = {self.scale.parallel: 'ᵖ'}
+            for rel_scale, mark in related_scale_marks.items():
+                if self in rel_scale:
+                    rel_mark = mark
+                    break
+
+        # next, decide whether the numeral should be upper or lowercase:
+        if self.quality.major_ish:
+            numeral = parsing.numerals_roman[self.scale_factor].upper()
+        elif self.quality.minor_ish:
+            numeral = parsing.numerals_roman[self.scale_factor].lower()
+        else:
+            # chords of ambiguous quality (sus chords etc) use the scale's quality:
+            if self.scale.quality.minor_ish:
+                numeral = parsing.numerals_roman[self.scale_factor].lower()
+            else: # falling back on uppercase if even the SCALE is ambiguous:
+                numeral = parsing.numerals_roman[self.scale_factor].upper()
+
+        # get the chord suffix, but ignore any suffix that means 'minor'
+        # because minor-ness is already communicated by the numeral's case
+        chord_suffix = self.suffix
+        if (len(chord_suffix)) > 0 and (chord_suffix[0] == 'm') and (not self.quality.major_ish):
+            chord_suffix = chord_suffix[1:]
+
+        # turn suffix modifiers into superscript marks etc. where possible:
+        chord_suffix = ''.join(reduce_aliases(chord_suffix, parsing.modifier_marks))
+
+        # get inversion as integer degree rather than bass note:
+        inv_string = '' if self.inversion == 0 else f'/{self.inversion}'
+
+        # finally, compose full numeral:
+        full_numeral = rel_mark + root_prefix + numeral + chord_suffix + inv_string
+
+        return full_numeral
+
 
     def __repr__(self):
         in_str = 'not ' if not self.in_scale else ''
@@ -644,7 +769,7 @@ class Scale:
                 degree_below = int(self.interval_degrees[iv-1])
                 frac_degree = round(degree_below + 0.5, 1)
                 fractional_interval_degrees[iv] = frac_degree
-        return ModDict(fractional_interval_degrees, index=0, max_key=11, raise_values=True)
+        return ModDict(fractional_interval_degrees, index=0, max_key=11, raise_values=True, raise_by=7)
 
     @cached_property
     def fractional_degree_intervals(self):
@@ -1368,7 +1493,7 @@ class Scale:
             # a scale cannot be asked if it contains an AbstractChord without any other qualiifers,
             # but a ScaleChord contains its degree within the scale, so we wrap around
             # contains_degree_chord in this case:
-            return self.contains_degree_chord(item.degree, item)
+            return self.contains_degree_chord(item.scale_degree, item)
         else:
             raise TypeError(f'Scale.__contains__ not defined for items of type: {type(item)}')
 
