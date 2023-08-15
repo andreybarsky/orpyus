@@ -2241,13 +2241,13 @@ parallel_scale_names = {'natural major': 'natural minor',
 common_base_scale_names = base_scale_names.intersection(common_scale_names)
 
 # this list is important: it's the scales that get searched for matching_keys
-common_base_scales = set([Scale(n) for n in common_base_scale_names])
+common_base_scales = [Scale(n) for n in common_base_scale_names]
 
-common_modes = set([Scale(n) for n in common_scale_names if n not in common_base_scale_names])
-common_scales = set(list(common_base_scales) + list(common_modes))
+common_modes = [Scale(n) for n in common_scale_names if n not in common_base_scale_names]
+common_scales = list(common_base_scales) + list(common_modes)
 
 for name, scale in zip(common_base_scale_names, common_base_scales):
-    if name not in parallel_scale_names:
+    if name not in parallel_scale_names.keys():
         named_modes = [m for m in scale.modes[1:] if m.factors in canonical_scale_factor_names]
         modes_by_consonance = sorted(named_modes, key=lambda x: -x.consonance)
         if len(modes_by_consonance) > 0:
