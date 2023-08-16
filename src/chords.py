@@ -685,7 +685,7 @@ class AbstractChord:
         if inversion >= self.order:
             # mod inversion back into chord range: i.e. Chord('C').invert(3) is the same as invert(0)
             inversion = inversion % self.order
-        return AbstractChord(factors=self.factors, inversion=inversion, inversion_degree=inversion_degree)
+        return self._reinit(factors=self.factors, inversion=inversion, inversion_degree=inversion_degree)
 
     @property
     def inversions(self):
@@ -754,6 +754,43 @@ class AbstractChord:
                 return True
         return False
 
+    def _reinit(self, *args, root=None, notes=None, scale=None, key=None, degree=None, **kwargs):
+        """reinitialises another object of this same type,
+        whether it is AbstractChord or ScaleChord or KeyChord etc.
+        if scale/key/degree args are not given, passes the same ones as this object."""
+        if self.__class__.__name__ == 'AbstractChord':
+            return self.__class__(*args, **kwargs)
+        elif self.__class__.__name__ == 'Chord':
+            if root is None and notes is None:
+                root = self.root
+            return self.__class__(*args, root=root, notes=notes, **kwargs)
+        elif self.__class__.__name__ == 'ScaleChord':
+            if scale is None:
+                scale = self.scale
+            if degree is None:
+                degree = self.scale_degree
+            return self.__class__(*args, scale=scale, degree=degree, **kwargs)
+        elif self.__class__.__name__ == 'KeyChord':
+            if degree is None:
+                if root is None: # preserve same degree if root not given
+                    degree = self.scale_degree
+                else: # but if root is given, silently shift the degree as well
+                    assert key is None, "KeyChord reinit wants to silently shift degree but got conflicting key arg"
+                    if not isinstance(root, Note):
+                        root = Note(root)
+                    if root in self.key.note_degrees:
+                        degree = self.key.note_degrees[root]
+                    else:
+                        degree = self.key.fractional_note_degrees[root]
+            if root is None and notes is None:
+                root = self.root
+            if key is None:
+                key = self.key
+            return self.__class__(*args, key=key, root=root, notes=notes, degree=degree, **kwargs)
+        else:
+            raise Exception(f'Unrecognised Chord subclass: {self.__class__}')
+
+
     def __add__(self, other):
         """Chord + Chord results in a ChordList (which can further be analysed as a progression)
         Chord + Note adds the note to produce a new Chord
@@ -775,16 +812,16 @@ class AbstractChord:
         elif isinstance(other, Note):
             # addition of new note to produce new chord:
             new_notes = list(self.notes) + [other]
-            return Chord(notes=new_notes)
+            return self._reinit(notes=new_notes)
 
         elif isinstance(other, (int, Interval)):
             # transposition by int/interval:
             new_root = self.root + int(other)
-            return Chord(factors=self.factors, root=new_root)
+            return self._reinit(factors=self.factors, root=new_root)
 
         elif isinstance(other, ChordModifier):
             new_factors = self.factors + other
-            return Chord(factors=new_factors, root=self.root)
+            return self._reinit(factors=new_factors, root=self.root)
 
         elif isinstance(other, list):
             temp_chord = self
@@ -806,15 +843,17 @@ class AbstractChord:
 
         if isinstance(other, Note):
             # note deletion
+            assert other != self.root, "Cannot delete a chord's root"
+            assert other != self.bass, "Cannot delete a chord's bass note"
             new_notes = [n for n in self.notes if n != other]
-            return Chord(notes=new_notes)
+            return self._reinit(notes=new_notes, bass=self.bass)
 
         elif isinstance(other, Chord):
             return self.chord_distance(other)
 
         elif isinstance(other, (int, Interval)):
             new_root = self.root - int(other)
-            return Chord(root=new_root, factors=self.factors, inversion=self.inversion)
+            return self._reinit(root=new_root, factors=self.factors, inversion=self.inversion)
 
         else:
             raise TypeError(f'Chord.__sub__ not defined for type: {type(other)}')
@@ -834,10 +873,10 @@ class AbstractChord:
 
     def __eq__(self, other):
         """AbstractChords are equal to others on the basis of their factors and inversion"""
-        if type(other) == AbstractChord:
+        if not isinstance(other, Chord):
             return (self.factors == other.factors) and (self.inversion == other.inversion)
         else:
-            raise TypeError(f'AbstractChords can only be compared to other AbstractChords')
+            raise TypeError(f'AbstractChords cannot be compared to {other.__class__.__name__}s')
 
     def __hash__(self):
         return hash(((tuple(self.factors.items())), self.inversion))
@@ -1387,7 +1426,7 @@ class Chord(AbstractChord):
         new_factors[3] -= 1 # flatten third
         if 5 in self.factors: # if fifth is aug/dim, make it dim/aug
             new_factors[5] = -self.factors[5]
-        return Chord(factors=new_factors, root=rel_root, inversion=self.inversion)
+        return self._reinit(factors=new_factors, root=rel_root, inversion=self.inversion)
 
     @property
     def relative_major(self):
@@ -1398,7 +1437,7 @@ class Chord(AbstractChord):
         new_factors[3] += 1 # raise third
         if 5 in self.factors: # if fifth is aug/dim, make it dim/aug
             new_factors[5] = -self.factors[5]
-        return Chord(factors=new_factors, root=rel_root, inversion=self.inversion)
+        return self._reinit(factors=new_factors, root=rel_root, inversion=self.inversion)
 
     @property
     def relative(self):
@@ -1417,7 +1456,7 @@ class Chord(AbstractChord):
         new_factors[3] -= 1 # flatten third
         if 5 in self.factors: # if fifth is aug/dim, make it dim/aug
             new_factors[5] = -self.factors[5]
-        return Chord(factors=new_factors, root=self.root, inversion=self.inversion)
+        return self._reinit(factors=new_factors, root=self.root, inversion=self.inversion)
 
     @property
     def parallel_major(self):
@@ -1427,7 +1466,7 @@ class Chord(AbstractChord):
         new_factors[3] += 1 # raise third
         if 5 in self.factors: # if fifth is aug/dim, make it dim/aug
             new_factors[5] = -self.factors[5]
-        return Chord(factors=new_factors, root=self.root, inversion=self.inversion)
+        return self._reinit(factors=new_factors, root=self.root, inversion=self.inversion)
 
     @property
     def parallel(self):
@@ -1459,11 +1498,17 @@ class Chord(AbstractChord):
     def invert(self, inversion=None, inversion_degree=None, bass=None):
         """returns a new Chord based off this one, but inverted.
         not to be confused with self.__invert__!"""
-        return Chord(factors=self.factors, root=self.root, inversion=inversion, inversion_degree=inversion_degree, bass=bass)
+        return self._reinit(factors=self.factors, root=self.root, inversion=inversion, inversion_degree=inversion_degree, bass=bass)
 
     def abstract(self):
         """return the AbstractChord that this Chord is associated with"""
         return AbstractChord(factors=self.factors, inversion=self.inversion)
+
+    def in_key(self, key, degree=None, factor=None):
+        """constructs a KeyChord from this Chord on a desired degree or
+            factor of a desired Key"""
+        from src.keys import KeyChord
+        return KeyChord(factors=self.factors, inversion=self.inversion, key=key, degree=degree, factor=factor)
 
     def _get_flags(self):
         """Returns a list of the boolean flags associated with this object"""
@@ -1851,6 +1896,9 @@ class ChordList(list):
         else:
             raise TypeError(f'ChordList.__add__ not defined for type: {type(other)}')
 
+    def __sub__(self, other):
+        return self + (-other)
+
     def all_notes(self):
         """returns a NoteList of all the notes that occur in these chords, in order"""
         notes = NoteList()
@@ -2232,10 +2280,10 @@ def fuzzy_matching_chords(note_list, display=True,
     if input_sharps == input_flats:
         # tiebreak on global default:
         prefer_sharps = _settings.DEFAULT_SHARPS
-        print(f'Decided to prefer sharps: {prefer_sharps}')
+        log(f'Decided to prefer sharps: {prefer_sharps}')
     else:
         prefer_sharps = input_sharps > input_flats
-        print(f'Decided to prefer sharps: {prefer_sharps}')
+        log(f'Decided to prefer sharps: {prefer_sharps}')
 
 
     candidates = {} # we'll build a list of Chord object candidates as we go

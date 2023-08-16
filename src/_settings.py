@@ -61,8 +61,8 @@ DIACRITICS = { 'ScaleDegree': '\u0311', # caret above integer (a common conventi
                '2_octaves_below': '\u0324', # 2 dots below
                ### displayed in matching_keys and similar functions:
                'note_not_in_input': '\u0332', # underline
-               'chord_in_related_scale': '\u0332', # as above
-               'chord_not_in_scale': '\u0332', # double underline
+               'chord_in_related_scale': '\u0323', # dot below
+               'chord_not_in_scale': '\u0332', # underline
                }
 
 

@@ -297,7 +297,7 @@ class DataFrame:
         """DataFrame length is the number of rows"""
         return self.num_rows
 
-    def column_widths(self, up_to_row=None):
+    def column_widths(self, up_to_row=None, header=True):
         """return the max str size in each column, up to a specified row"""
         widths = []
 
@@ -306,22 +306,31 @@ class DataFrame:
         for col_num, col in self.column_data.items():
             cell_strs = [str(c) for c in col[:up_to_row]]
             combi_chars_per_cell = [sum([char in self._combi_chars for char in cell]) if type(cell)==str else 0  for cell in cell_strs]
-            str_lens = [len(s)-combi_chars_per_cell[i] for i,s in enumerate(cell_strs)] + [len(self.column_names[col_num]) - combi_chars_per_header[col_num]]
+            str_lens = [len(s)-combi_chars_per_cell[i] for i,s in enumerate(cell_strs)]
+            if header:
+                str_lens.extend([len(self.column_names[col_num]) - combi_chars_per_header[col_num]])
             widths.append(max(str_lens))
         return widths
 
-    def show(self, margin=' ', header_border=True, max_rows=None, **kwargs):
+    def total_width(self, up_to_row=None, header=True, margin_size=1):
+        widths = self.column_widths(up_to_row=up_to_row, header=header)
+        return sum(widths) + (self.num_columns-1)*margin_size # - sum(combi_chars_per_header)
+
+    def show(self, margin=' ', header=True, header_border=True, max_rows=None, **kwargs):
         margin_size = len(margin)
         printed_rows = []
-        widths = self.column_widths(up_to_row=max_rows)
+
+        widths = self.column_widths(up_to_row=max_rows, header=header)
         # must account for combining diacritics explicitly:
 
         # make header:
         combi_chars_per_header = [sum([char in self._combi_chars for char in colname]) if type(colname)==str else 0  for colname in self.column_names]
-        header_row = [f'{self.column_names[i]:{widths[i] + combi_chars_per_header[i]}}' for i in range(self.num_columns)]
-        printed_rows.append(margin.join(header_row))
+        if header:
+            header_row = [f'{self.column_names[i]:{widths[i] + combi_chars_per_header[i]}}' for i in range(self.num_columns)]
+            printed_rows.append(margin.join(header_row))
         if header_border:
-            total_width = sum(widths) + (self.num_columns-1)*margin_size # - sum(combi_chars_per_header)
+            total_width = self.total_width(up_to_row=max_rows, header=header, margin_size=margin_size)
+            # total_width = sum(widths) + (self.num_columns-1)*margin_size # - sum(combi_chars_per_header)
             printed_rows.append('='*total_width)
         # make rows:
         for row in self.row_data[:max_rows]:

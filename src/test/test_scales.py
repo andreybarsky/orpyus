@@ -36,8 +36,8 @@ def unit_test():
 
 
     print('Test chords built on Scale degrees:')
-    compare(Scale('minor').chord(2), AbstractChord('dim'))
-    compare(Scale('major').chord(5, order=5), AbstractChord('dom9'))
+    compare(Scale('minor').chord(2, linked=False), AbstractChord('dim'))
+    compare(Scale('major').chord(5, order=5, linked=False), AbstractChord('dom9'))
 
     print('Scales underlying the common 13th chords:')
     compare(Scale('lydian').chord(1, order=7), AbstractChord('maj13#11'))

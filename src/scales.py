@@ -458,7 +458,7 @@ class ScaleChord(AbstractChord):
     def numeral(self):
         return self.get_numeral()
 
-    def get_numeral(self, modifiers=True, related_scale_marks=True):
+    def get_numeral(self, modifiers=True, marks=False, diacritics=True):
         """returns the roman numeral associated with this ScaleChord
         with respect to its Scale and its degree within it"""
 
@@ -483,36 +483,40 @@ class ScaleChord(AbstractChord):
             # root in scale, so no prefix needed
             root_prefix, root_factor = '', self.scale_factor
 
+        chord_in_related_scale = False
         rel_mark, diacritic = '', None
-        if (related_scale_marks) and (not self.in_scale):
+        if (not self.in_scale):
             # mark a chord as not in its scale,
             # but indicate if it belongs to other closely related scales:
             if self.scale == NaturalMajor:
-                related_scale_marks = {NaturalMinor: '', # i.e. parallel minor
-                                       HarmonicMajor: 'ʰ',
-                                       MelodicMajor:  'ᵐ',
-                                       Lydian:        'ˡʸ',
-                                       Mixolydian:    'ᵐˣ', }
-                                       # dominant/subdominant keys?
+                rel_scale_marks = {NaturalMinor: '', # i.e. parallel minor
+                             HarmonicMajor: 'ᴴ',
+                             MelodicMajor:  'ᴹ',
+                             Lydian:        'ᴸʸ',
+                             Mixolydian:    'ᴹˣ', }
+                             # dominant/subdominant keys?
 
             elif self.scale == NaturalMinor:
-                related_scale_marks = {NaturalMajor: '', # i.e. parallel minor
-                                       HarmonicMinor: 'ʰ',
-                                       MelodicMinor:  'ᵐ',
-                                       Dorian: 'ᵈᵒ',
-                                       Phrygian: 'ᵖʰ',
-                                       }
+                rel_scale_marks = {NaturalMajor: '', # i.e. parallel minor
+                             HarmonicMinor: 'ᴴ',
+                             MelodicMinor:  'ᴹ',
+                             Dorian: 'ᴰᵒ',
+                             Phrygian: 'ᴾʰ', }
             else:
                 # just report the parallel scale
                 if self.scale.has_parallel():
-                    related_scale_marks = {self.scale.parallel: 'ᵖ'}
-            for rel_scale, mark in related_scale_marks.items():
+                    rel_scale_marks = {self.scale.parallel: 'ᵖ'}
+
+            for rel_scale, mark in rel_scale_marks.items():
                 if self in rel_scale:
                     rel_mark = mark
-                    diacritic = _settings.DIACRITICS['chord_in_related_scale']
+                    chord_in_related_scale = True
                     break
-            if rel_mark == '':
-                # chord is out-of-scale and not in any related scale
+
+            # set out-of-scale diacritics:
+            if (chord_in_related_scale):
+                diacritic = _settings.DIACRITICS['chord_in_related_scale']
+            else:
                 diacritic = _settings.DIACRITICS['chord_not_in_scale']
 
         # next, decide whether the numeral should be upper or lowercase:
@@ -542,19 +546,42 @@ class ScaleChord(AbstractChord):
             chord_suffix, inv_string = ''
 
         # finally, compose full numeral:
-        chord_name = root_prefix + numeral + chord_suffix + inv_string
-        if diacritic is not None:
+        if (diacritics) and (diacritic is not None):
             # underline chord name part of this numeral to illustrate out-of-scale etc.:
-            chord_name = ''.join([ char + diacritic for char in chord_name])
-        full_numeral = rel_mark + chord_name
+            numeral = ''.join([ char + diacritic for char in numeral])
 
+        full_name = root_prefix + numeral + chord_suffix + inv_string
+        if marks:
+            full_name = rel_mark + full_name
+        return full_name
 
-        return full_numeral
+    def on_root(self, root_note):
+        """constructs a KeyChord object from this ScaleChord with respect to a
+            desired root"""
+        from src.keys import Key, KeyChord
+        interval_from_tonic = self.scale.degree_intervals[self.scale_degree]
+        tonic_note = root_note - interval_from_tonic
+        key = self.scale.on_tonic(tonic_note)
+        return KeyChord(root=root_note, factors=self.factors, inversion=self.inversion, key=key, degree=self.scale_degree)
 
+    def on_bass(self, bass_note):
+        """constructs an inverted KeyChord object from this inverted ScaleChord with respect to a desired bass"""
+        from src.keys import Key, KeyChord
+        if self.inversion == 0:
+            # bass is root, so on_bass is equivalent to on_root:
+            return self.on_root(bass_note)
+        else:
+            # construct the root note from the desired bass note and this AbstractChord's inversion:
+            root_to_bass_interval = self.root_intervals[self.inversion]
+            root_note = Note.from_cache(bass_note) - root_to_bass_interval
+            interval_from_tonic = self.scale.degree_intervals[self.scale_degree]
+            tonic_note = root_note - interval_from_tonic
+            key = self.scale.on_tonic(tonic_note)
+            return KeyChord(root=root_note, factors=self.factors, inversion=self.inversion, key=key, degree=self.scale_degree)
 
     def __repr__(self):
         in_str = 'not ' if not self.in_scale else ''
-        return f'{AbstractChord.__repr__(self)} ({in_str}in: {self.scale})'
+        return f'{AbstractChord.__repr__(self)} ({in_str}in: {self.scale._marker}{self.scale.name})'
 
 ### Scale class that spans diatonic scales, subscales, blues scales, octatonic scales and all the rest:
 
@@ -1156,7 +1183,7 @@ class Scale:
         Optionally, the order arg can be specified to return non-triad chords."""
         return self.get_chord(i, order=order)
 
-    def get_chord(self, i, order=3):
+    def get_chord(self, i, order=3, linked=True):
         """returns the AbstractChord built on degree i of this Scale,
             by selecting degree i, i+2, etc. (i.e. play-one skip-one construction)
         this produces familiar tertian chords when used on diatonic scales, but
@@ -1169,15 +1196,18 @@ class Scale:
         start_interval = scale_intervals[0]
         # drop degree from intervals (and cast away from IrregularInterval objects) to get nice chord names:
         chord_intervals = IntervalList([Interval(iv.value) for iv in scale_intervals]) - start_interval
-        return ScaleChord(chord_intervals, scale=self, degree=i)
+        if linked:
+            return ScaleChord(chord_intervals, scale=self, degree=i)
+        else:
+            return AbstractChord(chord_intervals)
 
-    def chord(self, i, order=3):
+    def chord(self, i, order=3, linked=True):
         """convenience wrapper around Scale.get_chord; see the documentation for that method
         (note that this wrapper breaks the convention that nouns are properties and verbs are methods;
         'chord' is a noun, but Scale.chord is meaningless without a degree arg, so it hopefully remains intuitive)"""
-        return self.get_chord(i, order)
+        return self.get_chord(i, order, linked=linked)
 
-    def get_tertian_chord(self, i, order=3, prefer_chromatic=False):
+    def get_tertian_chord(self, i, order=3, linked=True, prefer_chromatic=False):
         """returns an AbstractChord built on degree i of this Scale,
         by attempting to construct a chord using this scale's degrees that is as
         tertian as possible. may not always work, but will always try to return something."""
@@ -1185,7 +1215,7 @@ class Scale:
 
         # first try ordinary get_chord method (with spaced-degree harmonisation)
         # and see if the result is tertian:
-        naive_chord = self.get_chord(i, order=order)
+        naive_chord = self.get_chord(i, order=order, linked=linked)
         if naive_chord.is_tertian() or naive_chord.is_inverted_tertian():
             # if so, just return it
             log(f'Degree {i}: Naive spaced chord construction returns a tertian chord: {naive_chord}')
@@ -1243,7 +1273,10 @@ class Scale:
                         chord_intervals.append(raw_interval)
                 chord_intervals = IntervalList(chord_intervals)
                 log(f'With root interval: {root_interval} and chord intervals: {chord_intervals}, resulting in: {chord_intervals - root_interval}')
-                return ScaleChord(intervals=chord_intervals - root_interval, scale=self, degree=i)
+                if linked:
+                    return ScaleChord(intervals=chord_intervals - root_interval, scale=self, degree=i)
+                else:
+                    return AbstractChord(inervals=chord_intervals - root_interval)
 
         # otherwise...
         # could not construct a tertian chord using available scale degrees,
@@ -1288,21 +1321,21 @@ class Scale:
             log(f'Degree {i}: Did not find any chords that contain a 3rd and 5th, so just taking the first match')
             return valid_chords_on_root[0]
 
-    def tertian_chord(self, i, order=3):
+    def tertian_chord(self, i, order=3, linked=True):
         """convenience wrapper around Scale.get_tertian_chord;
         see the documentation for that method."""
-        return self.get_tertian_chord(i, order)
+        return self.get_tertian_chord(i, order, linked=linked)
     tertian = tertian_chord
 
-    def get_chords(self, order=3, display=False, pad=False, **kwargs):
+    def get_chords(self, order=3, linked=True, display=False, pad=False, **kwargs):
         """returns a ChordList of the AbstractChords built on every degree
         of this Scale"""
         scale_chords = []
         for d in self.degrees:
-            scale_chords.append(self.get_chord(d, order=order))
+            scale_chords.append(self.get_chord(d, order=order, linked=linked))
         if pad:
             # add an extra tonic chord on top:
-            scale_chords.append(self.get_chord(self.degrees[0]**1, order=order))
+            scale_chords.append(self.get_chord(self.degrees[0]**1, order=order, linked=linked))
         if display:
             title = f"Spaced-degree chords over: {self.__repr__()}"
             print(title)
@@ -1342,12 +1375,12 @@ class Scale:
     def harmony(self):
         return self.harmonise()
 
-    def get_tertian_chords(self, order=3, prefer_chromatic=False, display=False, **kwargs):
+    def get_tertian_chords(self, order=3, linked=True, prefer_chromatic=False, display=False, **kwargs):
         """returns a ChordList of the (tertian) AbstractChords built on
        every degree of this Scale"""
         scale_chords = []
         for d in self.degrees:
-            scale_chords.append(self.get_tertian_chord(d, order=order, prefer_chromatic=prefer_chromatic))
+            scale_chords.append(self.get_tertian_chord(d, order=order, linked=linked, prefer_chromatic=prefer_chromatic))
         if display:
             title = f"Attempted tertian chords over: {self.__repr__()}"
             print(title)
@@ -1370,7 +1403,7 @@ class Scale:
     def tertian_harmony(self):
         return self.harmonise_tertian()
 
-    def valid_chords_on(self, degree, order=None, min_order=3, max_order=4,
+    def valid_chords_on(self, degree, order=None, min_order=3, max_order=4, linked=True,
         min_likelihood=0.7, min_consonance=0, max_results=None, sort_by='likelihood',
         inversions=False, display=True, _root_note=None, no5s=False, **kwargs):
         """For a specified degree, returns all the chords that can be built on that degree
@@ -1416,7 +1449,10 @@ class Scale:
                             is_match = False
                             break
                     if is_match:
-                        candidate = AbstractChord(factors=chord_names_to_factors[name], inversion=inversion)
+                        if linked:
+                            candidate = ScaleChord(factors=chord_names_to_factors[name], inversion=inversion, scale=self, degree=degree)
+                        else:
+                            candidate = AbstractChord(factors=chord_names_to_factors[name], inversion=inversion)
                         if _root_note is not None: # for easy inheritance by Key class
                             candidate = candidate.on_bass(_root_note)
                         shortlist.append(candidate)
@@ -1424,7 +1460,10 @@ class Scale:
                         if no5s:
                             # also add the no5 version of this chord if it is at least a tetrad (but not for inversions)
                             if (inversion == 0) and (candidate.order >= 4) and (5 in candidate):
-                                no5_candidate = AbstractChord(candidate.suffix + '(no5)')
+                                if linked:
+                                    no5_candidate = ScaleChord(candidate.suffix + '(no5)', scale=self, degree=degree)
+                                else:
+                                    no5_candidate = AbstractChord(candidate.suffix + '(no5)')
                                 shortlist.append(no5_candidate)
 
         # apply statistical minimums and maximums to our shortlist to decide what to keep:

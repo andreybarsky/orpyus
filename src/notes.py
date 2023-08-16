@@ -183,7 +183,7 @@ class Note:
             notes = [self + iv for iv in other]
             return NoteList(notes)
         else:
-            raise TypeError(f'Notes can only be added with Intervals or with other Notes')
+            raise TypeError(f'Notes can only be added with Intervals or with other Notes, not {type(other)}')
 
     def __sub__(self, other):
         """if 'other' is an integer, returns a new Note that is shifted down by that many semitones.
@@ -200,7 +200,7 @@ class Note:
             # log(f'Subtracting root Note ({other}) from self ({self}) to produce Interval: {intrv}')
             return Interval(distance)
         else:
-            raise Exception('Only integers, Intervals, and other Notes can be subtracted from a Note')
+            raise Exception(f'Only integers, Intervals, and other Notes can be subtracted from a Notes, not {type(other)}')
 
     def in_octave(self, octave=4):
         """instantiates an OctaveNote object corresponding to this Note played in a specific octave"""
@@ -225,7 +225,7 @@ class Note:
         # elif isinstance(other, OctaveNote):
         #     return self == other.note
         else:
-            raise TypeError('Notes can only be compared to other Notes')
+            raise TypeError(f'Notes can only be compared to other Notes, but got: {type(other)}')
 
     def __hash__(self):
         """note and octavenote hash-equivalence is based on position alone, not value"""
@@ -238,14 +238,14 @@ class Note:
         if type(other) == Note:
             return self.position > other.position
         else:
-            raise Exception('> operation for Notes only defined over other Notes')
+            raise Exception(f'> operation for Notes only defined over other Notes, not {type(other)}')
 
     def __lt__(self, other):
         """see Note.__gt__"""
         if type(other) == Note:
             return self.position < other.position
         else:
-            raise Exception('< operation for Notes only defined over other Notes')
+            raise Exception(f'< operation for Notes only defined over other Notes, not {type(other)}')
 
     @property
     def name(self):

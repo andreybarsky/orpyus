@@ -294,19 +294,23 @@ class Key(Scale):
     def leading_tone(self):
         return self.factor_notes[7]
 
-    def get_chord(self, degree, order=3):
-        """overwrites Scale.get_chord, returns a Chord object instead of an AbstractChord"""
+    def get_chord(self, degree, order=3, linked=True):
+        """overwrites Scale.get_chord, returns a Chord object instead of an AbstractChord.
+        if linked, returns a KeyChord instead of a ScaleChord."""
         abstract_chord = Scale.get_chord(self, degree, order)
         root_interval = self.get_interval_from_degree(degree)
         root_note = self.tonic + root_interval
-        chord_obj = abstract_chord.on_bass(root_note)
+        if linked:
+            chord_obj = KeyChord(factors=abstract_chord.factors, inversion=abstract_chord.inversion, root=root_note, key=self, degree=degree)
+        else:
+            chord_obj = abstract_chord.on_bass(root_note)
         # initialised chords inherit this key's sharp preference:
         chord_obj._set_sharp_preference(self.prefer_sharps)
         return chord_obj
 
-    def get_tertian_chord(self, degree, order=3, prefer_chromatic=False):
+    def get_tertian_chord(self, degree, order=3, linked=True, prefer_chromatic=False):
         """overwrites Scale.get_tertian_chord, returns a Chord object instead of an AbstractChord"""
-        abstract_chord = Scale.get_tertian_chord(self, degree, order, prefer_chromatic=prefer_chromatic)
+        abstract_chord = Scale.get_tertian_chord(self, degree, order, linked=linked, prefer_chromatic=prefer_chromatic)
         root_interval = self.get_interval_from_degree(degree)
         root_note = self.tonic + root_interval
         chord_obj = abstract_chord.on_bass(root_note)
@@ -594,6 +598,13 @@ class KeyChord(Chord, ScaleChord):
         # KeyChord inherits its key's sharp preference unless explicitly overwritten:
         if 'prefer_sharps' not in kwargs:
             self.prefer_sharps = self.key.prefer_sharps
+
+    def to_key(self, key):
+        """transposes this KeyChord to another with a different root,
+        but the same degree, in another Key"""
+        if not isinstance(key, Key):
+            key = Key(key)
+        return key.chord(degree=self.scale_degree, linked=True)
 
     def __repr__(self):
         in_str = 'not ' if not self.in_key else ''
