@@ -45,6 +45,9 @@ def unit_test():
     compare(Scale('dorian').chord(1, order=7), AbstractChord('m13'))
     compare(Scale('lydian b3').chord(1, order=7), AbstractChord('mmaj13'))
 
+    # init multiple chords at once:
+    compare(Scale('major').get_chords([1,4,5]), [Scale('major').chord(d) for d in [1,4,5]])
+
     print('Subscales:')
     compare(Scale('major').pentatonic.intervals, [0, 2, 4, 7, 9])
     compare(Scale('minor blues').intervals, [0, 3, 5, 6, 7, 10])

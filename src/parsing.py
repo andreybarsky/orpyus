@@ -432,4 +432,5 @@ def auto_split(inp, allow='', allow_numerals=True, allow_letters=True, allow_acc
         splits = inp.split(sep_char)
         # strip whitespace in addition: in case our sep is something like ', '
         splits = [s.strip() for s in splits]
+        splits = [s for s in splits if s != ''] # omit emptystring splits (handles stacked whitespace chars in input )
         return splits

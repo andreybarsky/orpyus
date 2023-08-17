@@ -17,6 +17,20 @@ PREFER_UNICODE_ACCIDENTALS = True
 ### both are treated as valid input options in either case,
 ### this only affects what the program outputs to screen
 
+### DEFAULT_PROGRESSION_DIACRITICS controls whether Progressions are
+### displayed with informative marks underneath chords that are out-of-scale,
+### or that are borrowed from a related scale.
+### e.g. the progression ii-V-i in major would show a diacritic
+### under the i chord, to show that it is not in the major scale.
+DEFAULT_PROGRESSION_DIACRITICS = True
+### DEFAULT_PROGRESSION_MARKERS is related, and controls whether
+### chords in progressions are shown with informative prefix markers
+### that indicate *which* related scale a chord is borrowed from.
+### e.g. the progression ii-V-i in minor would be shown: ᴹii ᴴV i
+### with 'M' to indicate the ii chord is from melodic minor,
+### and 'H' to indicate the V chord is from harmonic minor
+DEFAULT_PROGRESSION_MARKERS = False
+
 
 # orpyus musical objects use little unicode MARKERS in their string methods
 # to identify them at a glance. the default markers are defined here, so you
@@ -64,6 +78,23 @@ DIACRITICS = { 'ScaleDegree': '\u0311', # caret above integer (a common conventi
                'chord_in_related_scale': '\u0323', # dot below
                'chord_not_in_scale': '\u0332', # underline
                }
+
+SCALE_MARKS = { # near natural major:
+             'natural minor': '', # i.e. parallel minor
+             'harmonic major': 'ᴴ',
+             'melodic major':  'ᴹ',
+             'lydian':        'ᴸʸ',
+             'mixolydian':    'ᴹˣ',
+
+             # near natural minor:
+             'natural minor': '', # i.e. parallel minor
+             'harmonic minor': 'ᴴ',
+             'melodic minor':  'ᴹ',
+             'dorian': 'ᴰᵒ',
+             'phrygian': 'ᴾʰ',
+
+             'parallel': 'ᵖ', # parallel scale generally
+             }
 
 
 ### CHARACTERS are used in lists to compactly denote certain traits

@@ -1844,9 +1844,12 @@ class ChordList(list):
     _brackets = _settings.BRACKETS['ChordList']
 
 
-    def __str__(self):
+    def __str__(self, brackets=True):
         # return f'𝄃{super().__repr__()}𝄂'
-        lb, rb = self._brackets
+        if brackets:
+            lb, rb = self._brackets
+        else:
+            lb = rb = ''
         sep_char = ' - '
         # if any of the chords in this progression are AbstractChords, use a different sep char
         # (because AbstractChords have spaces in their names)
@@ -1962,6 +1965,11 @@ class ChordList(list):
         abs_chords = [c.abstract() if (type(c) == Chord)  else c  for c in self]
         assert check_all(abs_chords, 'type_is', AbstractChord)
         return ChordList(abs_chords)
+
+    def rotate(self, N):
+        """rotates the chords in this list by N places"""
+        rotated_items = rotate_list(list(self), N)
+        return ChordList(rotated_items)
 
     # def matching_keys(self, *args, **kwargs):
     #     """just wraps around keys.matching_keys module function"""

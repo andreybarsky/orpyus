@@ -461,3 +461,43 @@ def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
         df.append(df_row)
 
     df.show(max_rows=max_results, **kwargs)
+
+
+
+circle_of_fifths = """
+         , - ~ ~ ~ - ,
+     , '               ' ,
+   ,                       ,
+  ,                         ,
+ ,                           ,
+ ,                           ,
+ ,                           ,
+  ,                         ,
+   ,                       ,
+     ,                  , '
+       ' - , _ _ _ ,  '
+
+                        ___
+                  ,  '        '  ,
+              ,;'        C         ';,
+           ,;'                         ';,
+        ,;'    F                    G     ';,
+      ,;'                                   ';,
+    ,;'                                       ';,
+   ,;'   Bb                                D   ';,
+  ,;'                                           ';,
+ ,;'                                             ';,
+ ,;'                                             ';,
+ ,;   Eb                                      A   ;,
+ ,;                                               ;'
+ ,;,                                             ,;'
+  ';,                                           ,;'
+   ';,   Ab                                E   ,;'
+    ';,                                       ,;'
+      ';,                                   ,;'
+        ';,     Db                  B      ,;'
+           ';,                         ,;'
+              ';,        Gb        ,;'
+                  '  ,  ___   ,  '
+
+"""

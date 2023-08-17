@@ -76,6 +76,20 @@ class Guitar: ### TBI: allow ukelele tunings?
             distances.append(s - tunings['standard'][i])
         return distances
 
+    def tuning_is_natural(self):
+        """returns True if tuned strings contain only natural notes, otherwise False"""
+        if sum([not s.is_natural() for s in self.tuned_strings]) > 0:
+            return False
+        else:
+            return True
+
+    def open_is_natural(self):
+        """returns True if open strings (i.e. on capo) contain only natural notes, otherwise False"""
+        if sum([not s.is_natural() for s in self.open_strings]) > 0:
+            return False
+        else:
+            return True
+
     def pick(self, frets, pattern=None, *args, **kwargs):
         """plays the fretted notes as audio, arpeggiated into a melody.
         accepts optional 'pattern' arg as list of string indices,
@@ -300,15 +314,29 @@ class Guitar: ### TBI: allow ukelele tunings?
 
         #### determine index / string labels:
         if show_index:
+            # determine how much space to leave for note names on index, by seeing if tuned strings contain accidentals:
+            note_space = 2 if self.tuning_is_natural() else 3
+
             if intervals_only:
                 # replace note with interval on index labels as well
-                index = [f'{(chord.factor_intervals[chord.note_factors[string.note]].factor_name):>3}' if string.note in chord.notes else '' for s in self.tuned_strings ]
+                index = [f'{(chord.factor_intervals[chord.note_factors[string.note]].factor_name):>3}'
+                         if string.note in chord.notes
+                         else ' '*3
+                         for string in self.tuned_strings ]
             elif notes_only:
-                index = [string.chroma if string.chroma in chord.notes else '' for string in self.tuned_strings ]
+                index = [f'{string.chroma:>{note_space}}'
+                         if string.chroma in chord.notes
+                         else ' '*note_space
+                         for string in self.tuned_strings ]
             else: # notes AND intervals:
-                index = [f'{(chord.factor_intervals[chord.note_factors[string.note]].factor_name):>3}:{string.chroma}'  if string.note in chord.notes  else ''  for string in self.tuned_strings ]
+                index = [f'{(chord.factor_intervals[chord.note_factors[string.note]].factor_name):>3}:{string.chroma:<{note_space}}'
+                         if string.note in chord.notes
+                         else ' '*(3+note_space)
+                         for string in self.tuned_strings ]
+
         else:
-            index = ['']*self.num_strings # list of empty strings as index
+            index = [' '] * self.num_strings # list of empty strings as index
+
 
 
         #### finalise:
@@ -494,3 +522,14 @@ class Guitar: ### TBI: allow ukelele tunings?
 standard = eadgbe = Guitar()
 dadgad = Guitar('DADGAD')
 dadgbe = dropD = dropd = Guitar('DADGBE')
+
+# 'easy' chords to try and find for transposing song progressions:
+standard_open_chord_names = {'A', 'Am', 'A7', 'Am7',
+                        'B7', 'Bm7',
+                        'C', 'C7', 'Cmaj7', 'Csus2',
+                        'D', 'Dm', 'D7', 'Dm7', 'Dmaj7', 'Dsus4', 'Dsus2',
+                        'E', 'Em', 'E7', 'Em7', 'Emaj7', 'Esus4',
+                        'Fmaj7', # I still have trouble even with partial bars on Fmaj
+                        'G', 'G7', 'Gmaj7',
+                         }
+standard_open_chords = set([Chord(c) for c in standard_open_chord_names])

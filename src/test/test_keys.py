@@ -47,6 +47,12 @@ def unit_test():
     compare(Key('C major blues').relative, Key('Am blues'))
 
 
+    ### KeyChords:
+
+    compare(Key('C').chord(2).to_key('G'), Chord('Am'))
+    compare(Key('C').chord(2).abstract(), Scale('major').chord(2))
+
+
     # matching_keys(['C', Chord('F'), 'G7', 'Bdim'], upweight_pentatonics=False)
     #
     # matching_keys(['Dm', 'Dsus4', 'Am', 'Asus4', 'E', 'E7', 'Asus4', 'Am7'], upweight_pentatonics=True)

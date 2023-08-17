@@ -367,13 +367,15 @@ class Key(Scale):
     #     """the 'parallel' modes of a Key are all its modes that start on the same tonic"""
     #     return [self.rotate(m) for m in range(1,8)]
 
-    @property
-    def modes(self):
+
+    def get_modes(self):
         """the modes of a Key are the relative keys that share its notes but start on a different tonic
         i.e. modes of C major are D dorian, E phrygian, etc."""
-        return [self.mode(n) for n in range(1,self.order+1)]
+        return [self.mode(n) for n in range(2,self.order+1)]
         # return [Key(notes=Key('C').notes.rotate(i)) for i in range(1,8)]
-
+    @property
+    def modes(self):
+        return self.get_modes()
     # def subscale(self, degrees=None, omit=None, chromatic_intervals=None, name=None):
     #     """as Scale.subscale, but adds this key's tonic as well and initialises a Subkey instead"""
     #     return Subkey(parent_scale=self, degrees=degrees, omit=omit, chromatic_intervals=chromatic_intervals, assigned_name=name, tonic=self.tonic) # [self[s] for s in degrees]
@@ -519,12 +521,23 @@ class Key(Scale):
 
     def progression(self, *degrees, order=3):
         """accepts a sequence of (integer) degrees,
-        and produces a ChordProgression in this key rooted on those degrees"""
-        # if len(degrees) == 1:
-        #     # if a single list or tuple was provided, unpack it here:
-        #     degrees = degrees[0]
-        from .progressions import Progression
-        return Progression(*degrees, scale=self.scale, order=order).on_tonic(self.tonic)
+            and produces a ChordProgression in this key rooted on those degrees.
+        alternatively, accepts anything that would initialise a ChordList,
+            and produces a ChordProgression of those chords in this key."""
+        from .progressions import Progression, ChordProgression
+        if len(degrees) == 1: # unpack single list arg
+            degrees = degrees[0]
+        # use list of integers:
+        if check_all(degrees, 'isinstance', int):
+            # use superclass progression method and place on tonic:
+            prog = self.scale.progression(*degrees, order=order)
+            return prog.on_tonic(self.tonic)
+        else:
+            # assume we have been given an input that resembles a chordlist
+            if not isinstance(degrees, ChordList):
+                degrees = ChordList(degrees)
+            return ChordProgression(degrees, key=self)
+        # return Progression(*degrees, scale=self.scale, order=order).on_tonic(self.tonic)
 
     @property
     def suffix(self):
@@ -604,7 +617,13 @@ class KeyChord(Chord, ScaleChord):
         but the same degree, in another Key"""
         if not isinstance(key, Key):
             key = Key(key)
-        return key.chord(degree=self.scale_degree, linked=True)
+        new_root = key.degree_notes[self.scale_degree] if self.scale_degree in key.degree_notes else key.fractional_degree_notes[self.scale_degree]
+        return KeyChord(root=new_root, factors=self.factors, inversion=self.inversion, key=key, degree=self.scale_degree)
+        # return key.chord(degree=self.scale_degree, linked=True)
+
+    def abstract(self):
+        """return the ScaleChord that this KeyChord is associated with"""
+        return ScaleChord(factors=self.factors, inversion=self.inversion, scale=self.key.scale, degree=self.scale_degree)
 
     def __repr__(self):
         in_str = 'not ' if not self.in_key else ''
