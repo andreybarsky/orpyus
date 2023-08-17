@@ -275,14 +275,14 @@ class Note:
         print(self.properties)
 
     ## chord constructors:
-    def chord(self, arg='major'):
+    def chord(self, arg='maj'):
         """instantiate Chord object by parsing either:
         1) a string denoting a Chord quality, like 'major' or 'minor' or 'dom7'
         2) an iterable of semitone intervals relative to this Note as root
         in the exact same way as Chord.__init__ (we pass this arg there directly)"""
 
-        from chords import Chord
-        return Chord(self, arg)
+        from src.chords import Chord
+        return Chord(self.chroma + arg)
 
     def _wave(self, duration, falloff=True, **kwargs):
         """Outputs a sine wave corresponding to this note,
@@ -465,15 +465,15 @@ class OctaveNote(Note):
         associated with this OctaveNote"""
         return Note.from_cache(self.chroma)
 
-    ## ChordVoicing constructor
-    def chord(self, *args):
-        """instantiate ChordVoicing object by parsing either:
-        1) a string denoting a Chord quality, like 'major' or 'minor' or 'dom7'
-        2) a list of semitone intervals relative to this Note as root
-        in the exact fashion as ChordVoicing.__init__, since we pass our args there directly"""
-
-        from chords import ChordVoicing # specific chord subclass defined on positions and octaves
-        return ChordVoicing(self, *args)
+    # ## ChordVoicing constructor (TBI)
+    # def chord(self, *args):
+    #     """instantiate ChordVoicing object by parsing either:
+    #     1) a string denoting a Chord quality, like 'major' or 'minor' or 'dom7'
+    #     2) a list of semitone intervals relative to this Note as root
+    #     in the exact fashion as ChordVoicing.__init__, since we pass our args there directly"""
+    #
+    #     from chords import ChordVoicing # specific chord subclass defined on positions and octaves
+    #     return ChordVoicing(self, *args)
         # # case 1:
         # if len(args) == 1 and isinstance(args[0], str):
         #     quality = args[0]
@@ -884,6 +884,8 @@ F = Note('F')
 Gb = Note('Gb')
 G = Note('G')
 Ab = Note('Ab')
+
+MiddleC = OctaveNote('C4')
 
 # all chromatic pitch classes:
 chromatic_notes = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
