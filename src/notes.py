@@ -61,8 +61,6 @@ class Note:
         # 'chroma' is the string denoting pitch class: ('C#', 'Db', 'E', etc.)
 
 
-        # boolean flag, is True for white notes:
-        self.natural = self.chroma in parsing.natural_note_names
 
         self.sharp_name = preferred_name(self.position, prefer_sharps=True)
         self.flat_name = preferred_name(self.position, prefer_sharps=False)
@@ -251,7 +249,15 @@ class Note:
     def name(self):
         return f'{self.chroma}'
 
-    #### useful public methods:
+    #### useful public methods / properties:
+
+    def is_natural(self):
+        """True if this is a white note, False otherwise"""
+        return self.chroma in parsing.natural_note_names
+    @property
+    def natural(self):
+        return self.is_natural()
+
     @property
     def properties(self):
         """Describe all the useful properties this Note has"""
