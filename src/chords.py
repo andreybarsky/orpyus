@@ -321,7 +321,7 @@ class AbstractChord:
             # sanitise interval list input, expect root to be provided:
 
             # if it is a list of ints, catch common thirds/fifths:
-            if isinstance(intervals, (tuple, list)): # and check_all(intervals, 'isinstance', int):
+            if isinstance(intervals, (tuple, list)) and check_all(intervals, 'type_is', int):
                 sanitised_intervals = []
                 chord_tones = {3,5,7,9,11,13}
                 for iv in intervals:
@@ -686,6 +686,14 @@ class AbstractChord:
             # mod inversion back into chord range: i.e. Chord('C').invert(3) is the same as invert(0)
             inversion = inversion % self.order
         return self._reinit(factors=self.factors, inversion=inversion, inversion_degree=inversion_degree)
+
+    def simplify(self):
+        """returns the simplest version of this chord,
+        which is a major or minor triad for chords that contain a 3rd,
+        or a 5 (power chord) for indeterminate chords,
+        always in root position."""
+        new_factors = ChordFactors({f:v for f,v in self.factors.items() if f in [1,3,5]})
+        return self._reinit(factors=new_factors, inversion=0)
 
     @property
     def inversions(self):
@@ -1384,10 +1392,10 @@ class Chord(AbstractChord):
 
     def __eq__(self, other):
         """Chords are equal to others on the basis of their root, factors and inversion"""
-        if type(other) == Chord:
+        if isinstance(other, Chord):
             return (self.factors == other.factors) and (self.inversion == other.inversion) and (self.root == other.root)
         else:
-            raise TypeError(f'Chords can only be compared to other Chords')
+            raise TypeError(f'Chords can only be compared to other Chords, not: {type(other)}')
 
     def __hash__(self):
         return hash(((tuple(self.factors.items())), self.inversion, self.root))
@@ -1982,7 +1990,7 @@ class ChordList(list):
         # root_degrees = [key.interval_degrees[iv]  if iv in key.interval_degrees  else None for iv in root_intervals_from_tonic]
         return root_degrees
 
-    def as_numerals_in(self, key, sep=' ', modifiers=True, related_scale_marks=True):
+    def as_numerals_in(self, key, sep=' ', modifiers=True, marks=False, diacritics=False, *args, **kwargs):
         """returns this ChordList's representation in roman numeral form
         with respect to a desired Key"""
         from src.keys import Key
@@ -1992,7 +2000,7 @@ class ChordList(list):
         root_degrees = self.root_degrees_in(key)
         scale_chords = [ch.in_scale(key.scale, degree=root_degrees[i]) for i,ch in enumerate(self)]
 
-        numerals = [ch.get_numeral(modifiers=modifiers, related_scale_marks=related_scale_marks) for ch in scale_chords]
+        numerals = [ch.get_numeral(modifiers=modifiers, marks=marks, diacritics=diacritics, *args, **kwargs) for ch in scale_chords]
 
         if sep is not None:
             roman_chords_str = sep.join(numerals)
@@ -2050,22 +2058,27 @@ class ChordList(list):
 
     def find_key(self, natural_only=False, verbose=True):
         """wraps around matching_keys but additionally uses cadence information to distinguish between competing candidates"""
-        from src.keys import matching_keys
+        from src.keys import Key, matching_keys
+        from src.progressions import Progression, most_grammatical_progression
+
         matches = matching_keys(chords=self, return_matches=True, min_likelihood=0, max_results=12, require_tonic=True, require_roots=True,
-                                upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False, natural_only=natural_only)
+                                upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False, natural_only=natural_only,
+                                display=False)
 
         if len(matches) == 0:
             # if no matches at all first, open up the min recall property:
             log(f'No key found matching notes using default parameters, widening search')
             matches = matching_keys(chords=self, return_matches=True, min_recall=0, min_likelihood=0, max_results=12,
                                     require_tonic=True, require_roots=True, natural_only=natural_only,
-                                    upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False)
+                                    upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False,
+                                    display=False)
             if len(matches) == 0:
                 # open up everything:
                 log(f'Still no key found with widened search, removing all search constraints')
                 matches = matching_keys(chords=self, return_matches=True, min_recall=0, min_precision=0, min_likelihood=0, max_results=12,
                                         require_tonic=False, require_roots=False, natural_only=natural_only,
-                                        upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False)
+                                        upweight_first=False, upweight_last=False, upweight_chord_roots=False, upweight_key_tonics=False,
+                                        display=False)
                 if len(matches) == 0:
                     raise Exception(f'No key matches at all found for chords: {self} \n(this should never happen!)')
         # try ideal matches (with perfect recall) first:
@@ -2121,6 +2134,7 @@ class ChordList(list):
                     candidate_keys = [match for match,stats in precise_matches if match.is_natural]
                 else:
                     candidate_keys = [match for match,stats in precise_matches]
+
                 log(f'Testing {len(candidate_keys)} candidate keys for grammaticity of this progression in those keys')
                 candidate_progressions = [Progression(self.as_numerals_in(k), scale=k.scale).in_key(k) for k in candidate_keys]
                 log(f'Candidate keys: {", ".join([str(p.key) for p in candidate_progressions])}')
