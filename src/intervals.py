@@ -308,11 +308,16 @@ class Interval:
         new_degree = self.extended_degree + self.offset_from_default
         return self.re_cache(value=self.value, degree=new_degree)
 
-    def flatten(self, octaves=1):
+    def flatten(self, octaves=1, preserve_sign=False):
         """returns Interval object corresponding to this interval's mod-value and mod-degree"""
         if self.value < 0:
-            # invert before flattening:
-            return (~self).flatten(octaves=octaves)
+            if not preserve_sign: # invert before flattening:
+                return (~self).flatten(octaves=octaves)
+            else:
+                # -14 becomes -2 instead of +10
+                abs_mod_val = abs(self.value) % (self.span_size * octaves)
+                abs_mod_degree = (abs(self.extended_degree - 1) % (self.max_degree * octaves)) + 1
+                return self.re_cache(-abs_mod_val, abs_mod_degree)
         else:
             # allow for flattening into multiple octaves:
             mod_value = self.value % (self.span_size * octaves)
@@ -377,6 +382,23 @@ class Interval:
 
     def __rsub__(self, other):
         return other - self.value
+
+    @property
+    def signed_class(self):
+        """returns the signed interval class associated with this interval,
+        which is equivalent to argmin(abs(self), abs(~self))"""
+        # signed_mod = self.mod if not self.descending else (-self.mod)
+        flat_self = self.flatten(preserve_sign=True)
+        if (flat_self.mod) <= (~flat_self).mod:
+            return flat_self
+        else:
+            return ~flat_self
+
+    @property
+    def unsigned_class(self):
+        """returns the unsigned interval class associated with this interval,
+        which is equivalent to min(self.mod, 12-self.mod)"""
+        return abs(self.signed_class)
 
     def __hash__(self):
         """intervals only hash their values, not their degrees"""
@@ -746,10 +768,11 @@ class IntervalList(list):
         but IntervalList([2,7,12]).strict_pad(left=True) gives intervals [0,2,7]  """
         return self.strip().pad(left, right)
 
-    def flatten(self, octaves=1, duplicates=False):
+    def flatten(self, octaves=1, duplicates=False, preserve_sign=False):
         """flatten all intervals in this list and return them as a new (sorted) list.
-        if duplicates=False, remove those that are non-unique. else, keep them. """
-        new_intervals = [i.flatten(octaves=octaves) for i in self]
+        if duplicates=False, remove those that are non-unique. else, keep them.
+        if preserve_sign, flattens to the range (-12,12) instead of (0, 12)"""
+        new_intervals = [i.flatten(octaves=octaves, preserve_sign=preserve_sign) for i in self]
         if not duplicates:
             new_intervals = list(set(new_intervals))
         return IntervalList(sorted(new_intervals))
