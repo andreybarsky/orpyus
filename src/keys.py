@@ -496,6 +496,15 @@ class Key(Scale):
         else:
             raise TypeError(f'Key.__contains__ not defined for items of type: {type(item)}')
 
+    def __add__(self, other):
+        """Addition defined over Keys:
+        1. Addition with interval (or int) is transposition onto a new tonic."""
+        if isinstance(other, (Interval, int)):
+            new_tonic = self.tonic + other
+            return Key(tonic=new_tonic, factors=self.factors)
+        else:
+            raise TypeError(f'Cannot add Key with {type(other)}')
+
     def __eq__(self, other):
         if isinstance(other, Key):
             return self.notes == other.notes
@@ -625,9 +634,12 @@ class KeyChord(Chord, ScaleChord):
         """return the ScaleChord that this KeyChord is associated with"""
         return ScaleChord(factors=self.factors, inversion=self.inversion, scale=self.key.scale, degree=self.scale_degree)
 
+    def __str__(self):
+        return f'{self.name} ({self.simple_numeral})'
+
     def __repr__(self):
-        in_str = 'not ' if not self.in_key else ''
-        return f'{Chord.__repr__(self)} ({in_str}in: {self.key})'
+        # in_str = 'not ' if not self.in_scale else ''
+        return f'{self.name} {self.notes} ({self.simple_numeral} of: {self.key._marker}{self.key.name})'
 
     # overwrites Chord.from_cache:
     def from_cache(self, *args, **kwargs):
@@ -652,7 +664,8 @@ relative_co5_distances = IntervalList([0, 5, 2, 3, 4, 1, 6, 1, 4, 3, 2, 5])
 def matching_keys(chords=None, notes=None, tonic=None,
                   exact=False, exhaustive=None, modes=False, scale_lengths=[7],
                   min_precision=0, min_recall=0.9,
-                  min_likelihood=0.7, max_rarity=None, min_consonance=0,
+                  min_likelihood=0.7, max_likelihood=1.0, max_rarity=None, min_rarity=None,
+                  min_consonance=0, max_consonance=1.0,
                   chord_factor_weights = {1: 1.1}, weight_counts=False,
                   scale_factor_weights = {1: 2, 4: 1.5, 5: 1.5},
                   # (by default, upweight roots and thirds, downweight fifths)
@@ -670,7 +683,10 @@ def matching_keys(chords=None, notes=None, tonic=None,
         if False, only returns base keys and their relative keys.
     min_[precision/recall/consonance/likelihood]: minimum scores that a key must meet
         to count as 'matching'
-    max_rarity: inverse of min_likelihood. default None, but overrides min_likelihood if set.
+    max_[consonance/likelihood]: scores above which keys will NOT be searched.
+        (does not seem useful, but is more efficient when doing multiple-wave searching,
+        since these constraints are applied before instantiating and looping over key objects)
+    max_rarity, min_rarity: inverse of min/max_likelihood. default None, but overrides min/max_likelihood if set.
     weight_counts: if True, weights precision and recall by the relative frequency
         of each note in the input list.
     chord_factor_weights: a dict that determines how much to weight each input chord factor by.
@@ -693,6 +709,9 @@ def matching_keys(chords=None, notes=None, tonic=None,
     if max_rarity is not None:
         # translate rarity integer to likelihood score
         min_likelihood = Scale.rarity_to_likelihood(max_rarity)
+    if min_rarity is not None:
+        max_likelihood = Scale.rarity_to_likelihood(min_rarity)
+
 
     # parse input into counter-dict of notes frequencies:
     if chords is not None:
@@ -715,10 +734,12 @@ def matching_keys(chords=None, notes=None, tonic=None,
     #### LIST OF SCALES TO SEARCH
     # loop over all common base scales (and, by extension, their modes if desired)
     # provided they exceed minimum scale scores:
-    scales_to_search = [s for s in scales.common_base_scales if s.likelihood >= min_likelihood and s.consonance >= min_consonance]
+    scales_to_search = [s for s in scales.common_base_scales if (max_likelihood >= s.likelihood >= min_likelihood) and (max_consonance >= s.consonance >= min_consonance)]
     if not modes:
         # only include modes if they are common:
-        scales_to_search.extend([m for m in scales.common_modes  if m.likelihood >= min_likelihood and m.consonance >= min_consonance])
+        scales_to_search.extend([m for m in scales.common_modes  if (max_likelihood >= m.likelihood >= min_likelihood) and (max_consonance >= m.consonance >= min_consonance)])
+
+    log(f'Searching {len(scales_to_search)} possible scales: {", ".join([s.name for s in scales_to_search])}')
 
     #### SCALE LENGTH RESTRICTION
     # restrict search to scales only of certain lengths
@@ -726,11 +747,12 @@ def matching_keys(chords=None, notes=None, tonic=None,
         if isinstance(scale_lengths, int): # catch single int arg
             scale_lengths = [scale_lengths]
         scales_to_search = [s for s in scales_to_search if len(s) in scale_lengths]
+        log(f'Restricted to {len(scales_to_search)} of length/s {scale_lengths}: {", ".join([s.name for s in scales_to_search])}')
 
     #### TONIC RESTRICTION
     if tonic is not None:
         # set explicit tonics only
-        possible_tonics = NoteList(tonic)
+        possible_tonics = NoteList(tonic).unique()
 
         # if we want modes, this also requires we modify scales_to_search
         # as e.g. D phrygian dominant will never appear if the possible
@@ -753,10 +775,12 @@ def matching_keys(chords=None, notes=None, tonic=None,
     else:
         if chords is not None:
             # search only the tonics that occur as chord roots:
-            possible_tonics = [ch.root for ch in chords]
+            possible_tonics = NoteList([ch.root for ch in chords]).unique()
         elif notes is not None:
             # search tonics corresponding to input notes
-            possible_tonics = notes
+            possible_tonics = notes.unique()
+
+    log(f'Searching key tonics: {possible_tonics}')
 
     ###############################
     ###### main search loop: ######
@@ -783,8 +807,6 @@ def matching_keys(chords=None, notes=None, tonic=None,
             key_weights.update(input_note_weights)
             # print(f'  Updated by input note weights to:')
             # print('  ' + str(key_weights))
-
-
 
             candidate_chrom_notes = [key_tonic + iv for iv in chrom_intervals] if chrom_intervals is not None else []
             candidate_notes = candidate_key_notes + candidate_chrom_notes

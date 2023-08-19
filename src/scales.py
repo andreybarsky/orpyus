@@ -458,6 +458,10 @@ class ScaleChord(AbstractChord):
     def numeral(self):
         return self.get_numeral()
 
+    @property
+    def simple_numeral(self):
+        return self.get_numeral(modifiers=False, marks=False, diacritics=False)
+
     def get_numeral(self, modifiers=True, marks=_settings.DEFAULT_PROGRESSION_MARKERS, diacritics=_settings.DEFAULT_PROGRESSION_DIACRITICS):
         """returns the roman numeral associated with this ScaleChord
         with respect to its Scale and its degree within it"""
@@ -467,10 +471,10 @@ class ScaleChord(AbstractChord):
             sharp_degree, flat_degree = ceil(self.scale_degree), floor(self.scale_degree)
             sharp_factor, flat_factor = self.scale.degree_factors[sharp_degree], self.scale.degree_factors[flat_degree]
 
-            if sharp_factor in self.scale.factors:
+            if sharp_factor in self.scale.factors and sharp_factor != 1:
                 # this can be called a flat degree
                 root_prefix, root_factor = fl, sharp_factor
-            elif flat_factor in self.scale.factors:
+            elif flat_factor in self.scale.factors and flat_factor != 1:
                 # the rarer sharp degree
                 root_prefix, root_factor = sh, flat_factor
             else:
@@ -539,6 +543,8 @@ class ScaleChord(AbstractChord):
         # because minor-ness is already communicated by the numeral's case
         if modifiers:
             chord_suffix = self.suffix
+            if '/' in chord_suffix: # remove slash over bass (added back later)
+                chord_suffix = chord_suffix.split('/')[0]
             if (len(chord_suffix)) > 0 and (chord_suffix[0] == 'm') and (not self.quality.major_ish):
                 chord_suffix = chord_suffix[1:]
 
@@ -559,6 +565,8 @@ class ScaleChord(AbstractChord):
             full_name = rel_mark + full_name
         return full_name
 
+    as_numeral = get_numeral # convenience alias
+
     @property
     def root_interval_from_tonic(self):
         """returns the interval (relative to scale tonic) that this chord's root sits on"""
@@ -567,13 +575,24 @@ class ScaleChord(AbstractChord):
         else:
             return self.scale.fractional_degree_intervals[self.scale_degree]
 
+    def in_key(self, tonic):
+        """constructs a KeyChord object from this ScaleChord with respect to a
+        desired Key tonic (keeping the same scale degree)"""
+        if not isinstance(tonic, notes.Note):
+            tonic = notes.Note(tonic)
+        root_note = tonic + self.root_interval_from_tonic
+        return self.on_root(root_note)
+
     def on_root(self, root_note):
         """constructs a KeyChord object from this ScaleChord with respect to a
             desired root"""
         from src.keys import Key, KeyChord
+        if not isinstance(root_note, notes.Note):
+            root_note = notes.Note(root_note)
         tonic_note = root_note - self.root_interval_from_tonic
         key = self.scale.on_tonic(tonic_note)
-        return KeyChord(root=root_note, factors=self.factors, inversion=self.inversion, key=key, degree=self.scale_degree)
+        return KeyChord(root=root_note, factors=self.factors, inversion=self.inversion,
+                        key=key, degree=self.scale_degree, assigned_name=self.assigned_name)
 
     def on_bass(self, bass_note):
         """constructs an inverted KeyChord object from this inverted ScaleChord with respect to a desired bass"""
@@ -590,9 +609,13 @@ class ScaleChord(AbstractChord):
             key = self.scale.on_tonic(tonic_note)
             return KeyChord(root=root_note, factors=self.factors, inversion=self.inversion, key=key, degree=self.scale_degree)
 
+    @property
+    def __str__(self):
+        return f'{self.name} ({self.simple_numeral})'
+
     def __repr__(self):
-        in_str = 'not ' if not self.in_scale else ''
-        return f'{AbstractChord.__repr__(self)} ({in_str}in: {self.scale._marker}{self.scale.name})'
+        # in_str = 'not ' if not self.in_scale else ''
+        return f'{self.name} {self.intervals} ({self.simple_numeral} of: {self.scale._marker}{self.scale.name})'
 
 ### Scale class that spans diatonic scales, subscales, blues scales, octatonic scales and all the rest:
 
@@ -1583,7 +1606,7 @@ class Scale:
         if isinstance(abs_chord, str):
             abs_chord = AbstractChord(abs_chord)
         # assert type(abs_chord) == AbstractChord, "Scales can only contain AbstractChords"
-        assert 1 <= degree <= self.factors.max_degree, "Scales can only contain chords built on degrees between 1 and 7"
+        assert 1 <= degree <= self.factors.max_degree+0.9, "Scales can only contain chords built on degrees between 1 and 7"
         if degree not in self.degrees:
             return False # this subscale does not even have that degree
         if degree_interval is not None:

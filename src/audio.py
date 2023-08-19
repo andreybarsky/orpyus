@@ -4,7 +4,7 @@ from .util import log
 import threading
 
 import numpy as np
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 # from matplotlib import ticker as mticker
 from scipy.fft import fft, ifft
 import sounddevice as sd

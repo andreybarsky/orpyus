@@ -173,21 +173,11 @@ degree_names = {1: 'unison',  2: 'second', 3: 'third',
 
 multiple_names = {2: 'Double', 3: 'Triple', 4: 'Quadruple'}
 
-# very niche use: 'Octave' is not technically appropriate for octatonic scales,
-# and other theoretical scales with more than 7 degrees,
-# so we define what else these non-Octave 'spans' might be called:
-span_names = {5: 'pentave', 6: 'sexave', 7: 'septave', 8: 'octave',
-              9: 'nonave', 10: 'decave', 11: 'undecave', 12: 'duodecave'}
-# in practice we avoid 'sexave' etc. for pentatonic scales
-# because they have eight IMPLIED degrees, some of which are skipped,
-# but we do use 'nonave' in the context of octatonic scales and so on
-
 
 ################### roman numeral handling: (and associated lookups)
 
 numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV',
-                  5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', # for octatonic scales
-                  9: 'IX', 10: 'X', 11: 'XI', 12: 'XII'} # for who knows
+                  5: 'V', 6: 'VI', 7: 'VII'}
 roman_numerals = reverse_dict(numerals_roman)
 
 # superscript modifiers used specifically in roman numeral chord notation:
@@ -204,6 +194,22 @@ modifier_marks.update({c: superscript_symbols[c] for c in '/+-!?'})
 # but not chord alterations: (because we can't superscript sharps/flats)
 modifier_marks.update({f'{acc}{i}' : f'{acc}{i}' for i in range(3,14) for acc in [sh, fl, nat]})
 
+
+#####  CURSED MUSIC THEORY  #####
+
+# very niche use: 'Octave' is not technically appropriate for octatonic scales,
+# and other theoretical scales with more than 7 degrees,
+# so we define what else these non-Octave 'spans' might be called:
+span_names = {5: 'pentave', 6: 'sexave', 7: 'septave', 8: 'octave',
+              9: 'nonave', 10: 'decave', 11: 'undecave', 12: 'duodecave'}
+# in practice we avoid 'sexave' etc. for pentatonic scales
+# because they have eight IMPLIED degrees, some of which are skipped,
+# but we do use 'nonave' in the context of octatonic scales and so on
+
+extended_numerals = {8: 'VIII', # for octatonic scales
+                     9: 'IX', 10: 'X', 11: 'XI', 12: 'XII'} # for god-knows-what
+numerals_roman.update(extended_numerals)
+roman_numerals.update(reverse_dict(extended_numerals))
 
 ################### note name parsing functions:
 
@@ -328,6 +334,8 @@ def parse_octavenote_name(name, case_sensitive=True):
         return note_name, octave
 
 
+##### alteration / accidental parsing:
+
 def is_alteration(string):
     """returns True if a string is a valid chord/scale alteration, like #5 or b11,
     and False otherwise"""
@@ -399,38 +407,71 @@ def parse_alteration(alteration):
     return {degree: offset}
 
 
+##### multi-purpose string splitting/parsing:
+
 ### TBI: allow split by blacklist instead of whitelist??
-def auto_split(inp, allow='', allow_numerals=True, allow_letters=True, allow_accidentals=False):
-    """takes a string 'inp' and automatically separates it by the first character found that is
-        not in the whitelist 'allow'.
+def auto_split(inp, allow='', allow_numerals=True, allow_letters=True, allow_accidentals=False, disallow=None):
+    """takes a string 'inp' and automatically separates it by the first char found that is
+        not in the whitelist iterable 'allow'.
+        alternatively, if 'disallow' is not None and is set to a string or list of chars,
+        separates along any of those chars.
     'allow' should be a string of characters that are NOT to be treated as separators.
     if 'allow_numerals' is True, allow all the digit characters from 0 to 9.
-    if 'allow_letters' is True, allow all the upper and lowercase English alphabetical chars."""
-    allow = set(allow)
-    if allow_numerals:
-        allow.update(string.digits)
-    if allow_letters:
-        allow.update(string.ascii_letters)
-    if allow_accidentals:
-        allow.update('#♯𝄪b♭𝄫')
-    sep_char = None
-    for c in inp:
-        # specifically allow whitespace, to catch separators like ' - ', but look for whitespace as sep later
-        if c not in allow and c != ' ':
-            sep_char = c
-            break
-    if sep_char is None and ' ' in inp:
-        # if no separator found yet, use whitespace if it is in the string:
-            sep_char = ' '
+    if 'allow_letters' is True, allow all the upper and lowercase English alphabetical chars.
+    all three above args are ignored if 'disallow' is set."""
 
-    if sep_char is None:
-        # if no separator found,
-        # return input as single list item
-        return [inp]
+    if disallow is None:
+        whitelist = set(allow)
+        if allow_numerals:
+            whitelist.update(string.digits)
+        if allow_letters:
+            whitelist.update(string.ascii_letters)
+        if allow_accidentals:
+            whitelist.update('#♯𝄪b♭𝄫')
+        blacklist = None
     else:
-        # split along detected separator
-        splits = inp.split(sep_char)
-        # strip whitespace in addition: in case our sep is something like ', '
-        splits = [s.strip() for s in splits]
-        splits = [s for s in splits if s != ''] # omit emptystring splits (handles stacked whitespace chars in input )
+        blacklist = disallow
+        whitelist = None
+
+    if whitelist is not None:
+        # whitelist method: move forward and find the first char not in whitelist,
+        # then treat it as a sep-char (while also stripping surrounding whitespace)
+        sep_char = None
+        for c in inp:
+            # specifically allow whitespace, to catch separators like ' - ', but look for whitespace as sep later
+            if c not in whitelist and c != ' ':
+                sep_char = c
+                break
+        if sep_char is None and ' ' in inp:
+            # if no separator found yet, use whitespace if it is in the string:
+                sep_char = ' '
+
+        if sep_char is None:
+            # if no separator found,
+            # return input as single list item
+            return [inp]
+        else:
+            # split along detected separator
+            splits = inp.split(sep_char)
+            # strip whitespace in addition: in case our sep is something like ', '
+            splits = [s.strip() for s in splits]
+            splits = [s for s in splits if s != ''] # omit emptystring splits (handles stacked whitespace chars in input )
+            return splits
+
+    elif blacklist is not None:
+        # blacklist method: move forward and create a new substring
+        # whenever a new blacklist char is encountered
+        splits = []
+        current_word = []
+        for c in inp:
+            if c not in blacklist:
+                # continue building a word
+                current_word.append(c)
+            else:
+                if len(current_word) > 0:
+                    # finish this word and start a new one
+                    splits.append(''.join(current_word))
+                    current_word = []
+        # add final word to splits too:
+        splits.append(''.join(current_word))
         return splits

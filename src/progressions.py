@@ -1,11 +1,11 @@
 ### this progressions module is incomplete, very WIP at the moment
 
 from .intervals import Interval
-from .notes import Note, NoteList
+from .notes import Note, NoteList, chromatic_notes
 from .chords import Chord, AbstractChord, ChordList
 from .qualities import Major, Minor, Perfect, Diminished, parse_chord_modifiers, ChordModifier
 from .scales import Scale, ScaleChord, NaturalMajor, NaturalMinor, MelodicMinor, HarmonicMinor, MelodicMajor, HarmonicMajor
-from .keys import Key, KeyChord # matching_keys, most_likely_key
+from .keys import Key, KeyChord, matching_keys# , most_likely_key
 from .util import reduce_aliases, rotate_list, check_all, reverse_dict, log
 from .parsing import roman_numerals, numerals_roman, auto_split, superscript, fl, sh, nat
 from . import parsing, _settings
@@ -85,24 +85,7 @@ scale_function_names = {0: "tonic", # 1st
                         11: "leading tone", # 7th (major)
                         }
 
-# modifier_marks = { 'dim':  '°',
-#                    'hdim': 'ø', # ᶲ ?
-#                    'aug':  '⁺',
-#                    'maj':  'ᐞ',
-#                    # '5':    '⁵',
-#                    # '6':    '⁶',
-#                    # '7':    '⁷',
-#                    # 'm7':   '⁷',  # a kludge; here we replace out the 'm' because it is already implied by the lower case roman numeral
-#                    # '9':    '⁹',
-#                    # 'm9':   '⁹', # ditto for m9, m11, m13
-#                    # '11':   '¹¹',
-#                    # 'm11':  '¹¹',
-#                    # '13':   '¹³',
-#                    # 'm13':  '¹³',
-#                    'sus':  'ˢ',
-#                    'add':  'ᵃ',
-# _settings.CHARACTERS['unknown_chord']: _settings.CHARACTERS['unknown_superscript'],
-# } # '⁽ᵃ⁾'}
+
 #
 # # all numerals also get turned into modifier marks:
 # modifier_marks.update({str(i): parsing.superscript_integers[i] for i in range(10)})
@@ -164,7 +147,7 @@ def parse_roman_numeral(numeral, ignore_alteration=False):
             assert len(rest_inv) == 2 # chord part and inversion part
             rest, inversion = rest_inv[0], int(rest_inv[1])
 
-        rest_mods = parse_chord_modifiers(rest)
+        rest_mods = parse_chord_modifiers(rest, catch_duplicates=True)
         modifiers.extend(rest_mods)
 
     chord = AbstractChord(modifiers=modifiers, inversion=inversion)
@@ -197,11 +180,16 @@ class DegreeMotion:
         if isinstance(start, int) and isinstance(end, int):
             # regular integer degree movement
             assert (start in range(1,scale.factors.max_degree+1)) and (end in range(1,scale.factors.max_degree+1))
+            # cast ScaleDegrees to ints:
+            start, end = int(start), int(end)
             self.fractional = False
         else:
             # movement involving one or more fractional degrees
             # which might get strange?
             log(f'Parsed a fractional degree movement from {start} to {end}')
+            # cast the non-float ones to int anyway, because you can't add ScaleDegrees
+            start = int(start) if not isinstance(start, float) else start
+            end = int(end) if not isinstance(end, float) else end
             self.fractional = True
 
         self.start, self.end = start, end
@@ -221,6 +209,12 @@ class DegreeMotion:
             self.down = 7-(self.end - self.start)
         else:
             self.up = self.down = 0
+
+        # the 'size' of the movement: 2 to 1 has less magnitude than 5 to 1, but the same as 7 to 1
+        self.magnitude = min([self.up, self.down])
+        # signed/directional shortest distance up or down:
+        self.distance = self.up if self.up == self.magnitude else -self.down
+
 
     def _set_interval_distances(self, scale_obj):
         if not self.fractional:
@@ -287,10 +281,6 @@ class RootMotion(DegreeMotion):
         self.ascending_fifth = self.down == 3
         # self.function = ('primary ' if self.primary else 'substitute ') + ('dominant' if self.dominant else 'subdominant')
 
-        # the 'size' of the movement: 2 to 1 has less magnitude than 5 to 1, but the same as 7 to 1
-        self.magnitude = min([self.up, self.down])
-        # signed/directional shortest distance up or down:
-        self.distance = self.up if self.up == self.magnitude else -self.down
 
         # experimental chord function flags: (based on major scale harmony theory, but should apply to minor as well?)
         self.dominant = self.down in {4,2} or self.up in {3,1} # descending by fifth or third
@@ -522,16 +512,15 @@ class Progression:
                     assert isinstance(order, (list,tuple)), f"'order' arg to Progression must be an int or list of ints, but got: {type(order)}"
                 self.chords = ChordList([self.scale.chord(d, order=order[i], linked=True) for i,d in enumerate(self.root_degrees)])
             else:
-                # use the abstractchords we have been given (and cast them to abstract)
-                import ipdb; ipdb.set_trace() # why are these being abstracted?
-                self.chords = ChordList(chords).abstract()
+                # use the abstractchords we have been given (and cast them to ScaleChords)
+                self.chords = ChordList([ScaleChord(factors=chords[i].factors, inversion=chords[i].inversion, scale=self.scale, degree=d) for i,d in enumerate(self.root_degrees)])
 
         elif check_all(numerals, 'isinstance', ScaleChord):
             ### allow init by scalechords alone
             scalechord_scales = [ch.scale for ch in numerals]
             assert check_all(scalechord_scales, 'eq', scalechord_scales[0]), f"Non-matching scale attributes in ScaleChord list given to Progression: {scalechord_scales}"
             self.scale = scalechord_scales[0]
-            self.chords = numerals
+            self.chords = ChordList(numerals)
             self.root_degrees = [ch.scale_degree for ch in self.chords]
 
         else:
@@ -596,10 +585,11 @@ class Progression:
                          'Distance', '', 'Cadence'])
         # sloppy for now: should be rolled into a dataframe from the Display module
         num1s, num2s, c1s, c2s, mvs, cads = [], [], [], [], [], []
+        clean_numerals = self.as_numerals(marks=False, diacritics=False, sep='@').split('@')
         for i in range(len(self)-1):
             f = f'[{self.root_movements[i].function_char}]'
             arrow = self.root_movements[i]._movement_marker
-            n1, n2 = self.numerals[i], self.numerals[i+1]
+            n1, n2 = clean_numerals[i], clean_numerals[i+1]
             ch1, ch2 = self.chords[i].short_name, self.chords[i+1].short_name,
             dist = str(self.root_movements[i].direction_str)
             cadence = self.root_movements[i].cadence
@@ -608,13 +598,6 @@ class Progression:
                         # ch1, arrow, ch2, ' ',
                         dist, '  ', cadence])
 
-            # num1s.append(self.numerals[i])
-            # num2s.append(self.numerals[i+1])
-            # c1s.append(self.chords[i].short_name)
-            # c2s.append(self.chords[i+1].short_name)
-            # mvs.append(str(self.root_movements[i].direction_str))
-            # cad = self.root_movements[i].cadence
-            # cads.append(cad if cad != False else '')
 
         if display:
             print('\n' + str(self))
@@ -625,30 +608,6 @@ class Progression:
             df.show(header=False, header_border=False, margin='')
         if ret:
             return df
-        # # determine max string len of each element:
-        # c1_len = max([len(c) for c in c1s])
-        # c2_len = max([len(c) for c in c2s])
-        # mv_len = max([len(mv) for mv in mvs])
-        # n1_len = max([len(n) for n in num1s])
-        # n2_len = max([len(n) for n in num2s])
-
-        # out = [str(self)]
-        # for i in range(len(self)-1):
-        #     f = self.root_movements[i].function_char
-        #     arrow = self.root_movements[i]._movement_marker
-        #     d1, c1, d2, c2, mv, cad = self.root_degrees[i], c1s[i], self.root_degrees[i+1], c2s[i], mvs[i], cads[i]
-        #     n1 = num1s[i].lower() if self.chords[i].quality.minor_ish else num1s[i]
-        #     n2 = num2s[i].lower() if self.chords[i+1].quality.minor_ish else num2s[i]
-        #     line = f'[{f}] {n1:{n1_len}}{arrow}{n2:{n2_len}}    {d1}:{c1:{c1_len}}{arrow}{d2}:{c2:{c2_len}}    {mv:{mv_len}}    {cad}'
-        #     out.append(line)
-        # if display:
-        #     print('\n'.join(out))
-        # if ret:
-        #     return '\n'.join(out)
-
-    # def analyze(self, *args, **kwargs):
-    #     """see Progression.analyse (this is just a quality-of-life alias for American spelling)"""
-    #     return self.analyse(*args, **kwargs)
 
     analyze = analyse # QoL alias
 
@@ -670,89 +629,11 @@ class Progression:
         else:
             # just return the raw list, instead of a sep-connected string
             return numerals
-
+    get_numerals = as_numerals # convenience alias
     @property
     def numerals(self):
         return self.as_numerals()
 
-    # def _as_numerals(self, sep='  ', check_scale=False):
-    #     numerals = []
-    #     for d,c in self.degree_chords:
-    #         # use the quality of the chord if it is not indeterminate, otherwise use the quality of the key:
-    #         chord_mod = c.quality if not c.quality.perfect else self.scale.quality
-    #         if chord_mod.major_ish:
-    #             numerals.append(numerals_roman[d])
-    #         elif chord_mod.minor_ish:
-    #             numerals.append(numerals_roman[d].lower())
-    #         else:
-    #             raise Exception(f'Could not figure out whether to make numeral upper or lowercase: {d}:{c} in {key} (should never happen)')
-    #
-    #     # add suffixes: (we ignore the 'm' suffix because it is denoted by lowercase instead)
-    #     suffix_list = [c.suffix if c.suffix != 'm' else '' for c in self.chords]
-    #     # pull inversions out of suffixes:
-    #     for i in range(len(suffix_list)):
-    #         chord, suf = self.chords[i], suffix_list[i]
-    #         if '/' in suf:
-    #             # slash chord detected
-    #             new_slash = parsing.superscript['/']
-    #             new_inv = ''.join([parsing.superscript[s] for s in str(chord.inversion)])
-    #             new_suf = f'{new_slash}{new_inv}'
-    #             suffix_list[i] = new_suf
-    #
-    #     roman_chords_list = [f'{numerals[i]}{suffix_list[i]}' for i in range(len(self))]
-    #
-    #     if check_scale:
-    #         # annotate chords that are chromatic to the scale with square brackets
-    #         # or, if they are at least in the corresponding harmonic/melodic scale, mark that too:
-    #         if self.scale.is_natural():
-    #             if self.scale == NaturalMinor:
-    #                 # natural minor scale
-    #                 harmonic_scale = HarmonicMinor
-    #                 melodic_scale = MelodicMinor
-    #             elif self.scale == NaturalMajor:
-    #                 # natural major scale
-    #                 harmonic_scale = HarmonicMajor
-    #                 melodic_scale = MelodicMajor
-    #
-    #             belongs_natural = [self.scale.contains_degree_chord(d,c) for d,c in self.degree_chords]
-    #
-    #             ## is this needed?
-    #             # but don't allow chords that are built on harmonic/melodic roots:
-    #             root_intervals = [self.scale.degree_intervals[d] for d,c in self.degree_chords]
-    #             belongs_harmonic = [HarmonicMinor.contains_degree_chord(*self.degree_chords[i], degree_interval=root_intervals[i]) for i in range(len(self))]
-    #             belongs_melodic = [MelodicMinor.contains_degree_chord(*self.degree_chords[i], degree_interval=root_intervals[i]) for i in range(len(self))]
-    #             ### (will probably handle chord roots belonging to parallel/neighbouring keys separately)
-    #
-    #             # belongs_harmonic = [HarmonicMinor.contains_degree_chord(d,c, for d,c in self.degree_chords]
-    #             # belongs_melodic = [MelodicMinor.contains_degree_chord(d,c for d,c in self.degree_chords]
-    #             new_roman_chords = []
-    #             for i in range(len(roman_chords_list)):
-    #                 orig = roman_chords_list[i]
-    #                 if belongs_natural[i]:
-    #                     new_roman_chords.append(orig)
-    #                 elif belongs_harmonic[i]:
-    #                     # mark first character with combining 'h':
-    #                     new_roman_chords.append(f'{orig[0]}{orig[1:]}\u036A')
-    #                 elif belongs_melodic[i]:
-    #                     # mark first character with combining 'm':
-    #                     new_roman_chords.append(f'{orig[0]}{orig[1:]}\u036B')
-    #                 else:
-    #                     # mark out-of-scale chord with brackets:
-    #                     new_roman_chords.append(f'[{orig}]')
-    #             roman_chords_list = new_roman_chords
-    #         else:
-    #             # non-natural scale: just check raw scale compatibility
-    #             belongs = [self.scale.contains_degree_chord(d,c) for d,c in self.degree_chords]
-    #             roman_chords_list = [f'{roman_chords_list[i]}' if belongs[i]  else f'[{roman_chords_list[i]}]'  for i in range(len(self))]
-    #
-    #     # turn suffix modifiers into superscript marks etc. where possible:
-    #     roman_chords_list = [''.join(reduce_aliases(r, parsing.modifier_marks)) for r in roman_chords_list]
-    #     if sep is not None:
-    #         roman_chords_str = sep.join(roman_chords_list)
-    #         return roman_chords_str
-    #     else:
-    #         # just return the raw list, instead of a sep-connected string
-    #         return roman_chords_list
 
     def in_key(self, key, **kwargs):
         """returns a ChordProgression with these chords over a specified Key object"""
@@ -781,7 +662,7 @@ class Progression:
 
     def get_rotations(self):
         """returns all the rotations of this progression"""
-        return [self.rotate(i) for i in range(2,len(self)+1)]
+        return [self.rotate(i) for i in range(1,len(self))]
     @property
     def rotations(self):
         return self.get_rotations()
@@ -790,6 +671,15 @@ class Progression:
     def diagram(self):
         from .guitar import standard # lazy import
         standard.show(self)
+
+    def transpose_for_guitar(self, *args, **kwargs):
+        """finds a nice key for playing these chords easily on guitar,
+        with respect to guitar.standard_open_chord_names,
+        by reverse-inheriting the ChordProgression method of the same name"""
+        return self.on_tonic('C').transpose_for_guitar(*args, **kwargs)
+
+    def __getitem__(self, i):
+        return self.chords[i]
 
     def __len__(self):
         return len(self.root_degrees)
@@ -805,7 +695,9 @@ class Progression:
         return str(self)
 
     def __hash__(self):
-        return hash(str(self))
+        chord_factors = tuple([ch.factors for ch in self.chords])
+        chord_degrees = tuple([ch.scale_degree for ch in self.chords])
+        return hash((chord_factors, chord_degrees, self.scale.factors))
 
     def __eq__(self, other):
         """progressions are emod to each other if they have the same chords built on the same degrees"""
@@ -814,14 +706,19 @@ class Progression:
 
     def __add__(self, other):
         """Addition defined over Progressions:
-            1. Progression + integer tranposes this progression's roots upward by that many degrees
-            2. Progression + roman numeral returns a new Progression with that numeral appended to it"""
-        if isinstance(other, int): # transpose upward/downward by integer degrees
-            new_root_degrees = [r + other for r in self.root_degrees]
-            # mod to range 1-7:
-            new_root_degrees = [((r-1) % 7) + 1 for r in new_root_degrees]
-            return Progression(numerals=new_root_degrees, chords=self.chords, scale=self.scale)
-        elif isinstance(other, str): # add a new chord (as roman numeral)
+            1. Progression + roman numeral returns a new Progression with that numeral appended to it"""
+        if isinstance(other, (int, Interval)):
+            raise TypeError('Progression cannot be transposed by interval (try on ChordProgression instead)')
+        ### old transposition-by-degrees-within-key implementation: less useful than key transposition
+        # if isinstance(other, int): # transpose upward/downward by integer degrees
+            # new_root_degrees = [r + other for r in self.root_degrees]
+            # # mod to range 1-7:
+            # new_root_degrees = [((r-1) % 7) + 1
+            #                     if isinstance(r, float) # i.e. catch fractional (float) degrees
+            #                     else r                  # use ScaleDegree as normal
+            #                     for r in new_root_degrees]
+            # return Progression(new_root_degrees, chords=self.chords, scale=self.scale)
+        if isinstance(other, str): # add a new chord (as roman numeral)
             new_numerals = self.numerals + [other]
             return Progression(new_numerals, scale=self.scale)
         elif isinstance(other, (list, tuple)): # add new chords as list of roman numeral strings
@@ -832,6 +729,8 @@ class Progression:
             new_numerals = self.numerals + other.numerals
             new_chords = self.chords + other.chords
             return Progression(new_numerals, chords=new_chords, scale=self.scale)
+
+
 
     def pad_with_tonic(self):
         """returns a new Progression that is this one but with an added tonic of the appropriate quality,
@@ -901,35 +800,11 @@ def most_grammatical_progression(progressions, add_resolution=True, verbose=Fals
 
 
 
-class ChordMotion:
-    """Movement of root and every other chord degree from one to another"""
-    def __init__(self, start_chord, end_chord, key=None):
-        self.start_chord = start_chord
-        self.end_chord = end_chord
-        if key is None:
-            # interpret it from given KeyChords:
-            assert isinstance(start_chord, KeyChord)
-            assert isinstance(end_chord, KeyChord)
-            assert start_chord.key == end_chord.key
-            key = start_chord.key
-        self.key = key
-        self.scale = key.scale
-
-        # experimental, WIP
-        import numpy as np
-        distance_matrix = np.zeros((len(start_chord), len(end_chord)))
-        for r, n1 in enumerate(start_chord.notes):
-            for c, n2 in enumerate(end_chord.notes):
-                deg1, deg2 = key.note_degrees[n1], key.note_degrees[n2]
-                motion = DegreeMotion(deg1, deg2, scale=key.scale)
-                distance_matrix[r,c] = motion.distance
-
-        print(distance_matrix)
 
 
-class ChordProgression(Progression, ChordList):
+class ChordProgression(Progression): # , ChordList):
     """ChordList subclass defined additionally over a specific key"""
-    def __init__(self, *chords, key=None, search_natural_keys_only=False):
+    def __init__(self, *chords, key=None, search_natural_keys_only=True):
         """Initialised by a list or series of Chord objects, or strings that cast to Chord objects,
         or by a list of integers combined with the (otherwise-optional) key argument.
 
@@ -953,6 +828,7 @@ class ChordProgression(Progression, ChordList):
 
         keychord_keys = [] # for determining progression key later on
         for item in chords:
+
             if isinstance(item, KeyChord): # already a KeyChord object
                 ch = item
                 keychord_keys.append(ch.key)
@@ -960,6 +836,8 @@ class ChordProgression(Progression, ChordList):
                 ch = item
             elif isinstance(item, str): # string that we try to cast to Chord
                 ch = Chord(item)
+                if log.verbose and (ch == Chord('Cmaj7#11')):
+                    import ipdb; ipdb.set_trace()
             elif isinstance(item, (list, tuple)): # unpackable parameters that we try to cast to Chord
                 ch = Chord(*item)
             elif isinstance(item, dict):
@@ -970,7 +848,7 @@ class ChordProgression(Progression, ChordList):
 
             valid_chords.append(ch)
 
-        base_chords = ChordList(chords)
+        base_chords = ChordList(valid_chords)
         # self.abstract_chords = [c.abstract() for c in base_chords]
 
         if key is None:
@@ -980,7 +858,7 @@ class ChordProgression(Progression, ChordList):
                 assert check_all(keychord_keys, 'eq', keychord_keys[0]), f"Non-matching key attributes in KeyChord list given to ChordProgression: {keychord_keys}"
                 self.key = keychord_keys[0]
             else:
-                self.key = base_chords.find_key(natural_only = search_natural_keys_only)
+                self.key = self.find_key(chords=base_chords, natural_only = search_natural_keys_only)
         else:
             self.key = key if isinstance(key, Key) else Key(key)
 
@@ -990,8 +868,12 @@ class ChordProgression(Progression, ChordList):
 
         self.root_degrees = [self.key.note_degrees[n] if n in self.key.note_degrees else self.key.fractional_note_degrees[n] for n in self.roots]
 
-        # form KeyChords:
-        self.chords = ChordList([KeyChord(factors=ch.factors, inversion=ch.inversion, root=ch.root, key=self.key, degree=d) for ch,d in zip(base_chords, self.root_degrees)])
+        # form KeyChords (if they are not all already keychords)
+        if len(keychord_keys) == len(base_chords):
+            log(f'Not recasting ChordProgression input chords to KeyChords, as they are already KeyChords: {base_chords}')
+            self.chords = base_chords
+        else:
+            self.chords = ChordList([KeyChord(factors=ch.factors, inversion=ch.inversion, root=ch.root, key=self.key, degree=d, assigned_name=ch.assigned_name) for ch,d in zip(base_chords, self.root_degrees)])
 
         # self.degree_chords = [(self.root_degrees[i], self.chords[i]) for i in range(len(self))]
 
@@ -1033,15 +915,23 @@ class ChordProgression(Progression, ChordList):
         return self.abstract()
 
     def __add__(self, other):
-        """Addition defined over ChordProgressions:
-            1. Progression + integer tranposes this progression's roots upward by that many degrees
-            2. ChordProgression + roman numeral returns a new ChordProgression with that numeral appended to it
-            3. ChordProgression + Chord returns a new ChordProgression with that chord appended to it"""
-        if isinstance(other, int):
-            new_root_degrees = [r + other for r in self.root_degrees]
-            # mod to range 1-7:
-            new_root_degrees = [((r-1) % 7) + 1 for r in new_root_degrees]
-            return Progression(numerals=new_root_degrees, chords=self.scale_chords, scale=self.scale)
+        """Addition defined over ChordProgressions.
+            Addition with interval (or int) is transposition, otherwise concatenation.
+        1. ChordProgression + Interval (or integer) returns the same progression in a new Key,
+            transposed up that many semitones (with the same root degrees, i.e. transposed chord roots)
+        2. ChordProgression + roman numeral returns a new ChordProgression with that numeral appended to it
+        3. ChordProgression + Chord returns a new ChordProgression with that chord appended to it"""
+        #### transposition
+        if isinstance(other, (int, Interval)):
+            new_key = self.key + other
+            return self.in_key(new_key)
+            # new_root_degrees = [r + other for r in self.root_degrees]
+            # # mod to range 1-7:
+            # new_root_degrees = [((r-1) % 7) + 1
+            #                     if isinstance(r, float) # i.e. catch fractional (float) degrees
+            #                     else r                  # use ScaleDegree as normal
+            #                     for r in new_root_degrees]
+            # return Progression(new_root_degrees, chords=self.scale_chords, scale=self.scale)
         elif isinstance(other, str):
             # check if a roman numeral:
             if other.upper() in roman_numerals:
@@ -1051,13 +941,12 @@ class ChordProgression(Progression, ChordList):
                 # assume this is a string that casts to Chord
                 other = Chord(other)
 
+        #### concatenation:
         if isinstance(other, Chord):
             new_chords = self.chords + other
             return ChordProgression(new_chords, key=self.key)
-        else:
-            raise TypeError('ChordProgression.__add__ not implemented for type: {type(other)}')
 
-        if isinstance(other, (list, tuple)):
+        elif isinstance(other, (list, tuple)):
             # if the first item is a numeral, assume the rest are numerals:
             if other[0].upper() in roman_numerals:
                 new_numerals = self.numerals + list(other)
@@ -1070,6 +959,16 @@ class ChordProgression(Progression, ChordList):
         elif isinstance(other, Progression):
             new_numerals = self.numerals + other.numerals
             return Progression(new_numerals, scale=self.key.scale).in_key(self.key)
+
+        else:
+            raise TypeError(f'ChordProgression.__add__ not implemented for type: {type(other)}')
+
+    def __sub__(self, other):
+        """subtraction with Interval"""
+        if isinstance(other, (int, Interval)):
+            return self + (-other)
+        else:
+            raise TypeError(f'ChordProgression.__sub__ not implemented for type: {type(other)}')
 
     def pad_with_tonic(self):
         """returns a new ChordProgression that is this one but with an added tonic of the appropriate quality,
@@ -1097,145 +996,276 @@ class ChordProgression(Progression, ChordList):
         lb, rb = self._brackets
         return f'{self.chords}  or  {lb}{self.as_numerals()}{rb}  (in {self.key.name})'
 
-    def __str__(self, marks=default_marks, diacritics=default_diacs):
+    def __str__(self, marks=default_marks, diacritics=default_diacs, chords_only=False, degrees_only=False):
         lb, rb = self._brackets
         numerals = self.as_numerals(marks=marks, diacritics=diacritics, sep='@')
         split_numerals = numerals.split('@')
         chordlist = [ch.name for ch in self.chords]
         num_chords = zip(split_numerals, chordlist)
-        num_chords_str = ' - '.join([f'{ch} ({num})' for num, ch in num_chords])
+        if chords_only:
+            prog_str = ' '.join([f'{ch}' for num, ch in num_chords])
+        elif degrees_only:
+            prog_str = ' '.join([f'{num}' for num, ch in num_chords])
+        else: # i.e. both chords AND degrees
+            prog_str = ' - '.join([f'{ch} ({num})' for num, ch in num_chords])
         # return f'{self.chords}  (in {self.key.name})'
-        return f'ChordProgression:  {lb}{num_chords_str}{rb}  (in {self.key.name})'
+        return f'ChordProgression:  {lb}{prog_str}{rb}  (in {self.key.name})'
 
+    def __repr__(self, marks=default_marks, diacritics=default_diacs):
+        """ChordProgression repr comes out as a table
+        with chords above and scale degrees below"""
+        numerals = self.as_numerals(marks=marks, diacritics=diacritics, sep='@')
+        split_numerals = numerals.split('@')
+        chord_names = [ch.name for ch in self.chords]
+        from src.display import DataFrame
+        df = DataFrame(['' for c in range(len(self))])
+        df.append(chord_names) # chord row
+        df.append(split_numerals) # degrees row
+        return df.show(header=False, header_border=False, margin=' - ', fix_widths=True,
+                       return_string=True, title=str(self.key), align='centre')
+
+    def chord_motions(self):
+        for i in range(1, len(self)):
+            ch1, ch2 = self.chords[i-1], self.chords[i]
+            motion = ChordMotion(ch1, ch2, key=self.key)
+            print(motion.interval_df, '\n')
+
+    def voice_table(self):
+        ### experimental: needs a better name (and Progression main class implementation)
+        import numpy as np
+        import pandas as pd
+        arr = np.zeros((len(self.chords), 12), dtype=int)
+        for i, ch in enumerate(self.chords):
+            note_array = [1  if n in ch.notes else 0 for n in chromatic_notes]
+            arr[i] = note_array
+        df = pd.DataFrame(arr, index=[ch.name for ch in self.chords], columns=[f'{n.chroma:<2}' for n in chromatic_notes])
+        return df
+
+    def find_chromatic_lines(self, min_length=3, max_length=None):
+        print(f'Searching for chromatic lines in {self.__str__(chords_only=True)} ....')
+        if max_length is None:
+            max_length = len(self)+1
+        voice_table = self.voice_table()
+        lines = {}
+        # try starting on each row, provided there's enough space to find a min-length line:
+
+        print('\n', voice_table)
+        for start_row in range(len(self)-(min_length-1)):
+            # start locs are the places in this row where each note occurs:
+            line_start_locs = [i for i,val in enumerate(voice_table.iloc[start_row]) if val]
+            left_dir, right_dir = (-1, +1)
+            left_name, right_name = 'falling', 'rising'
+
+            for start_loc in line_start_locs: # i.e. columns
+                for dir, dir_name in zip([left_dir, right_dir], [left_name, right_name]):
+                    # don't search if this would overlap with an existing line in the same direction:
+                    if (start_row-1, start_loc - dir, dir) not in lines:
+                        line = [chromatic_notes[start_loc]] # list of notes that form this line
+                        log(f'Starting a {dir_name} line at: {start_row, start_loc}, on chord: {self.chords[start_row].name} beginning: {line[0]}')
+                        line_broken = False
+                        next_row = start_row + 1
+                        next_loc = (start_loc + dir) % 12 # mod so as to wrap arond from C to B
+                        while (not line_broken) and not (next_row >= len(self)):
+                            if voice_table.iloc[next_row, next_loc]:
+                                # if a note exists on that diagonal:
+                                this_note = chromatic_notes[next_loc]
+                                log(f'Line continues on chord: {self.chords[next_row].name} with: {this_note}')
+                                line.append(this_note)
+                                next_row = next_row + 1
+                                next_loc = (next_loc + dir) % 12
+                            else:
+                                line_broken = True
+
+                        if (len(line) >= min_length) and (len(line) <= max_length):
+                            line = NoteList(line)
+                            idx = start_row+1
+                            suf = parsing.num_suffixes[idx]
+                            print(f'Found a {dir_name} chromatic line starting on {idx}{suf} chord ({self.chords[idx-1]}): {line}')
+                            lines[(start_row, start_loc, dir)] = line
+                    else:
+                        log(f'Existing line already begins at {(start_row-1, start_loc)}')
+
+
+    def transpose_for_guitar(self, return_all=False):
+        """tries to transpose this ChordProgression into a form where its chords
+            are easily playable on guitar in open form
+            (depending on the 'easy' chords defined in guitar.standard_open_chords).
+        if return_all, returns a list of all matches.
+            otherwise, return the first match (or None)"""
+        from src import guitar
+        easy_chords = guitar.standard_open_chords
+        playable_progressions = []
+        for i in range(1,12):
+            transp_prog = self + i
+            is_easy = True
+            for chord in transp_prog.chords:
+                if chord not in easy_chords:
+                    is_easy = False
+                    break
+            if is_easy:
+                if not return_all:
+                    # just return the first match found:
+                    return transp_prog
+                playable_progressions.append(transp_prog)
+        if return_all:
+            return playable_progressions
+        else:
+            return None
+
+    def find_key(self, chords, natural_only=True, verbose=False):
+        """wraps around matching_keys but additionally uses cadence information to distinguish between competing candidates"""
+
+        prev_verbosity = log.verbose
+        log.verbose=verbose
+
+        if natural_only:
+            min_lik = 0.9
+            modes = False
+        else: # currently not very good (fix cadential detection)
+            min_lik = 0.8
+            modes = True
+
+        log(f'Searching for keys of {chords} with default parameters')
+        matches = matching_keys(chords=chords, min_likelihood=min_lik, min_recall=0.8, modes=modes,
+                                chord_factor_weights = {}, key_factor_weights = {}, # kludge for now until we fix these
+                                max_results=12, display=False)
+
+        if len(matches) == 0:
+            # if no matches at all first, open up the min recall property:
+            log(f'No key found matching notes using default parameters, widening search')
+            matches = matching_keys(chords=chords, max_likelihood=min_lik-0.01, min_likelihood=0, min_recall=0.8, modes=modes,
+                                    max_results=12, display=False)
+            if len(matches) == 0:
+                raise Exception(f'No key matches at all found for chords: {self} \n(this should never happen!)')
+        # try ideal matches (with perfect recall) first:
+        log(f'Matches: {matches}')
+
+        ideal_matches = [(k,scores) for k,scores in matches.items() if scores['recall'] == 1.0]
+        log(f'{len(matches)} possible key matches found')
+
+        if len(ideal_matches) == 0:
+            # no good matches, so open up to all matches that share the max recall:
+            max_rec = max([scores['recall'] for k,scores in matches.items()])
+            max_rec_matches = [(k,scores) for k,scores in matches.items() if scores['recall'] == max_rec]
+            match_tuples = max_rec_matches
+            log('No ideal matches with perfect recall')
+            log(f'So opened up to all {len(match_tuples)} matches tied for the highest recall')
+        else:
+            log(f'Found {len(ideal_matches)} candidate/s with perfect recall')
+            # at least one ideal match, so we'll focus on those
+            match_tuples = ideal_matches
+
+        if len(match_tuples) == 1:
+            log(f'Only one candidate for key: {match_tuples}')
+            # only one good match, so use it
+            key = match_tuples[0][0]
+            print(f'Found key: {key}')
+
+        elif len(match_tuples) >= 2:
+            # multiple good matches, see if one has better precision than the other
+            max_prec = max([scores['precision'] for k,scores in match_tuples])
+            precise_matches = [(k,scores) for k,scores in match_tuples if scores['precision'] == max_prec]
+            log(f'Multiple candidates for key: {[m[0].name for m in match_tuples]}')
+            log(f' So focusing on the {len(precise_matches)} tied for highest precision')
+            if len(precise_matches) == 1:
+                # one of the perfect-recall matches is better than all the others, so use it (probably?)
+                key = precise_matches[0][0]
+                print(f'Found key: {key}')
+
+            # elif len(best_matches) == 2:
+            #     # is one major and the other minor?
+            #     m1, m2 = best_matches[0][0], best_matches[1][0]
+            #     if (m1.quality.major and m2.quality.minor) or (m1.quality.minor and m2.quality.major):
+            #         # decide between major and minor candidate keys:
+            #         candidate_progressions = [Progression(self.as_numerals_in(k)) for k in [m1, m2]]
+
+            else:
+                # multiple matches that are equally as good,
+                # so look for a cadence-based match around V-I resolutions or something
+
+                # log(f'Reducing the shortlist to those tied for highest likelihood')
+                # max_likely = max([s['likelihood'] for c,s in match_tuples])
+                # likely_matches = [(c,s) for c,s in match_tuples if s['likelihood'] == max_likely]
+
+                # # limit shortlist to natural keys only if specified:
+                # if natural_only:
+                #     candidate_keys = [k for k, scores in precise_matches if k.is_natural()]
+                #     log(f'Restricted to natural keys only')
+                # else:
+                candidate_keys = [k for k, scores in precise_matches]
+
+                log(f'Testing {len(candidate_keys)} candidate keys for grammaticity of this progression in those keys')
+                candidate_progressions = [Progression(chords.as_numerals_in(k), scale=k.scale).in_key(k) for k in candidate_keys]
+                log(f'Candidate keys: {", ".join([str(p.key) for p in candidate_progressions])}')
+                grammatical_progressions = most_grammatical_progression(candidate_progressions, verbose=log.verbose)
+                grammatical_keys = [p.key for p in grammatical_progressions]
+                if len(grammatical_keys) == 1:
+                    key = grammatical_keys[0]
+                    log(f'Found one key more grammatical than the others: {str(key)}')
+                else:
+                    # multiple keys equally tied for how grammatical they are
+                    # so tiebreak by likelihood:
+                    log(f'Found multiple equally grammatical keys: {[str(k) for k in grammatical_keys]}')
+                    log('So tie-breaking by key likelihood')
+                    max_likely = max([k.likelihood for k in grammatical_keys])
+                    likely_keys = [k for k in grammatical_keys if k.likelihood == max_likely]
+
+                    if len(likely_keys) == 1:
+                        key = likely_keys[0]
+                        log(f'One key is more likely than the others: {key}')
+                    else:
+                        # nothing else left, just tie-break by key consonance
+                        keys_by_consonance = sorted(likely_keys, key=lambda x: x.consonance, reverse=True)
+                        log(f'Found multiple equally likely keys: {[str(k) for k in keys_by_consonance]}')
+                        log(f'So doing a final tie-break by consonance')
+                        key = keys_by_consonance[0]
+
+                print(f'Found key: {key}')
+
+        log.verbose = prev_verbosity
+
+        assert isinstance(key, Key)
+        return key
+
+        # return lines
     # def __repr__(self):
     #     return str(self)
 
-# def chordlist_numerals_in_key(chordlist, key, sep=' ', modifiers=True, auto_superscript=True):
-#     """given a chordlist and a key, produces the roman numerals
-#     that describe those chords in that key"""
-#     # recast args if needed:
-#     if not isinstance(chordlist, (ChordList)):
-#         chordlist = ChordList(chordlist)
-#     if not isinstance(key, Key):
-#         key = Key(key)
-#
-#     root_degrees = chordlist.root_degrees_in(key)
-#     scale_chords = [ch.in_scale(key.scale, degree=root_degrees[i]) for i,ch in enumerate(chordlist)]
-#
-#     numerals = [ch.numeral for ch in scale_chords]
-#
-#     if sep is not None:
-#         roman_chords_str = sep.join(numerals)
-#         return roman_chords_str
-#     else:
-#         # just return the raw list, instead of a sep-connected string
-#         return numerals
+class ChordMotion:
+    """Movement of root and every other chord degree from one to another"""
+    def __init__(self, start_chord, end_chord, key=None):
+        self.start_chord = start_chord
+        self.end_chord = end_chord
+        if key is None:
+            # interpret it from given KeyChords:
+            assert isinstance(start_chord, KeyChord)
+            assert isinstance(end_chord, KeyChord)
+            assert start_chord.key == end_chord.key
+            key = start_chord.key
+        self.key = key
+        self.scale = key.scale
 
-    # if None in root_degrees:
-    #     # if any of the chords start on a root that is NOT in the key,
-    #     # figure out alternative notations:
-    #     nonmatching_chord_idxs = [i for i,d in enumerate(root_degrees) if d is None]
-    #     root_degrees = []
-    #     root_degree_offsets = []
-    #     for i, ch in enumerate(chordlist):
-    #         if ch.root in key:
-    #             root_degree = key.note_degrees[ch.root]
-    #             root_degrees.append(root_degree)
-    #             root_degree_offsets.append(0)
-    #         else:
-    #             root_interval = ch.root - key.tonic
-    #             # is this a bIII or something?
-    #             sharpened_root_note = ch.root + 1
-    #             if sharpened_root_note in key:
-    #                 sharpened_degree = key.note_degrees[sharpened_root_note]
-    #                 root_degrees.append(sharpened_degree)
-    #                 root_degree_offsets.append(-1)
-    #                 continue
-    #
-    #             # this is more rare, but might come up in irregular keys:
-    #             flattened_root_note = ch.root - 1
-    #             if flattened_root_note in key:
-    #                 flattened_degree = key.note_degrees[flattened_root_note]
-    #                 root_degrees.append(flattened_degree)
-    #                 root_degree_offsets.append(1)
-    #                 continue
-    #
-    #             # otherwise, this will just be treated as a chromatic or out-of-key root
-    #             assumed_degree = root_interval.degree
-    #             root_degrees.append(assumed_degree)
-    #             root_degree_offsets.append(None)
-    # else:
-    #     # all chord roots are in this key,
-    #     # so all offsets are 0 by definition:
-    #     root_degree_offsets = [0] * len(root_degrees)
-    #
-    # chords_degrees_offsets = zip(chordlist, root_degrees, root_degree_offsets)
-    # numerals = [] # build a list of numerals, allocating case as we go
-    # for ch, deg, offset in chords_degrees_offsets:
-    #     # use the quality of the chord if it is not indeterminate, otherwise use the quality of the key:
-    #     chord_qual = ch.quality if not ch.quality.perfect else key.quality
-    #     if chord_qual.major_ish:
-    #         numeral = parsing.numerals_roman[deg]
-    #     elif chord_qual.minor_ish:
-    #         numeral = parsing.numerals_roman[deg].lower()
-    #     else:
-    #         raise Exception(f'Could not figure out whether to make numeral upper or lowercase: {d}:{c} in {key} (should never happen)')
-    #
-    #     # get the chord suffix, but ignore any suffix that means 'minor'
-    #     # because minor-ness is already communicated by the numeral's case
-    #     suffix = ch.suffix
-    #     if (len(suffix)) > 0 and (suffix[0] == 'm') and (not ch.quality.major_ish):
-    #         suffix = suffix[1:]
-    #
-    #     # turn suffix modifiers into superscript marks etc. where possible:
-    #     suffix = ''.join(reduce_aliases(suffix, parsing.modifier_marks))
-    #
-    #     # # place leading numbers in superscript:
-    #     # leading_numbers = [] # will be list of integer strings
-    #     # is_leading = False
-    #     # rest_index = len(suffix)
-    #     # for i,s in enumerate(suffix):
-    #     #     if s.isnumeric():
-    #     #         is_leading = True
-    #     #         leading_numbers.append(s)
-    #     #     else:
-    #     #         if is_leading:
-    #     #             rest_index = i # start of non-leading part of string
-    #     #             break
-    #     # # leading_numbers = ''.join(leading_numbers) # cast to str
-    #     # rest = suffix[rest_index:] # everything after leading numbers
-    #     # leading_numbers_super = ''.join([parsing.superscript[s] for s in leading_numbers])
-    #     # suffix = leading_numbers_super + rest
-    #
-    #     # if auto_superscript:
-    #     #     # replace all superscriptable characters
-    #
-    #     # get inversion as integer degree rather than bass note:
-    #     inv_string = '' if ch.inversion == 0 else f'/{ch.inversion}'
-    #
-    #     full_numeral = f'{numeral}{suffix}{inv_string}'
-    #     # finally, prefix the numeral with flat or sharp if it's not in key:
-    #     if offset is not None:
-    #         prefix = '' if offset==0 else parsing.preferred_accidentals[offset]
-    #         full_numeral = prefix + full_numeral
-    #     else:
-    #         # or wrap it in out-of-key brackets:
-    #         lb, rb = _settings.BRACKETS['non_key_chord_root']
-    #         full_numeral = lb + full_numeral + rb
-    #
-    #     numerals.append(full_numeral)
+        # experimental, WIP
+        import numpy as np
+        degree_distance_matrix = np.zeros((len(start_chord), len(end_chord)), dtype=float)
+        interval_distance_matrix = np.zeros((len(start_chord), len(end_chord)), dtype=int)
+        for r, n1 in enumerate(start_chord.notes):
+            for c, n2 in enumerate(end_chord.notes):
+                deg1 = key.note_degrees[n1] if n1 in key.note_degrees else key.fractional_note_degrees[n1]
+                deg2 = key.note_degrees[n2] if n2 in key.note_degrees else key.fractional_note_degrees[n2]
+                motion = DegreeMotion(deg1, deg2, scale=key.scale)
+                degree_distance_matrix[r,c] = round(motion.distance,1)
 
-    # numerals = [numerals_roman[d]  if c.quality.major_ish else numerals_roman[d].lower()  for d,c in degree_chords]
-    # add suffixes: (we ignore the 'm' suffix because it is denoted by lowercase instead)
-    # if modifiers:
-    #     suffix_list = [c.get_suffix(inversion=False) if c.get_suffix() != 'm' else '' for c in self]
-    #     inversion_list = ['' if c.inversion==0 else f'/{c.inversion}' for c in self]
-    #     roman_chords_list = [f'{numerals[i]}{suffix_list[i]}{inversion_list[i]}' for i in range(len(self))]
-    #     # turn suffix modifiers into superscript marks etc. where possible:
-    #     roman_chords_list = [''.join(reduce_aliases(r, modifier_marks)) for r in roman_chords_list]
-    # else:
-    #     roman_chords_list = [f'{numerals[i]}' for i in range(len(self))]
+                iv_distance = (n2 - n1).signed_class # i.e. the interval or its inversion, whichever is narrower
+                interval_distance_matrix[r,c] = iv_distance.value
 
+        import pandas as pd
+        self.degree_df = pd.DataFrame(degree_distance_matrix,
+                                      columns=[f'{n.chroma}' for n in end_chord.notes],
+                                      index=[f'{n.chroma:<2}  ' for n in start_chord.notes])
+        self.interval_df = pd.DataFrame(interval_distance_matrix,
+                                        columns=[f'{n.chroma}' for n in end_chord.notes],
+                                        index=[f'{n.chroma:<2}  ' for n in start_chord.notes])
 
 
 
@@ -1262,11 +1292,13 @@ common_progressions = {
     Progression('I V ♭VII IV' ) : 'common (variant)',
     Progression('I vi IV V'   ) : '50s',
     Progression('i VII VI V'  ) : 'andalusian',
-    Progression('vi IV V I'   ) : 'komuro', # better as rotation/transposition of 50s progression?
+    # Progression('vi IV V I'   ) : 'komuro', # better as rotation/transposition of 50s progression?
 
-    Progression('ii V I V' ) : 'jazz turnaround',
-
-    Progression('I⁷ IV⁷ ii⁷ V⁷') : 'montgomery-ward bridge',
+    Progression('ii⁷ V⁷  Iᐞ⁷ V⁷') : 'jazz turnaround',
+    Progression('Iᐞ⁷ vi⁷ ii⁷ V⁷') : 'rhythm changes',
+    Progression('Iᐞ⁷ ii⁷ V⁷ IVᐞ⁷') : '1 to 4',
+    Progression('Iᐞ⁷ II⁷ ii⁷ V⁷ Iᐞ⁷') : 'a-train',
+    Progression('I⁷  IV⁷ ii⁷ V⁷') : 'montgomery-ward bridge',
     Progression('v⁷ I⁷ IV IV vi⁷ II⁷ ii⁷ V⁷'): 'full montgomery-ward bridge',
 
     Progression('I⁷ IV⁷ I⁷ V⁷      I⁷') : 'blues',
@@ -1292,6 +1324,28 @@ common_progressions = {
     Progression('               III VII i V i'): 'passamezzo antico (second phrase)',
     }
 
-common_simple_progressions = {p.simplify(): name for p,name in common_progressions.items()}
+simple_progressions = {p.simplify(): name for p,name in common_progressions.items()}
+
+# augmented dicts that includes all their rotations as well:
+rotated_common_progressions = dict(common_progressions)
+rotated_simple_progressions = dict(simple_progressions)
+
+for prog_dict, rot_dict in zip([common_progressions, simple_progressions], [rotated_common_progressions, rotated_simple_progressions]):
+    for prog, name in prog_dict.items():
+        rotations = {rot: f'{name} ({i+1}{parsing.num_suffixes[i+1]} rotation)' for i,rot in enumerate(prog.rotations)}
+        # check if any rotations are already in this dict
+        # for prog, name in rotations.items():
+        #     if prog in common_rotated_progressions:
+        #         print(f'{name} already exists as: {common_progressions[prog]} ({prog})')
+        rot_dict.update(rotations)
+
+# rotated_simple_progressions = {p.simplify(): name for p,name in rotated_common_progressions.items()}
 
 common_progressions_by_name = reverse_dict(common_progressions)
+
+# just some songs I'm practicing:
+house_of_the_rising_sun = ChordProgression('Am C D F Am E Am E', key='Am') # animals
+cant_find_my_way_home = ChordProgression('G, D/F#, Dm/F, A, C, D, A', key='A') # clapton
+hollow = ChordProgression('A6 - Cmaj7#11 - Emadd9', key='Em') # yosh
+would_you_go_with_me = ChordProgression('E C#m B E B A', key='E') # josh turner
+your_man = ChordProgression('C G D G', key='G') - 1

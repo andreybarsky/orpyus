@@ -10,16 +10,18 @@ from src.notes import Note, OctaveNote, NoteList
 from src.chords import AbstractChord, Chord, ChordList, matching_chords
 from src.scales import Scale, ScaleFactors, ScaleDegree, ScaleChord
 from src.keys import Key, KeyChord
-from src.progressions import Progression, ChordProgression
+# from src.progressions import Progression, ChordProgression
 from src.guitar import Guitar, standard
 
 from src.test import test_util, test_parsing, test_qualities, test_intervals, test_notes, test_chords, test_scales, test_keys, test_guitar, test_display, test_progressions
 from src import util
 if PROFILE_INIT:
+
     profiler.disable()
     stats = pstats.Stats(profiler).sort_stats('cumtime')
     stats.print_stats(20)
 
+    stats.print_callers('progressions')
 
 util.log.verbose = False
 
