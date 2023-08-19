@@ -216,7 +216,7 @@ class AbstractChord:
     """a hypothetical chord not built on any specific note but having all the modifiers that a chord would,
     whose principal members are Intervals. see AbstractChord._parse_input for valid input schemas.
     an AbstractChord is fully identified by its Factors and its Inversion."""
-    def __init__(self, name=None, factors=None, intervals=None, inversion=None, inversion_degree=None, modifiers=None, auto_invert=True):
+    def __init__(self, name=None, factors=None, intervals=None, inversion=None, inversion_degree=None, modifiers=None, auto_invert=True, assigned_name=None):
         """primary input arg must be one of the following mutually exclusive keywords, in order of resolution:
         1. 'name' arg as string denoting the name of an AbstractChord (like 'mmaj7'),
                 which we look up and parse as a list of ChordModifiers.
@@ -264,15 +264,9 @@ class AbstractChord:
 
         self.quality = self._determine_quality()
 
-        # check if the final chord has a registered name or not.
-        # if it doesn't, and the auto_invert flag is True, we try to find
-        # if it is an inversion of a registered chord instead:
-        if self.name == self._unknown_char:
-            if auto_invert:
-                pass
 
 
-    def _parse_input(self, name, factors, intervals, inversion, inversion_degree, modifiers, _allow_note_name=False, min_inversion_rarity=3):
+    def _parse_input(self, name, factors, intervals, inversion, inversion_degree, modifiers, _allow_note_name=False, min_inversion_rarity=3, max_uninverted_rarity=5, _debug=False):
         """takes valid inputs to AbstractChord and parses them into factors, intervals and inversion.
         (see docstring for AbstractChord.__init__)"""
 
@@ -289,6 +283,10 @@ class AbstractChord:
         if name is None and factors is None and intervals is None:
             # we have been given nothing to init by, so initialise a basic major triad:
             factors = ChordFactors()
+
+
+        if _debug:
+            import ipdb; ipdb.set_trace()
 
         if name is not None:
             assert factors is None and intervals is None
@@ -319,27 +317,32 @@ class AbstractChord:
         elif intervals is not None:
             assert name is None and factors is None
             # sanitise interval list input, expect root to be provided:
+            if not isinstance(intervals, IntervalList):
+                intervals = IntervalList(intervals)
+            if intervals[0] != 0:
+                # pad with root if needed
+                intervals = intervals.pad(left=True, right=False)
 
-            # if it is a list of ints, catch common thirds/fifths:
-            if isinstance(intervals, (tuple, list)) and check_all(intervals, 'type_is', int):
-                sanitised_intervals = []
-                chord_tones = {3,5,7,9,11,13}
-                for iv in intervals:
-                    val = int(iv)
-                    common_degrees = Interval.from_cache(val).common_ext_degrees
-                    val_used = False
-                    for c in common_degrees:
-                        if c in chord_tones:
-                            sanitised_intervals.append(Interval.from_cache(val, degree=c))
-                            chord_tones.remove(c)
-                            val_used = True
-                            break
-                    if not val_used:
-                        sanitised_intervals.append(iv)
-                print(f'Intervals sanitised from {intervals} to {sanitised_intervals}')
-                if IntervalList(sanitised_intervals) != intervals:
-                    print(f'\n\n  and it mattered!\n\n')
-                    import ipdb; pdb.set_trace()
+            # # if it is a list of ints, catch common thirds/fifths:
+            # if isinstance(intervals, (tuple, list)) and check_all(intervals, 'type_is', int):
+            #     sanitised_intervals = []
+            #     chord_tones = {3,5,7,9,11,13}
+            #     for iv in intervals:
+            #         val = int(iv)
+            #         common_degrees = Interval.from_cache(val).common_ext_degrees
+            #         val_used = False
+            #         for c in common_degrees:
+            #             if c in chord_tones:
+            #                 sanitised_intervals.append(Interval.from_cache(val, degree=c))
+            #                 chord_tones.remove(c)
+            #                 val_used = True
+            #                 break
+            #         if not val_used:
+            #             sanitised_intervals.append(iv)
+            #     print(f'Intervals sanitised from {intervals} to {sanitised_intervals}')
+            #     if IntervalList(sanitised_intervals) != intervals:
+            #         print(f'\n\n  and it mattered!\n\n')
+            #         import ipdb; pdb.set_trace()
 
                     # for tone in chord_tones:
                     #     potential_tone_degrees = common_degree_intervals[tone]
@@ -358,10 +361,10 @@ class AbstractChord:
                     #     sanitised_intervals.append(Interval.from_cache(i, degree=5))
                     # else:
                     #     sanitised_intervals.append(i)
-                intervals = sanitised_intervals
+                # intervals = sanitised_intervals
 
-            # cast to IntervalList object, pad to canonical chord intervals form with left bass root but not upper octave root
-            intervals = IntervalList(intervals).pad(left=True, right=False)
+            # # cast to IntervalList object, pad to canonical chord intervals form with left bass root but not upper octave root
+            # intervals = IntervalList(intervals).pad(left=True, right=False)
             assert len(intervals) == len(set(intervals)), f'Interval list supplied to AbstractChord init contains repeated intervals: {intervals}'
 
             # check if this is an inversion of some common chord:
@@ -385,7 +388,7 @@ class AbstractChord:
                     best_inversion = sorted_inversions[0]
                     # adopt the inversion if it is less rare than our existing name and at least as common as our max_inversion_rarity threshold,
                     # OR if we have no other registered chord to fall back on
-                    if (not has_uninverted_name) or (best_inversion.rarity < supplied_rarity and supplied_rarity > min_inversion_rarity):
+                    if (not has_uninverted_name) or (best_inversion.rarity < supplied_rarity and best_inversion.rarity <= max_uninverted_rarity and supplied_rarity > min_inversion_rarity):
                         # adopt the inverted chord's root intervals and inversion instead
                         old_intervals = intervals
                         new_intervals = best_inversion.root_intervals
@@ -423,6 +426,7 @@ class AbstractChord:
                     factors_without_5 = dict(chord_names_to_factors[full_chord_name])
                     del factors_without_5[5]
                     factors = ChordFactors(factors_without_5)
+
 
             if factors is None:
                 # build factors by looping through intervals:
@@ -532,60 +536,97 @@ class AbstractChord:
 
     def get_suffix(self, inversion=True):
         """dynamically determine chord suffix from factors and inversion"""
-        inv_string = self._inv_string if inversion else ''
-
-        if self.factors in factors_to_chord_names:
-            return factors_to_chord_names[self.factors] + inv_string
-        elif self.root_intervals in intervals_to_chord_names:
-            log(f'Chord has registered root intervals but not regular intervals')
-            suf = intervals_to_chord_names[self.root_intervals] + inv_string
-            return suf
+        if self._is_registered():
+            return self._get_registered_name(inversion=inversion)
+        else:
+            inv_string = self._inv_string if inversion else ''
+        # elif self.root_intervals in intervals_to_chord_names:
+        #     log(f'Chord has registered root intervals but not regular intervals')
+        #     suf = intervals_to_chord_names[self.root_intervals] + inv_string
+        #     return suf
             # print(f' ++ Could not find chord by factors ({self.factors}), but found it by root intervals ({self.root_intervals}): {suf}')
         # elif self.intervals in intervals_to_chord_names:
         #     # set_trace(context=30) # can't remember what is going on here
         #     log(f' ++++ Could not find chord by factors ({self.factors}), but found it by inverted intervals: {self.intervals}')
         #     # import pdb; pdb.set_trace() # in case this ever comes up
         #     return intervals_to_chord_names[self.intervals] + inv_string
-        elif 5 not in self.factors:
-            # try adding a 5 to see if this is a (no5) chord
-            factors_with_5 = dict(self.factors)
-            factors_with_5[5] = 0
-            factors_with_5 = ChordFactors(factors_with_5)
-            if factors_with_5 in factors_to_chord_names:
-                return factors_to_chord_names[factors_with_5] + '(no5)' + inv_string
+            if 5 not in self.factors:
+                # try adding a 5 to see if this is a (no5) chord
+                factors_with_5 = dict(self.factors)
+                factors_with_5[5] = 0
+                factors_with_5 = ChordFactors(factors_with_5)
+                if factors_with_5 in factors_to_chord_names:
+                    return factors_to_chord_names[factors_with_5] + '(no5)' + inv_string
 
-            # intervals_with_5 = IntervalList(sorted(list(self.root_intervals) + [P5]))
-            # if intervals_with_5 in intervals_to_chord_names:
-            #     return intervals_to_chord_names[intervals_with_5] + '(no5)' + inv_string
-            #     # try the same for this chord's inversions? (this gets messy very fast)
+                # intervals_with_5 = IntervalList(sorted(list(self.root_intervals) + [P5]))
+                # if intervals_with_5 in intervals_to_chord_names:
+                #     return intervals_to_chord_names[intervals_with_5] + '(no5)' + inv_string
+                #     # try the same for this chord's inversions? (this gets messy very fast)
 
-        # try flattening intervals and seeing if that produces a chord: (i.e. parsing CGE as CEG)
-        flat_intervals = self.intervals.flatten()
-        if flat_intervals in intervals_to_chord_names:
-            # affix with extended chord identifying char:
-            ext_char = _settings.CHARACTERS['extended_chord']
-            return intervals_to_chord_names[flat_intervals] + ext_char
-        elif self.factors == _major_triad:
-            return ''
-        elif self.assigned_name is not None:
-            # fall back on name given
-            # log(f'Falling back on assigned name for compound slash chord: {self.assigned_name}')
-            # if isinstance(self, Chord) and (self.compound_slash_chord):
-            #     comp_char = _settings.CHARACTERS['compound_slash_chord']
-            #     return f'{self.assigned_name}{comp_char}'
-            # else:
-            # strange/exotic unregistered chords that are not compound slash chords:
-            log(f'Falling back on assigned name for unregistered chord: {self.assigned_name}')
-            return self.assigned_name
+            # try flattening intervals and seeing if that produces a chord: (i.e. parsing CGE as CEG)
+            flat_intervals = self.intervals.flatten()
+            if flat_intervals in intervals_to_chord_names:
+                # affix with extended chord identifying char:
+                ext_char = _settings.CHARACTERS['extended_chord']
+                return intervals_to_chord_names[flat_intervals] + ext_char
+            elif self.factors == _major_triad:
+                return ''
+            elif self.assigned_name is not None:
+                # fall back on name given
+                # log(f'Falling back on assigned name for compound slash chord: {self.assigned_name}')
+                # if isinstance(self, Chord) and (self.compound_slash_chord):
+                #     comp_char = _settings.CHARACTERS['compound_slash_chord']
+                #     return f'{self.assigned_name}{comp_char}'
+                # else:
+                # strange/exotic unregistered chords that are not compound slash chords:
+                log(f'Falling back on assigned name for unregistered chord: {self.assigned_name}')
+                ### experimental: register this chord under this name too
+                if _settings.DYNAMIC_CACHING and cache_initialised:
+                    print(f'Post-hoc registering inside AbstractChord.get_suffix')
+                    self._register()
+                return self.assigned_name
+            else:
+                unknown_marker = self._unknown_char
+                return f'{unknown_marker}{inv_string}'
+
+    def _is_registered(self):
+        """returns True if this chord is registered under a name-factor mapping,
+        and False otherwise"""
+        if self.factors in factors_to_chord_names:
+            return True
+        elif self.root_intervals in intervals_to_chord_names:
+            return True
         else:
-            unknown_marker = self._unknown_char
-            return f'{unknown_marker}{inv_string}'
+            return False
+
+    def _get_registered_name(self, inversion=True):
+        inv_string = self._inv_string if inversion else ''
+        if self.factors in factors_to_chord_names:
+            return factors_to_chord_names[self.factors] + inv_string
+        elif self.root_intervals in intervals_to_chord_names:
+            return intervals_to_chord_names[self.intervals] + inv_string
+
+    def _register(self):
+        """adds this chord to the register of named chords and associated lookups,
+        by whatever name it was initialised by"""
+        intervals_to_chord_names[self.intervals] = self.assigned_name
+        factors_to_chord_names[self.factors] = self.assigned_name
+        chord_names_to_factors[self.assigned_name] = self.factors
+        chord_names_to_intervals[self.assigned_name] = self.intervals
+        chord_names_by_rarity[self.rarity].append(self.assigned_name)
+        chord_name_rarities[self.assigned_name] = self.rarity
 
     @property
     def rarity(self):
         """an integer denoting how rarely this chord is used in practice"""
         if self.factors in factors_to_chord_names:
-            return chord_name_rarities[factors_to_chord_names[self.factors]]
+            registered_name = factors_to_chord_names[self.factors]
+            if registered_name in chord_name_rarities:
+                return chord_name_rarities[registered_name]
+            else:
+                # strange case
+                log(f'Chord {self.name} with factors {self.factors} has registered factors but no rarity')
+                return max_rarity
         else:
             # no5 chords have no registered rarity; so here we check the rarity of this chord
             # WITH a perfect 5th, and make it one step rarer than that
@@ -709,7 +750,7 @@ class AbstractChord:
     def on_root(self, root_note):
         """constructs a Chord object from this AbstractChord with respect to a
             desired root"""
-        return Chord(root=root_note, factors=self.factors, inversion=self.inversion)
+        return Chord(root=root_note, factors=self.factors, inversion=self.inversion, assigned_name=self.assigned_name)
 
     def in_scale(self, scale, degree=None, factor=None):
         """constructs a ScaleChord from this AbstractChord on a desired degree or
@@ -771,7 +812,7 @@ class AbstractChord:
         elif self.__class__.__name__ == 'Chord':
             if root is None and notes is None:
                 root = self.root
-            return self.__class__(*args, root=root, notes=notes, **kwargs)
+            return self.__class__(*args, root=root, notes=notes, assigned_name=self.assigned_name, **kwargs)
         elif self.__class__.__name__ == 'ScaleChord':
             if scale is None:
                 scale = self.scale
@@ -814,7 +855,6 @@ class AbstractChord:
 
         if isinstance(other, Chord):
             # concatenation of chords to produce ChordList (or ChordProgression?):
-            from .progressions import ChordList, ChordProgression # lazy import
             return ChordList([self, other])
 
         elif isinstance(other, Note):
@@ -946,7 +986,8 @@ class Chord(AbstractChord):
                        root=None, factors=None, intervals=None, notes=None,
                        inversion=None, inversion_degree=None, bass=None,
                        modifiers=None,
-                       in_key=None, prefer_sharps=None):
+                       in_key=None, prefer_sharps=None,
+                       assigned_name=None, _debug=False):
         """initialised in one of three ways:
 
         1. from 'notes' arg, as a list of Notes (or a note-string),
@@ -1018,7 +1059,10 @@ class Chord(AbstractChord):
         # if name is a proper chord name like 'C' or 'Amaj' or 'D#sus2', separate it out into root and suffix components:
         self.root, suffix = self._parse_root(name, root)
 
-        self.assigned_name = suffix # the (root-less) name this chord was initialised by (or None, if not initialised by a name)
+        if assigned_name is None:
+            self.assigned_name = suffix # the (root-less) name this chord was initialised by (or None, if not initialised by a name)
+        else:
+            self.assigned_name = assigned_name
 
         assert self.root is not None
 
@@ -1032,7 +1076,7 @@ class Chord(AbstractChord):
                                           # (overwritten later if needed, in _parse_inversion)
 
         # recover factor offsets, intervals from root, and inversion position from input args:
-        self.factors, self.root_intervals, inversion = self._parse_input(suffix, factors, intervals, inversion, inversion_degree, modifiers, _allow_note_name=True)
+        self.factors, self.root_intervals, inversion = self._parse_input(suffix, factors, intervals, inversion, inversion_degree, modifiers, _allow_note_name=True, _debug=_debug)
         # note that while 'inversion' in AbstractChord comes out as strictly int or None
         # here we allow it to be a string denoting the bass note, which we'll correct in a minute
 
@@ -1056,6 +1100,13 @@ class Chord(AbstractChord):
 
         # # list of notes inside this chord, in root position:
         # self.root_notes = NoteList(self.factor_notes.values())
+
+        ### check if this chord is registered
+        ### (and if not, post-hoc register it)
+        if not self._is_registered() and self.assigned_name is not None:
+            print(f'Registering chord with factors {self.factors} as assigned name: {self.assigned_name}')
+            self._register()
+            print(f'Confirmed registration: {self._is_registered()} (as: {self.name})')
 
 
 
@@ -1510,13 +1561,14 @@ class Chord(AbstractChord):
 
     def abstract(self):
         """return the AbstractChord that this Chord is associated with"""
-        return AbstractChord(factors=self.factors, inversion=self.inversion)
+        return AbstractChord(factors=self.factors, inversion=self.inversion, assigned_name=self.assigned_name)
 
     def in_key(self, key, degree=None, factor=None):
         """constructs a KeyChord from this Chord on a desired degree or
             factor of a desired Key"""
         from src.keys import KeyChord
-        return KeyChord(factors=self.factors, inversion=self.inversion, key=key, degree=degree, factor=factor)
+        return KeyChord(root=self.root, factors=self.factors, inversion=self.inversion,
+                        key=key, degree=degree, factor=factor, assigned_name = self.assigned_name)
 
     def _get_flags(self):
         """Returns a list of the boolean flags associated with this object"""
@@ -1675,6 +1727,8 @@ class Chord(AbstractChord):
 
 ################################################################################
 
+cache_initialised = False
+
 chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor triads, dom/minor 7s, and power chords
                           1: ['m7', 'maj7', 'dim', 'sus4', 'sus2', 'add9'], # maj/min7s, dim triads, and common alterations like sus2/4 and add9
                           2: ['9', 'maj9', 'm9', 'aug', '6', 'm6'],
@@ -1687,7 +1741,7 @@ chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor 
 
 max_rarity = len(chord_names_by_rarity)-1
 ordered_tweak_names = ['sus4', 'sus2', 'add9', 'add11', 'add13']
-tweak_names_by_rarity = {1: ['sus4', 'sus2'], 2: ['add9'], 3: ['add11'], 4: ['add13']}
+tweak_names_by_rarity = {2: ['sus4', 'sus2', 'add9'], 3: ['add11', 'add13']}
 
 # these tweaks make a chord's quality indeterminate, so we don't apply them to chords that have had the minor modifier already applied
 ind_tweaks = {'sus4', 'sus2', '5'}
@@ -1796,6 +1850,7 @@ if _settings.PRE_CACHE_CHORDS: # initialise common chord objects in cache for fa
     cached_chord_factors.update({(c.factors, c.root.chroma): c for c in cached_chord_names.values()})
     cached_consonances_by_suffix.update({ac.suffix: ac.consonance for ac in cached_abstract_chord_names.values()}) # does this perform a double update if _settings.DYNAMIC_CACHING is on?
 
+cache_initialised = True
 
 ######################################################
 

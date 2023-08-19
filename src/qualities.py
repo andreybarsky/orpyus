@@ -564,12 +564,12 @@ modifier_aliases = {'maj': ['major', 'M', 'Δ', ],
                      'dim': ['o', '°', 'diminished'],
                      '+': ['aug','augmented'],
                      # special case: the chord 'half-dim' is implicitly a 7th, but 'hdim7' is clearer than 'hdim'
-                     'hdim7': ['ø', 'ø7', 'ø⁷', 'hdim', 'half diminished', 'half dim', 'half-diminished', 'half-dim', 'm7b5', 'm7♭5'],
+                     'hdim7': ['ø', 'ø7', 'hdim', 'half-diminished', 'half-dim', 'm7b5', 'm7♭5'],
                      'add': ['added'],
                      '(no5)': ['no5', '(omit5)'],
 
                      # bit of a kludge; but 'domX' always refers to an 'X' chord,
-                     # so we map 'dom' to nothing and it works fine
+                     # so we map 'dom' to nothing and it all works fine
                      '': ['dominant', 'dom'],
 
                      # another kludge: "maj7", "maj9" in particular need to be caught as
@@ -583,7 +583,7 @@ modifier_aliases = {'maj': ['major', 'M', 'Δ', ],
 
                      '2': ['two', '2nd', 'second'],
                      '4': ['four', '4th', 'fourth'],
-                     '5': ['five', '5th', 'fifth', '(no 3)', 'power', 'power chord', '⁵'],
+                     '5': ['five', '5th', 'fifth', '(no3)', 'power', 'power chord', '⁵'],
                      '6': ['six', '6th', 'sixth', 'add6', '⁶'],
                      '7': ['seven', '7th', 'seventh', '⁷'],
                      '9': ['nine', '9th', 'ninth', '⁹'],
@@ -619,7 +619,7 @@ modifier_aliases = {'maj': ['major', 'M', 'Δ', ],
 alias_modifiers = unpack_and_reverse_dict(modifier_aliases)
 
 
-def parse_chord_modifiers(mod_str, verbose=False, allow_note_names=False):
+def parse_chord_modifiers(mod_str, verbose=False, allow_note_names=False, catch_duplicates=False):
     """given a string of modifiers that typically follows a chord root,
     e.g. 7sus4add11♯5,
     recursively parse them into a list of ChordModifier objects"""
@@ -652,6 +652,18 @@ def parse_chord_modifiers(mod_str, verbose=False, allow_note_names=False):
     mod_ops = cast_modifiers(raw_mod_ops, verbose=verbose)
     # except ValueError as e:
     #     raise Exception(f'Could not understand {mod_str} (parsed as {reduced_mods}) as valid chord alias.\nSpecific issue: {e}')
+
+    if catch_duplicates:
+        # minor kludge: if we end up parsing the same modifier twice
+        # (due to a naming redundancy like 'hdim7')
+        # we want to ignore any repeats of the same modifier:
+        clean_ops = [mod_ops[0]]
+        for i in range(1, len(mod_ops)):
+            if mod_ops[i] != clean_ops[-1]:
+                clean_ops.append(mod_ops[i])
+            else:
+                log(f'Duplicate mod while parsing {mod_str} up to {clean_ops}: {mod_ops[i]}')
+        mod_ops = clean_ops
 
     return mod_ops
 
