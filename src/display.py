@@ -316,31 +316,64 @@ class DataFrame:
         widths = self.column_widths(up_to_row=up_to_row, header=header)
         return sum(widths) + (self.num_columns-1)*margin_size # - sum(combi_chars_per_header)
 
-    def show(self, margin=' ', header=True, header_border=True, max_rows=None, **kwargs):
+    def show(self, header=True, header_border=True, align='left',
+             max_rows=None, return_string=False, title=None, fix_widths=False,
+             margin=' ', header_char='=', title_pad_char='-',
+             **kwargs):
         margin_size = len(margin)
         printed_rows = []
 
         widths = self.column_widths(up_to_row=max_rows, header=header)
-        # must account for combining diacritics explicitly:
 
+        if fix_widths:
+            # make all widths the same (e.g. for progressions)
+            widths = [max(widths)] * len(widths)
+        total_width = sum(widths) + ((self.num_columns-1)*len(margin))
+
+        # must account for combining diacritics explicitly:
         # make header:
         combi_chars_per_header = [sum([char in self._combi_chars for char in colname]) if type(colname)==str else 0  for colname in self.column_names]
         if header:
             header_row = [f'{self.column_names[i]:{widths[i] + combi_chars_per_header[i]}}' for i in range(self.num_columns)]
             printed_rows.append(margin.join(header_row))
+
         if header_border:
-            total_width = self.total_width(up_to_row=max_rows, header=header, margin_size=margin_size)
+            # total_width = self.total_width(up_to_row=max_rows, header=header, margin_size=margin_size)
             # total_width = sum(widths) + (self.num_columns-1)*margin_size # - sum(combi_chars_per_header)
-            printed_rows.append('='*total_width)
+            printed_rows.append(header_char*total_width)
+        # else:
+        #     total_width = self.total_width(up_to_row=max_rows, header=header, margin_size=margin_size)
         # make rows:
         for row in self.row_data[:max_rows]:
             combi_chars_per_cell = [sum([char in self._combi_chars for char in cell]) if type(cell)==str else 0  for cell in row]
-            this_row = [f'{str(row[i]):{widths[i] + combi_chars_per_cell[i]}}' for i in range(self.num_columns)]
+            if align in ['l', 'left']:
+                this_row = [f'{str(row[i]):>{widths[i] + combi_chars_per_cell[i]}}' for i in range(self.num_columns)]
+            elif align in ['r', 'right']:
+                this_row = [f'{str(row[i]):<{widths[i] + combi_chars_per_cell[i]}}' for i in range(self.num_columns)]
+            else: # assume centre:
+                this_row = [f'{str(row[i]):^{widths[i] + combi_chars_per_cell[i]}}' for i in range(self.num_columns)]
+
             printed_rows.append(margin.join(this_row))
         # finally, print result:
         # import ipdb; ipdb.set_trace()
 
-        print('\n'.join(printed_rows))
+        if title is not None:
+            # pad title row with pad chars up to total width
+            remaining_width = total_width - len(title)
+            if remaining_width >= 2:
+                left_width, right_width = int(math.floor(remaining_width/2)), int(math.ceil(remaining_width/2))
+                left_pad = title_pad_char*(left_width-1) + ' '
+                right_pad = ' ' + title_pad_char*(right_width-1)
+                title = f'{left_pad}{title}{right_pad}'
+            printed_rows = [title] + printed_rows
+
+        final_string = '\n'.join(printed_rows)
+
+        if not return_string:
+            print(final_string)
+        else:
+            return final_string
+
 
     _combi_chars = set(_settings.DIACRITICS.values())
 
@@ -461,43 +494,3 @@ def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
         df.append(df_row)
 
     df.show(max_rows=max_results, **kwargs)
-
-
-
-circle_of_fifths = """
-         , - ~ ~ ~ - ,
-     , '               ' ,
-   ,                       ,
-  ,                         ,
- ,                           ,
- ,                           ,
- ,                           ,
-  ,                         ,
-   ,                       ,
-     ,                  , '
-       ' - , _ _ _ ,  '
-
-                        ___
-                  ,  '        '  ,
-              ,;'        C         ';,
-           ,;'                         ';,
-        ,;'    F                    G     ';,
-      ,;'                                   ';,
-    ,;'                                       ';,
-   ,;'   Bb                                D   ';,
-  ,;'                                           ';,
- ,;'                                             ';,
- ,;'                                             ';,
- ,;   Eb                                      A   ;,
- ,;                                               ;'
- ,;,                                             ,;'
-  ';,                                           ,;'
-   ';,   Ab                                E   ,;'
-    ';,                                       ,;'
-      ';,                                   ,;'
-        ';,     Db                  B      ,;'
-           ';,                         ,;'
-              ';,        Gb        ,;'
-                  '  ,  ___   ,  '
-
-"""

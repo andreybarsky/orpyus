@@ -3,7 +3,7 @@ from .notes import Note, OctaveNote, NoteList
 from .chords import AbstractChord, Chord, most_likely_chord, matching_chords
 from .scales import Scale
 from .keys import Key # , matching_keys
-from .progressions import Progression, ChordProgression
+# from .progressions import Progression, ChordProgression
 from . import parsing
 from .util import log, reverse_dict
 from .display import Fretboard
@@ -416,6 +416,7 @@ class Guitar: ### TBI: allow ukelele tunings?
 
 
     def show_progression(self, progression, **kwargs):
+        from src.progressions import Progression
         # try casting to Progression type if it is not one:
         if type(progression) != Progression:
             progression = Progression(Progression)
@@ -430,6 +431,7 @@ class Guitar: ### TBI: allow ukelele tunings?
             self.show_chord(c, fret_labels=False, show_index=False, min_fret=4, max_fret=16, fret_size=6, intervals_only=True, title=title, **kwargs)
 
     def show_chord_progression(self, progression, end_fret=13, **kwargs):
+        from src.progressions import ChordProgression
         # try casting to ChordProgression type if it is not one:
         if type(progression) != ChordProgression:
             progression = ChordProgression(progression)
@@ -444,7 +446,7 @@ class Guitar: ### TBI: allow ukelele tunings?
     def show(self, obj, *args, **kwargs):
         """wrapper around the show_note, show_chord, show_key etc. methods.
         accepts an arbitrary object and calls the relevant method to show it"""
-
+        from src.progressions import Progression, ChordProgression
         classes = [ Chord, AbstractChord,
                     Key, Scale,
                     ChordProgression, Progression,
