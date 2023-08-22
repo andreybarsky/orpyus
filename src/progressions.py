@@ -634,7 +634,6 @@ class Progression:
     def numerals(self):
         return self.as_numerals()
 
-
     def in_key(self, key, **kwargs):
         """returns a ChordProgression with these chords over a specified Key object"""
         # cast to Key object:
@@ -786,20 +785,6 @@ def most_grammatical_progression(progressions, add_resolution=True, verbose=Fals
     matching_progressions = [progressions[i] for i in top_matches]
 
     return matching_progressions
-
-    # if len(top_matches) == 1:
-        # # one progression has the most cadences
-
-        # return matching_progressions
-        # # match_idx = top_matches[0]
-        # # return progressions[match_idx]
-    # else:
-        # # multiple matching progressions
-        # return top_matches
-
-
-
-
 
 
 class ChordProgression(Progression): # , ChordList):
