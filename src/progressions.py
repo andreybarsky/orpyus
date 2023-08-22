@@ -1172,26 +1172,10 @@ class ChordProgression(Progression): # , ChordList):
                 key = precise_matches[0][0]
                 print(f'Found key: {key}')
 
-            # elif len(best_matches) == 2:
-            #     # is one major and the other minor?
-            #     m1, m2 = best_matches[0][0], best_matches[1][0]
-            #     if (m1.quality.major and m2.quality.minor) or (m1.quality.minor and m2.quality.major):
-            #         # decide between major and minor candidate keys:
-            #         candidate_progressions = [Progression(self.as_numerals_in(k)) for k in [m1, m2]]
-
             else:
                 # multiple matches that are equally as good,
                 # so look for a cadence-based match around V-I resolutions or something
 
-                # log(f'Reducing the shortlist to those tied for highest likelihood')
-                # max_likely = max([s['likelihood'] for c,s in match_tuples])
-                # likely_matches = [(c,s) for c,s in match_tuples if s['likelihood'] == max_likely]
-
-                # # limit shortlist to natural keys only if specified:
-                # if natural_only:
-                #     candidate_keys = [k for k, scores in precise_matches if k.is_natural()]
-                #     log(f'Restricted to natural keys only')
-                # else:
                 candidate_keys = [k for k, scores in precise_matches]
 
                 log(f'Testing {len(candidate_keys)} candidate keys for grammaticity of this progression in those keys')
@@ -1288,11 +1272,16 @@ common_progressions = {
     Progression('I vi V'  ) : '165',
     Progression('I V IV V') : '1545',
 
-    Progression('I V vi IV'   ) : 'common',
-    Progression('I V ♭VII IV' ) : 'common (variant)',
-    Progression('I vi IV V'   ) : '50s',
-    Progression('i VII VI V'  ) : 'andalusian',
-    # Progression('vi IV V I'   ) : 'komuro', # better as rotation/transposition of 50s progression?
+    Progression('I IV  ii V ') : '1425',
+    Progression('I III IV iv') : '134m4',
+    Progression('I ii iii IV V') : '12345',
+
+    Progression('I  V  vi  IV' ) : 'common',
+    Progression('I  V ♭VII IV' ) : 'common (variant)',
+    Progression('I  vi IV  V'  ) : '50s',
+    Progression('vi V  IV III' ) : 'andalusian',
+    Progression('i VII VI  V'  ) : 'andalusian minor',
+    Progression('vi IV V  I '  ) : 'komuro', # better as rotation/transposition of 50s progression?
 
     Progression('ii⁷ V⁷  Iᐞ⁷ V⁷') : 'jazz turnaround',
     Progression('Iᐞ⁷ vi⁷ ii⁷ V⁷') : 'rhythm changes',
@@ -1301,12 +1290,12 @@ common_progressions = {
     Progression('I⁷  IV⁷ ii⁷ V⁷') : 'montgomery-ward bridge',
     Progression('v⁷ I⁷ IV IV vi⁷ II⁷ ii⁷ V⁷'): 'full montgomery-ward bridge',
 
-    Progression('I⁷ IV⁷ I⁷ V⁷      I⁷') : 'blues',
-    Progression('I⁷ IV⁷ I⁷ V⁷  IV⁷ I⁷') : 'shuffle blues',
-    Progression('i⁷ iv⁷ i⁷ ♭VI⁷ V⁷ I⁷') : 'minor blues',
-    Progression('III⁷ VI⁷ II⁷ V⁷ I'   ) : 'ragtime',
+    Progression('I⁷ IV⁷ I⁷  V⁷    ') : 'blues',
+    Progression('I⁷ IV⁷ I⁷  V⁷ IV⁷') : 'shuffle blues',
+    Progression('i⁷ iv⁷ i⁷ ♭VI⁷ V⁷') : 'minor blues',
+    Progression('III⁷ VI⁷ II⁷ V⁷ I') : 'ragtime',
 
-    Progression('vi ii V I'  ) : 'circle',
+    Progression('vi ii  V I' ) : 'circle',
     Progression('VI ii° V i' ) : 'circle minor',
     Progression('I IV vii° iii vi ii V'     ): 'full circle',
     Progression('i iv VII  III VI ii° V i'  ): 'full circle minor',

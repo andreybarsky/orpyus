@@ -5,6 +5,7 @@ import threading
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.pyplot import plot, show
 # from matplotlib import ticker as mticker
 from scipy.fft import fft, ifft
 import sounddevice as sd
@@ -27,16 +28,7 @@ def show(*arrs, fix_ylim=True, fix_xlim=True, overlay=False):
             if isinstance(axes, np.ndarray):
                 for arr, ax in zip(arrs, axes):
                     ax.plot(arr)
-                    # xlims.append(ax.get_xlim())
-                    # ylims.append(ax.get_ylim())
-                # if fix_ylim:
-                #     miny, maxy = np.min([l[0] for l in ylims]), np.max([l[1] for l in ylims])
-                #     for ax in axes:
-                #         ax.set_ylim([miny, maxy])
-                # if fix_xlim:
-                #     minx, maxx = np.min([l[0] for l in xlims]), np.max([l[1] for l in xlims])
-                #     for ax in axes:
-                #         ax.set_xlim([minx, maxx])
+
             else:
                 axes.plot(arrs[0])
             fig.tight_layout()
