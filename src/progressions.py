@@ -3,11 +3,11 @@
 from .intervals import Interval
 from .notes import Note, NoteList, chromatic_notes
 from .chords import Chord, AbstractChord, ChordList
-from .qualities import Major, Minor, Perfect, Diminished, parse_chord_modifiers, ChordModifier
+from .qualities import Major, Minor, Perfect, Diminished, parse_chord_modifiers, ChordModifier, modifier_aliases
 from .scales import Scale, ScaleChord, NaturalMajor, NaturalMinor, MelodicMinor, HarmonicMinor, MelodicMajor, HarmonicMajor
 from .keys import Key, KeyChord, matching_keys# , most_likely_key
 from .util import reduce_aliases, rotate_list, check_all, reverse_dict, log
-from .parsing import roman_numerals, numerals_roman, auto_split, superscript, fl, sh, nat
+from .parsing import roman_numerals, numerals_roman, modifier_marks, auto_split, superscript, fl, sh, nat
 from . import parsing, _settings
 
 from collections import Counter
@@ -110,13 +110,21 @@ for num, (deg, qual) in progression_aliases.items():
     if deg > 1:
         for flat_sign in parsing.offset_accidentals[-1]:
             accidental_progression_aliases[flat_sign + num] = (round(deg-0.5, 1), qual)
-    if deg < 8:
+    if 1 < deg < 8:
         for sharp_sign in parsing.offset_accidentals[1]:
             accidental_progression_aliases[sharp_sign + num] = (round(deg+0.5, 1), qual)
 progression_aliases.update(accidental_progression_aliases)
 # kludge: we have to specifically ignore 'dim' when reading roman numerals,
 # because it is the only modifier that contains a roman numeral ('i')
 progression_aliases['dim'] = 'dim'
+
+# prog_modifier_aliases = dict(modifier_aliases) # a variant of modifier_aliases that includes
+#                                                # progression-specific superscript shorthand
+# for mod,mark in modifier_marks.items():
+#     if mod in prog_modifier_aliases:
+#         prog_modifier_aliases[mod].append(mark)
+#     else:
+#         prog_modifier_aliases[mod] = [mark]
 
 minor_mod = ChordModifier('minor')
 
@@ -147,8 +155,9 @@ def parse_roman_numeral(numeral, ignore_alteration=False):
             assert len(rest_inv) == 2 # chord part and inversion part
             rest, inversion = rest_inv[0], int(rest_inv[1])
 
-        rest_mods = parse_chord_modifiers(rest, catch_duplicates=True)
-        modifiers.extend(rest_mods)
+        if len(rest) > 0:
+            rest_mods = parse_chord_modifiers(rest, catch_duplicates=True)
+            modifiers.extend(rest_mods)
 
     chord = AbstractChord(modifiers=modifiers, inversion=inversion)
 
@@ -377,7 +386,7 @@ class Progression:
     """A theoretical progression between AbstractChords in a particular scale,
     initialised as list: e.g. Progression(['I', 'IV', 'iii', 'V'])
     or as string separated by dashes, e.g.: Progression('I-IV-iii-V')"""
-    def __init__(self, *numerals, scale=None, chords=None, order=3, ignore_conflicting_case=False):
+    def __init__(self, *numerals, scale=None, chords=None, order=None, ignore_conflicting_case=False):
         """accepts one of three input schemes:
         1. 'numerals' input is a list (or demarcated string) of upper/lower-case roman numerals denoting scale chords,
             with optional 'scale' parameter.
@@ -425,77 +434,97 @@ class Progression:
         if check_all(numerals, 'isinstance', str):
             # roman numeral strings
             # which we parse into AbstractChords based on their case and suffixes
+
             base_degree_chords = [parse_roman_numeral(n) for n in numerals] # degree, AbstractChord tuples
-
-
             self.root_degrees = [d[0] for d in base_degree_chords]
+
+            # determine scale from numerals provided, if scale not given:
+            if scale is None:
+                self.scale = self._detect_scale(base_degree_chords)
+            elif isinstance(scale, str):
+                self.scale = Scale(scale)
+            else:
+                self.scale = scale
+
+            # catch a special case: have we been given flat degrees (like bVI) in a minor key,
+            # which cannot be found because e.g. the minor VI is already flat?
+            for i, (deg, ch) in enumerate(base_degree_chords):
+                if isinstance(deg, float) and deg not in self.scale.fractional_degree_intervals:
+                    # quietly re-parse but ignore accidental:
+                    log(f'Progression given chord: {numerals[i]} but that altered root is already in scale')
+                    deg, ch = parse_roman_numeral(numerals[i], ignore_alteration=True)
+                    base_degree_chords[i] = deg, ch
+                    log(f'So quietly replaced with {numerals[i][1:]} (in scale: {self.scale.name}')
+                    self.root_degrees = [d[0] for d in base_degree_chords]
+
+
+            # decide how to instantiate chords:
+            if order is None:
+                # take numerals as given, assume that they might contain suffixes like maj7 etc.
+                degree_chords = base_degree_chords
+                self.chords = ChordList([ch.in_scale(self.scale, degree=d) for d,ch in degree_chords])
+            else:
+                # override any detected roman numeral suffixes and construct tertian chords instead:
+                # int_numerals = [num for num,chord in base_degree_chords]
+                scale_chords = scale.chords(self.root_degrees, order=order)
+                degree_chords = [(d,c) for d,c in zip(self.root_degrees, scale_chords)]
+                self.chords = degree_chords
 
             # log(f'Base (unscaled) degree chords:')
             # for r,c in base_degree_chords:
                 # log(f'{r}: {c}')
-
-            if scale is None:
-                # detect scale from base AbstractChords and then instantiate ScaleChords
-                # abs_chords = ChordList([ch for d,ch in base_degree_chords])
-                self.scale = self._detect_scale(base_degree_chords)
-
-                # catch a special case: have we been given flat degrees (like bVI) in a minor key,
-                # which cannot be found because e.g. the minor VI is already flat?
-                for i in range(len(base_degree_chords)):
-                    deg, ch = base_degree_chords[i]
-                    if isinstance(deg, float) and deg not in self.scale.fractional_degree_intervals:
-                        # quietly re-parse but ignore accidental:
-                        log(f'Progression given chord: {numerals[i]} but that altered root is already in scale')
-                        deg, ch = parse_roman_numeral(numerals[i], ignore_alteration=True)
-                        base_degree_chords[i] = deg, ch
-                        log(f'So quietly replaced with {numerals[i][1:]} (in scale: {self.scale.name}')
-                        self.root_degrees = [d[0] for d in base_degree_chords]
-
-                self.chords = ChordList([ch.in_scale(self.scale, degree=d) for d,ch in base_degree_chords])
-
-            else:
-                # scale is provided, so we simply instantiate it
-                # and, if needed, check degree chords against it
-                if isinstance(scale, str):
-                    scale = Scale(scale)
-                # assert isinstance(scale, Scale)
-                self.scale = scale
-
-                # catch a special case: have we been given flat degrees (like bVI) in a minor key,
-                # which cannot be found because e.g. the minor VI is already flat?
-                for i in range(len(base_degree_chords)):
-                    deg, ch = base_degree_chords[i]
-                    if isinstance(deg, float) and deg not in self.scale.fractional_degree_intervals:
-                        # quietly re-parse but ignore accidental:
-                        log(f'Progression given chord: {numerals[i]} but that altered root is already in scale')
-                        deg, ch = parse_roman_numeral(numerals[i], ignore_alteration=True)
-                        base_degree_chords[i] = deg, ch
-                        log(f'So quietly replaced with {numerals[i][1:]} (in scale: {self.scale.name}')
-                        self.root_degrees = [d[0] for d in base_degree_chords]
-
-
-                if ignore_conflicting_case:
-                    # ignore case (but not modifiers) of roman numeral chords provided
-                    # and instantiate them from scale instead:
-                    scale_chords = ChordList([self.scale.chord(d, linked=True) for d in self.root_degrees])
-                    self.chords = scale_chords
-                    log(f'Ignoring conflicting case in chord numerals:')
-                    for (d, bc), sc in zip(base_degree_chords, self.chords):
-                        if bc == sc:
-                            log(f'{d}: Provided {bc.short_name:{5}}, computed {sc.short_name:{5}}')
-                        else:
-                            log(f'{d}: Provided {bc.short_name:{5}}, computed {sc.short_name:{5}} [CONFLICT, using computed scale chord]')
-
-                else:
-                    # do not ignore case; instantiate chords in provided case
-                    self.chords = ChordList([ch.in_scale(self.scale, degree=d) for d,ch in base_degree_chords])
-                    # log(f'Ignoring conflicting case in chord numerals:')
-                    # for (d, bc), sc in zip(base_degree_chords, scale_chords):
-                        # if bc == sc:
-                            # log(f'{d}: Provided {bc.short_name:{5}}, computed {sc.short_name:{5}}')
-                        # else:
-                            # log(f'{d}: Provided {bc.short_name:{5}}, computed {sc.short_name:{5}} [CONFLICT, using provided chord]')
-                # print()
+            #
+            # if scale is None:
+            #     # detect scale from base AbstractChords and then instantiate ScaleChords
+            #     # abs_chords = ChordList([ch for d,ch in base_degree_chords])
+            #     self.scale = self._detect_scale(degree_chords)
+            #
+            #     # # catch a special case: have we been given flat degrees (like bVI) in a minor key,
+            #     # # which cannot be found because e.g. the minor VI is already flat?
+            #     # for i in range(len(degree_chords)):
+            #     #     deg, ch = degree_chords[i]
+            #     #     if isinstance(deg, float) and deg not in self.scale.fractional_degree_intervals:
+            #     #         # quietly re-parse but ignore accidental:
+            #     #         log(f'Progression given chord: {numerals[i]} but that altered root is already in scale')
+            #     #         deg, ch = parse_roman_numeral(numerals[i], ignore_alteration=True)
+            #     #         degree_chords[i] = deg, ch
+            #     #         log(f'So quietly replaced with {numerals[i][1:]} (in scale: {self.scale.name}')
+            #     #         self.root_degrees = [d[0] for d in degree_chords]
+            #
+            #     self.chords = ChordList([ch.in_scale(self.scale, degree=d) for d,ch in degree_chords])
+            #
+            # else:
+            #     # scale is provided, so we simply instantiate it
+            #     # and, if needed, check degree chords against it
+            #     if isinstance(scale, str):
+            #         scale = Scale(scale)
+            #     # assert isinstance(scale, Scale)
+            #     self.scale = scale
+            #
+            #
+            #
+            #     if ignore_conflicting_case:
+            #         # ignore case (but not modifiers) of roman numeral chords provided
+            #         # and instantiate them from scale instead:
+            #         scale_chords = ChordList([self.scale.chord(d, linked=True) for d in self.root_degrees])
+            #         self.chords = scale_chords
+            #         log(f'Ignoring conflicting case in chord numerals:')
+            #         for (d, bc), sc in zip(degree_chords, self.chords):
+            #             if bc == sc:
+            #                 log(f'{d}: Provided {bc.short_name:{5}}, computed {sc.short_name:{5}}')
+            #             else:
+            #                 log(f'{d}: Provided {bc.short_name:{5}}, computed {sc.short_name:{5}} [CONFLICT, using computed scale chord]')
+            #
+            #     else:
+            #         # do not ignore case; instantiate chords in provided case
+            #         self.chords = ChordList([ch.in_scale(self.scale, degree=d) for d,ch in degree_chords])
+            #         # log(f'Ignoring conflicting case in chord numerals:')
+            #         # for (d, bc), sc in zip(degree_chords, scale_chords):
+            #             # if bc == sc:
+            #                 # log(f'{d}: Provided {bc.short_name:{5}}, computed {sc.short_name:{5}}')
+            #             # else:
+            #                 # log(f'{d}: Provided {bc.short_name:{5}}, computed {sc.short_name:{5}} [CONFLICT, using provided chord]')
+            #     # print()
 
         elif check_all(numerals, 'isinstance', int):
             assert scale is not None, f'Progression chords given as integers but scale arg not provided'
@@ -504,6 +533,8 @@ class Progression:
             assert type(scale) is Scale
             self.scale = scale
             self.root_degrees = numerals
+            if order is None:
+                order = 3 # triads by default
             if chords is None:
                 # construct scale chords: (and here we check the order arg to make 7ths etc. if needed)
                 if isinstance(order, int): # same order for each chord
@@ -743,6 +774,12 @@ class Progression:
     def simplify(self):
         """returns a new Progression based on this one with simplified chords only"""
         new_chords = [ch.simplify() for ch in self.chords]
+        return self.__class__(new_chords)
+
+    def slice(self, start, stop):
+        """return a new Progression as a sliced subset of this Progression,
+        that starts on integer index 'start' and ends just before integer index 'stop'"""
+        new_chords = self.chords[start:stop]
         return self.__class__(new_chords)
 
     _brackets = _settings.BRACKETS['Progression']
@@ -1322,4 +1359,15 @@ house_of_the_rising_sun = ChordProgression('Am C D F Am E Am E', key='Am') # ani
 cant_find_my_way_home = ChordProgression('G, D/F#, Dm/F, A, C, D, A', key='A') # clapton
 hollow = ChordProgression('A6 - Cmaj7#11 - Emadd9', key='Em') # yosh
 would_you_go_with_me = ChordProgression('E C#m B E B A', key='E') # josh turner
-your_man = ChordProgression('C G D G', key='G') - 1
+your_man = ChordProgression('C G D G', key='G') - 1 # josh turner again
+
+# guitar-playable variants of the common progressions:
+def guitar_progressions():
+    for prog, name in common_progressions.items():
+        cprogs = prog.transpose_for_guitar(return_all=True)
+        desc = '\n'
+        if len(cprogs) == 0:
+            cprogs = prog.simplify().transpose_for_guitar(return_all=True)
+            desc += '(simplified)\n'
+        cprogs_str = desc + '\n'.join([str(p) for p in cprogs]) + '\n===='
+        print(f'{name}: {cprogs_str}')

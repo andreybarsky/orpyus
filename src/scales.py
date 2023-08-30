@@ -414,7 +414,11 @@ class ScaleChord(AbstractChord):
             indicating a chord whose root is not on a scale degree.
             (like a bIII chord in major scale)
         factor: an integer denoting which factor of the scale this chord sits on.
-                (the difference is meaningful only for non-heptatonic scales)"""
+                (the difference is meaningful only for non-heptatonic scales).
+
+        alternatively: can be defined by a single roman numeral string, such as
+        'VII' or 'bIII'. if so, scale is auto-detected, though can be manually overwritten
+        (e.g. with ScaleChord('V', scale='minor'))"""
 
         # initialise everything else as AbstractChord: (if not being inherited by KeyChord)
         if _init_abs:
@@ -453,6 +457,17 @@ class ScaleChord(AbstractChord):
 
         if self.root_in_scale:
             self.in_scale = scale.contains_degree_chord(degree, self)
+
+    @staticmethod
+    def from_numeral(numeral, scale=None):
+        from src.progressions import parse_roman_numeral, Progression
+        deg, abs_chord = parse_roman_numeral(numeral)
+        if scale is None:
+            scale = Progression._detect_scale(self=None, degree_chords=[(deg, abs_chord)])
+        else:
+            if not isinstance(scale, Scale):
+                scale = Scale(scale)
+        return abs_chord.in_scale(scale, degree=deg)
 
     @property
     def numeral(self):
@@ -609,9 +624,16 @@ class ScaleChord(AbstractChord):
             key = self.scale.on_tonic(tonic_note)
             return KeyChord(root=root_note, factors=self.factors, inversion=self.inversion, key=key, degree=self.scale_degree)
 
-    @property
     def __str__(self):
-        return f'{self.name} ({self.simple_numeral})'
+        return self.name
+
+    @property
+    def name(self):
+        return f'{super().short_name} chord ({self.simple_numeral})'
+
+    @property
+    def short_name(self):
+        return f'{super().short_name} {self.simple_numeral}'
 
     def __repr__(self):
         # in_str = 'not ' if not self.in_scale else ''
@@ -1369,8 +1391,12 @@ class Scale:
         elif isinstance(degrees, (int, ScaleDegree)):
             degrees = [degrees]
         scale_chords = []
-        for d in degrees:
-            scale_chords.append(self.get_chord(d, order=order, linked=linked))
+        if isinstance(order, int):
+            # list of identical orders of the correct length:
+            order = [order] * len(degrees)
+
+        for i,d in enumerate(degrees):
+            scale_chords.append(self.get_chord(d, order=order[i], linked=linked))
         if pad:
             # add an extra tonic chord on top:
             scale_chords.append(self.get_chord(self.degrees[0]**1, order=order, linked=linked))
@@ -1422,8 +1448,12 @@ class Scale:
         elif isinstance(degrees, (int, ScaleDegree)):
             degrees = [degrees]
         scale_chords = []
-        for d in degrees:
-            scale_chords.append(self.get_tertian_chord(d, order=order, linked=linked, prefer_chromatic=prefer_chromatic))
+        if isinstance(order, int):
+            # list of identical orders of the correct length:
+            order = [order] * len(degrees)
+
+        for i,d in enumerate(degrees):
+            scale_chords.append(self.get_tertian_chord(d, order=order[i], linked=linked, prefer_chromatic=prefer_chromatic))
         if display:
             title = f"Attempted tertian chords over: {self.__repr__()}"
             print(title)

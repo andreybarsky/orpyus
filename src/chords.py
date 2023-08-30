@@ -707,6 +707,11 @@ class AbstractChord:
 
     @property
     def triad(self):
+        """returns the first three notes of this chord"""
+        return AbstractChord(intervals=self.intervals[:3])
+
+    @property
+    def simple_triad(self):
         """returns the simple major or minor triad associated with this AbstractChord"""
         if self.quality.major_ish:
             return AbstractChord()
@@ -1649,7 +1654,7 @@ class ChordList(list):
             else:
                 assert isinstance(arg, (list, tuple)), f"Expected list or tuple of chord-like objects, but got single non-list/tuple arg: {type(arg)}"
                 items = arg
-        assert len(items) > 1, "ChordList must contain at least two Chords"
+        # assert len(items) > 1, "ChordList must contain at least two Chords"
 
         valid_chords = []
         for c in items:

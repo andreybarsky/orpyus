@@ -27,7 +27,8 @@ def unit_test():
     # modifiermark parsing:
     compare(Progression('I-IV-vii°-I', scale='major'), Progression(['I', 'IV', 'viidim', 'I']))
 
-
+    # progression slicing:
+    compare(Progression('I IV V7 I').slice(1,3), Progression('IV V7'))
 
     # # TBI: fix however ignore_conflicting_case is supposed to work
     # compare(Progression('ii-iv-i-vi', ignore_conflicting_case=True), Progression(['ii', 'iv', 'i', 'VI'], scale='minor'))

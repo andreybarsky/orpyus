@@ -180,8 +180,8 @@ numerals_roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV',
                   5: 'V', 6: 'VI', 7: 'VII'}
 roman_numerals = reverse_dict(numerals_roman)
 
-# superscript modifiers used specifically in roman numeral chord notation:
-modifier_marks = { 'dim':  '°', 'hdim': 'ø', # ᶲ ?
+# which chord modifier names map preferentially back onto roman numeral prog notation:
+modifier_marks = { 'dim':  '°', 'hdim7': 'ø', # ᶲ ?
                    'aug':  '⁺',  'maj':  'ᐞ',
                    'sus':  'ˢ',  'add':  'ᵃ',
 _settings.CHARACTERS['unknown_chord']: _settings.CHARACTERS['unknown_superscript'],

@@ -2,7 +2,7 @@ from . import notes as notes
 from .notes import Note, OctaveNote, NoteList
 from .chords import AbstractChord, Chord, most_likely_chord, matching_chords
 from .scales import Scale
-from .keys import Key # , matching_keys
+from .keys import Key, matching_keys
 # from .progressions import Progression, ChordProgression
 from . import parsing
 from .util import log, reverse_dict
@@ -425,9 +425,11 @@ class Guitar: ### TBI: allow ukelele tunings?
         # and display with respect to that:
         tonic_root = Note('A')
         chord_roots = [(tonic_root + iv) for iv in progression.chord_root_intervals_from_tonic]
+        abs_chords = progression.chords
         specific_chords = [c.on_root(r) for c,r in zip(progression.chords, chord_roots)]
-        for numeral, c in zip(progression.numerals, specific_chords):
-            title = f'\n{c.abstract()} on degree {numeral} of {progression.scale.name} on tuning:{self.name}'
+        for numeral, ac, sc in zip(progression.as_numerals(sep=None), abs_chords, specific_chords):
+            # title = f'\n{ac.short_name} on degree {numeral} of {progression.scale.name} on tuning:{self.name}'
+            title = str(ac)
             self.show_chord(c, fret_labels=False, show_index=False, min_fret=4, max_fret=16, fret_size=6, intervals_only=True, title=title, **kwargs)
 
     def show_chord_progression(self, progression, end_fret=13, **kwargs):
@@ -439,8 +441,9 @@ class Guitar: ### TBI: allow ukelele tunings?
         if 'fret_size' not in kwargs:
             kwargs['fret_size'] = 6
         print(f'{progression} on tuning:{self.name}')
-        for numeral, chord in zip(progression.numerals, progression.chords):
-            title=f'\n{numeral} Chord: {chord}'
+        for numeral, chord in zip(progression.as_numerals(sep=None), progression.chords):
+            # title=f'\n{numeral} Chord: {chord}'
+            title = str(chord)
             self.show_chord(chord, title=title, end_fret=end_fret, **kwargs)
 
     def show(self, obj, *args, **kwargs):
@@ -526,12 +529,12 @@ dadgad = Guitar('DADGAD')
 dadgbe = dropD = dropd = Guitar('DADGBE')
 
 # 'easy' chords to try and find for transposing song progressions:
-standard_open_chord_names = {'A', 'Am', 'A7', 'Am7',
-                        'B7', 'Bm7',
-                        'C', 'C7', 'Cmaj7', 'Csus2',
-                        'D', 'Dm', 'D7', 'Dm7', 'Dmaj7', 'Dsus4', 'Dsus2',
-                        'E', 'Em', 'E7', 'Em7', 'Emaj7', 'Esus4',
-                        'Fmaj7', # I still have trouble even with partial bars on Fmaj
-                        'G', 'G7', 'Gmaj7',
-                         }
+standard_open_chord_names = {'A', 'Am', 'A7', 'Am7', 'Amaj7',
+                             'B7', 'Bm7',
+                             'C', 'C7', 'Cmaj7', 'Csus2',
+                             'D', 'Dm', 'D7', 'Dm7', 'Dmaj7', 'Dsus4', 'Dsus2',
+                             'E', 'Em', 'E7', 'Em7', 'Emaj7', 'Esus4',
+                             'Fmaj7', # I still have trouble even with partial bars on Fmaj
+                             'G', 'G7', 'Gmaj7',
+                            }
 standard_open_chords = set([Chord(c) for c in standard_open_chord_names])
