@@ -1027,9 +1027,9 @@ class Chord(AbstractChord):
         ### check if this chord is registered
         ### (and if not, post-hoc register it)
         if not self._is_registered() and self.assigned_name is not None:
-            print(f'Registering chord with factors {self.factors} as assigned name: {self.assigned_name}')
+            log(f'Registering chord with factors {self.factors} as assigned name: {self.assigned_name}')
             self._register()
-            print(f'Confirmed registration: {self._is_registered()} (as: {self.name})')
+            log(f'Confirmed registration: {self._is_registered()} (as: {self.name})')
 
 
 

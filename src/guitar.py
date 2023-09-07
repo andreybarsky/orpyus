@@ -1,74 +1,75 @@
 from . import notes as notes
 from .notes import Note, OctaveNote, NoteList
-from .chords import AbstractChord, Chord, most_likely_chord, matching_chords
+from .chords import AbstractChord, Chord, ChordList, most_likely_chord, matching_chords
 from .scales import Scale
 from .keys import Key, matching_keys
-# from .progressions import Progression, ChordProgression
-from . import parsing
 from .util import log, reverse_dict
 from .display import Fretboard
+from . import parsing, _settings
+
+### TBI: special cases for other stringed instruments?
+### i.e. ukelele/banjo/mandolin tunings, with extensions for half capos etc.
 
 class String(OctaveNote):
+    """a String is just an OctaveNote that can be called with an offset ('fret')
+    to 'play' it higher by that many semitones"""
     def __call__(self, fret):
         return self + fret
 
+tuning_note_names = {   # names/aliases for common tunings:
+        'standard': ( 'E2',  'A2',  'D3',  'G3',  'B3',  'E4' ),
+              'Eb': ( 'Eb2', 'Ab2', 'Db3', 'Gb3', 'Bb3', 'Eb4'), # the GnR tuning
+           'dropD': ( 'D2',  'A2',  'D3',  'G3',  'B3',  'E4' ),
+           'dropC': ( 'C2',  'G2',  'C3',  'F3',  'A3',  'D4' ),
+           'dropB': ( 'B1',  'Gb2', 'B2',  'E3',  'Ab3', 'Db4'),
+           'openE': ( 'E2',  'B2',  'E3',  'G#3', 'B3',  'E4' ),
+          'celtic': ( 'D2',  'A2',  'D3',  'G3',  'A3',  'D4' ), # openDsus4, better known as DADGAD
+           'openD': ( 'D2',  'A2',  'D3',  'F#3', 'A3',  'D4' ),
+           'openC': ( 'C2',  'G2',  'C3',  'G3',  'C4',  'E4' ),
+           'openG': ( 'D2',  'G2',  'D3',  'G3',  'B3',  'D4' ),
+               }
 
-tunings = {'standard':(String('E2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')),
-              'Eb':   (String('Eb2'),String('Ab2'),String('Db2'),String('Gb3'),String('Bb3'),String('Eb4')), # i.e. GnR tuning
-           'dropD':   (String('D2'), String('A2'), String('D3'), String('G3'), String('B3'), String('E4')),
-           'dropC':   (String('C2'), String('G2'), String('C3'), String('F3'), String('A3'), String('D4')),
-           'dropB':   (String('B1'), String('Gb2'), String('B2'), String('E3'), String('Ab3'), String('Db4')),
-           'openE':   (String('E2'), String('B2'), String('E3'), String('G#3'), String('B3'), String('E4')),
-          'celtic':   (String('D2'), String('A2'), String('D3'), String('G3'), String('A3'), String('D4')),
-           'openD':   (String('D2'), String('A2'), String('D3'), String('F#3'), String('A3'), String('D4')),
-           'openC':   (String('C2'), String('G2'), String('C3'), String('G3'), String('C4'), String('E4')),
-           'openG':   (String('D2'), String('G2'), String('D3'), String('G3'), String('B3'), String('D4')),
-           }
+# cast string names into OctaveNote objects:
+tuning_strings = {name: tuple([String(nt) for nt in notes]) for name, notes in tuning_note_names.items()}
+tuning_aliases = reverse_dict(tuning_strings)
 
-tuning_aliases = reverse_dict(tunings)
-
-class Guitar: ### TBI: allow ukelele tunings?
+class Guitar:
     def __init__(self, tuning='standard', strings=6, capo=0, verbose=False):
         """tuning can be one of:
         a descriptive string: standard, dropD, openE, etc.
-        or a six-character string like: EADGBE, DADGAD, etc."""
+        or a six-character string of notes like: EADGBE, DADGAD, etc."""
 
-        assert isinstance(tuning, str) # for now
+        assert isinstance(tuning, str), "Guitar tuning must be a string, like 'standard' or 'EADGBE'"
 
         self.num_strings = strings
         self.capo = capo
 
         # parse tuning string into internal list of OctaveNotes:
-        if tuning in tunings.keys():
-            self.tuned_strings = tunings[tuning]
+
+        if tuning in tuning_strings.keys(): # interpret an  alias, like 'standard'
+            # what each string is tuned to, before capo:
+            self.tuned_strings = tuning_strings[tuning]
+            # string describing the tuning, such as EADGBE or DADGAD
             self.tuning = ''.join([s.chroma for s in self.tuned_strings])
 
         else:
-            default_bass = String('E2')
+            # interpret a string that casts to a NoteList, like 'EADGBE'
+
             # separate out individual note chromas from the input string:
             tuning_chromas = NoteList([Note(n) for n in parsing.parse_out_note_names(tuning)])
+            # make into a strictly ascending series of OctaveNotes:
             tuned_strings = tuning_chromas.force_octave(start_octave=2)
             self.tuned_strings = [String(s) for s in tuned_strings]
             self.tuning = ''.join([s.chroma for s in self.tuned_strings])
 
         self.verbose = verbose # for debugging
 
-    # open strings are relative to capo instead of to the neck:
+    # open strings are relative to capo instead of to the nut:
     @property
     def open_strings(self):
         return [s + self.capo for s in self.tuned_strings]
 
-    # def add_capo(self, capo):
-    #     self.capo = capo
-    #
-    #     print(self)
-    #
-    # def remove_capo(self):
-    #     self.capo = 0
-    #     self.open_strings = [s + self.capo for s in self.tuned_strings]
-    #     print(self)
-
-
+    @property
     def distance_from_standard(self):
         """how many semitones up/down must the strings of a standard guitar be tuned to get this tuning?"""
         distances = []
@@ -92,7 +93,7 @@ class Guitar: ### TBI: allow ukelele tunings?
 
     def pick(self, frets, pattern=None, *args, **kwargs):
         """plays the fretted notes as audio, arpeggiated into a melody.
-        accepts optional 'pattern' arg as list of string indices,
+        accepts optional 'pattern' arg as list of string indices, e.g. [1,4,3,4]
         indicating a picking pattern that changes the order of notes"""
         notes = self[frets]
         if pattern is not None:
@@ -102,16 +103,14 @@ class Guitar: ### TBI: allow ukelele tunings?
     def strum(self, frets, *args, **kwargs):
         """plays the fretted notes as audio, arpeggiated close together"""
         notes = self[frets]
-        # notes.play(*args, arpeggio=False, **kwargs)
         notes.play(*args, delay=0.05, duration=3, **kwargs)
 
     def chord(self, frets, *args, **kwargs):
         """plays the fretted notes as audio, summed into a chord"""
         notes = self[frets]
-        # notes.play(*args, arpeggio=False, **kwargs)
         notes.play(*args, duration=3, **kwargs)
 
-    ### TBI: distinguish between fretting from neck and fretting from capo
+    ### TBI: distinguish between fretting from nut and fretting from capo
     def fret(self, frets, from_capo=True):
         """simulates plucking each string according to the listed fret diagram, gets the
         resulting notes, and returns them as a NoteList."""
@@ -125,14 +124,14 @@ class Guitar: ### TBI: allow ukelele tunings?
                     # transpose the note that this string is tuned to upwards by f:
                     string_notes.append(self.open_strings[s] + f)
                 else:
-                    # from neck:
+                    # from nut: (unlikely anyone will ever use this)
                     if f in {0, self.capo}: # 'open', i.e. sounded from capo position
                         string_notes.append(self.open_strings[s])
                     else:
                         if f < self.capo:
                             raise Exception(f"Tried to fret on {f}, but capo on {self.capo} - can't fret beneath capo!")
                         else:
-                            # relative to neck position, not capo position:
+                            # increment relative to nut position, not capo position:
                             string_notes.append(self.tuned_strings[s] + f)
             elif f is None:
                 # don't sound this string
@@ -143,22 +142,30 @@ class Guitar: ### TBI: allow ukelele tunings?
         notes = NoteList(string_notes, strip_octave=False)
         return notes
 
-
     def __getitem__(self, frets):
         return self.fret(frets)
 
     def __contains__(self, item):
+        """a Guitar object 'contains' a note if that note is in its open strings"""
         return item in self.open_strings
 
     def __call__(self, frets):
         """accepts a fretting pattern, prints out sounded notes, detected chord,
-        and the chord diagram showing what note each string is playing"""
+            and the chord diagram showing what note each string is playing"""
         return self.query(frets, return_chord=False)
 
-        # TBI: find way to exclude frets from search? would need to modify precision_recall func probably
-    def find_key(self, include=None, exclude=None, string=None, frets=None, tonic=None, show_fretboard=True):
-        """for a specified string, and the specified fret numbers on that string
-        return the list of keys that those fretted notes are a match for"""
+    def find_key(self, include=None, exclude=None, tonic=None, display=True):
+        """accepts dict arguments for 'include' and 'exclude', both of the same form,
+            denoting which frets on which strings are respectively in and out of a key,
+            and tries to find a key that fits those constraints.
+        for example, the argument: include={1: [2,3,5], 2:[0,2]}
+            means that frets 2,3,5 on the 1st string, and frets 0,2 on the 2nd string
+            are to be considered 'in-key'
+        optionally accepts a 'tonic' argument, which can be a Note
+            or a dict with one key:value pair denoting string:fret,
+            which indicates that the key's tonic is known and restricts the
+            search only to keys that originate on that tonic.
+        """
 
         include_notes = []
         exclude_notes = []
@@ -172,18 +179,12 @@ class Guitar: ### TBI: allow ukelele tunings?
                         this_string_notes.append(self.tuned_strings[s-1]+f)
                     lst.extend(this_string_notes)
                     print(f'String {self.tuned_strings[s-1]}, frets {frets}: {this_string_notes}')
-            # else:
-            #     # fill by single string and its frets
-            #     # assert string is not None and frets is not None
-            #     assert 0 < string <= self.num_strings, f"This guitar has no string {string}"
-            #     include_notes = [self.tuned_strings[string-1]+f for f in frets]
-            #     print(f'String {self.tuned_strings[string-1]}, frets {frets}: {include_notes}')
-
 
         if tonic is not None:
-            if isinstance(tonic, int):
-                assert string is not None
-                tonic_note = (self.tuned_strings[string-1]+tonic).note
+            if isinstance(tonic, dict):
+                assert len(tonic) == 1, "if tonic arg is a dict, it must contain exactly one string:fret pair"
+                for s,fret in tonic.items(): # looks hacky but is the neatest way to unpack this
+                    tonic_note = (self.tuned_strings[s-1]+fret).note
             elif isinstance(tonic, str):
                 tonic_note = Note(tonic)
             elif isinstance(tonic, Note):
@@ -193,14 +194,17 @@ class Guitar: ### TBI: allow ukelele tunings?
         # dynamically adjust min_precision by the number of notes provided
         min_precision = len(include_notes) / 7
 
-        print(f'Requiring min_precision of: {min_precision}')
+        log(f'Requiring min_precision of: {min_precision}')
         matches = matching_keys(notes=include_notes, exclude=exclude_notes, min_precision=0, require_tonic=(tonic is not None), return_matches=True)
 
-        if show_fretboard:
+        if display:
             # show fretboard on the first 3 matches
             for m in list(matches.keys())[:3]:
-                print()
+                print() # i.e. newline
                 self.show_key(m)
+        else:
+            # just return the matches themselves
+            return matches
 
     def matching_chords(self, frets, *args, **kwargs):
         """analyses this set of frets and detects what chords they might represent"""
@@ -220,10 +224,10 @@ class Guitar: ### TBI: allow ukelele tunings?
         sounded_chord = self.most_likely_chord(frets)
         print(f'Detected chord: {sounded_chord}')
 
+        # construct Fretboard object for display:
         fret_ints = parsing.parse_out_integers(frets)
         mute = [s+1 for s in range(len(fret_ints)) if fret_ints[s] is None]
         string_contents = [(self.open_strings[s] + fret_ints[s]).chroma  if fret_ints[s] is not None  else None  for s in range(self.num_strings)]
-        ### TBI: capo support?
         fret_cells = {(s+1,f):string_contents[s] for s,f in enumerate(fret_ints) if (f != 0 and f is not None)}
         Fretboard(fret_cells, index=self.tuning, mute=mute, title=f'Frets: {frets}').disp(continue_strings=True)
 
@@ -265,6 +269,10 @@ class Guitar: ### TBI: allow ukelele tunings?
                             note_locs.append((s+1, next_loc+12))
         return note_locs
 
+
+    ### various methods for displaying various orpyus objects as frets:
+    ### (some copy/paste here but each method has its own requirements so be kind)
+
     def show_octavenote(self, note, max_fret=13, min_fret=0, preserve_accidental=True, **kwargs):
         if isinstance(note, str):
             note = OctaveNote(note, prefer_sharps=('#' in note) if preserve_accidental else None)
@@ -292,8 +300,25 @@ class Guitar: ### TBI: allow ukelele tunings?
             cells = {loc: note.chroma for loc in note_locs}
         Fretboard(cells, title=f'Note: {note.name} on tuning:{self.name}').disp(**kwargs)
 
-    def show_notes(self, notes, show_octave=True, max_fret=15, min_fret=0, preserve_accidental=True, **kwargs):
-        pass
+    def show_notes(self, notes, show_octave=True, max_fret=15, min_fret=0, title=None, **kwargs):
+        if not isinstance(notes, NoteList):
+            notes = NoteList(notes)
+        # make list of all the places where all these notes occur:
+        note_locs = []
+        for nt in notes:
+            note_locs.extend(self.locate_note(nt, min_fret=min_fret, max_fret=max_fret))
+        # populate dict of cells:
+        cells = {}
+        for loc in note_locs:
+            string, fret = loc
+            str_note = self.tuned_strings[string-1] + fret
+            # show octave if desired, otherwise just the note letter itself:
+            cells[loc] = str_note.name if show_octave else str_note.chroma
+
+        #### finalise:
+        if title is None:
+            title=f'Notes: {notes} on tuning:{self.name}'
+        Fretboard(cells, title=title).disp(**kwargs)
 
 
     def show_chord(self, chord, intervals_only=False, notes_only=False, max_fret=13, min_fret=0, preserve_accidental=True, title=None, show_index=True, **kwargs): # preserve accidentals?
@@ -452,20 +477,23 @@ class Guitar: ### TBI: allow ukelele tunings?
 
     def show(self, obj, *args, **kwargs):
         """wrapper around the show_note, show_chord, show_key etc. methods.
-        accepts an arbitrary object and calls the relevant method to show it"""
+            accepts an arbitrary object and calls the relevant method to show it,
+            with some string-parsing logic to try and understand intent"""
         from src.progressions import Progression, ChordProgression
+
+        # we will go down this list and see if the supplied object matches any of these classes:
         classes = [ Chord, AbstractChord,
                     Key, Scale,
-                    ChordProgression, Progression,
-                    Note, OctaveNote]
+                    ChordProgression, Progression, ChordList,
+                    Note, OctaveNote, NoteList]
         funcs = [self.show_chord, self.show_abstract_chord,
                  self.show_key, self.show_scale,
-                 self.show_chord_progression, self.show_progression,
-                 self.show_note, self.show_octavenote]
+                 self.show_chord_progression, self.show_progression, self.show_chord_progression,
+                 self.show_note, self.show_octavenote, self.show_notes]
         names = ['Chord', 'Chord',
                  'Key', 'Scale',
-                 'Progression', 'Progression',
-                 'Note', 'Note']
+                 'Progression', 'Progression', 'Chords',
+                 'Note', 'Note', 'Notes']
 
         found_type = False
         if not (isinstance(obj, str)): # for non strings, find the right class and function to use:
@@ -473,7 +501,7 @@ class Guitar: ### TBI: allow ukelele tunings?
                 if isinstance(obj, cls):
                     func(obj, *args, **kwargs)
                     break
-        else: # for strings,
+        else: # for strings, try and figure out what they could be by disambiguating information
             if 'chord' in obj.lower():
                 # could be something like 'Em chord' or 'Chord of F', so do a bunch of reps:
                 for rep in ['chord', 'Chord', 'of']:
@@ -502,6 +530,7 @@ class Guitar: ### TBI: allow ukelele tunings?
                 if not succeeded:
                     raise TypeError(f"Could not understand string input to Guitar.show: {obj}")
 
+    #### display methods:
     @property
     def name(self):
         """uses alias like 'standard' or 'dropD' if defined, otherwise spells out the tuning"""
@@ -513,32 +542,35 @@ class Guitar: ### TBI: allow ukelele tunings?
     def __str__(self):
         tuning_letters = [string.chroma for string in self.tuned_strings]
         tuning_str = ''.join(tuning_letters)
-        main_str = [f'Guitar | Tuning: {tuning_str} |']
+        lb, rb = self._brackets
+        main_str = [f'{lb}Guitar: {tuning_str}{rb}']
         if self.capo == 0:
-            return main_str[0]
+            return f'{lb}Guitar: {tuning_str}{rb}'
         else:
             capo_letters = [string.chroma for string in self.open_strings]
             capo_str = ''.join(capo_letters)
-            main_str.append(f'Capo on {self.capo}: {capo_str}')
-            return ' '.join(main_str)
+            return f'{lb}Guitar: {tuning_str}+{self.capo}: {capo_str}{rb}'
 
     def __repr__(self):
         return str(self)
 
+    _brackets = _settings.BRACKETS['Guitar']
 
 
-
+# some predefined common tunings:
 standard = eadgbe = Guitar()
 dadgad = Guitar('DADGAD')
 dadgbe = dropD = dropd = Guitar('DADGBE')
 
-# 'easy' chords to try and find for transposing song progressions:
-standard_open_chord_names = {'A', 'Am', 'A7', 'Am7', 'Amaj7',
-                             'B7', 'Bm7',
-                             'C', 'C7', 'Cmaj7', 'Csus2',
-                             'D', 'Dm', 'D7', 'Dm7', 'Dmaj7', 'Dsus4', 'Dsus2',
-                             'E', 'Em', 'E7', 'Em7', 'Emaj7', 'Esus4',
-                             'Fmaj7', # I still have trouble even with partial bars on Fmaj
-                             'G', 'G7', 'Gmaj7',
+# set of 'easy' open chords that can be played on standard tuning without barre:
+# (subjective and personal, but the main use is for the Progression.transpose_for_guitar method)
+standard_open_chord_names = {
+                'A', 'Am', 'A7', 'Am7', 'Amaj7', 'Asus2', 'Asus4',
+                 'B7', 'Bm7',
+                 'C', 'C7', 'Cmaj7', 'Csus2', 'Cadd9',
+                 'D', 'Dm', 'D7', 'Dm7', 'Dmaj7', 'Dsus2', 'Dsus4',
+                 'E', 'Em', 'E7', 'Em7', 'Emaj7', 'Esus4',
+                 'Fmaj7', # I still have trouble even with partial bars on Fmaj
+                 'G', 'G7', 'Gmaj7',
                             }
 standard_open_chords = set([Chord(c) for c in standard_open_chord_names])
