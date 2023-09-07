@@ -600,20 +600,22 @@ class Progression:
         log(f'For scale chords: {[(r,c.quality) for r,c in degree_chords]}')
         log(f'  Evidence for major scale: {major_evidence}')
         log(f'  Evidence for minor scale: {minor_evidence}')
-        if major_evidence >= minor_evidence:
-            log(f'    (inferred: natural major scale)\n')
-            return NaturalMajor
-        else:
-            log(f'    (inferred: natural minor scale)\n')
-            return NaturalMinor
+        inferred_scale = NaturalMajor if major_evidence >= minor_evidence else NaturalMinor
+        log(f'    (inferred: {inferred_scale})\n')
+        return inferred_scale
 
-    def analyse(self, display=False, ret=True):
+    def analyse(self, display=False, ret=True, roots=None):
         """shows the harmonic functions of the chords in this progression"""
         out = []
         from src.display import DataFrame
-        df = DataFrame(['Function', '', 'Deg1', '', 'Deg2', '',
-                         # 'Chd1', '', 'Chd2', '',
-                         'Distance', '', 'Cadence'])
+        if roots is None:
+            df = DataFrame(['Function', '', 'Deg1', '', 'Deg2', '',
+                             # 'Chd1', '', 'Chd2', '',
+                             'Distance', '', 'Cadence'])
+        else:
+            df = DataFrame(['Function', '', 'Deg1', '', 'Deg2', '',
+                             'Chd1', '', 'Chd2', '',
+                             'Distance', '', 'Cadence'])
         # sloppy for now: should be rolled into a dataframe from the Display module
         num1s, num2s, c1s, c2s, mvs, cads = [], [], [], [], [], []
         clean_numerals = self.as_numerals(marks=False, diacritics=False, sep='@').split('@')
@@ -625,15 +627,20 @@ class Progression:
             dist = str(self.root_movements[i].direction_str)
             cadence = self.root_movements[i].cadence
             cadence = cadence if (cadence != False) else ''
-            df.append([f, '  ', n1, arrow, n2, '  ',
-                        # ch1, arrow, ch2, ' ',
-                        dist, '  ', cadence])
-
+            if roots is None:
+                df.append([f, '  ', n1, arrow, n2, '  ',
+                            # ch1, arrow, ch2, ' ',
+                            dist, '  ', cadence])
+            else:
+                df.append([f, '  ', n1, arrow, n2, '  ',
+                            ch1, arrow, ch2, ' ',
+                            dist, '  ', cadence])
 
         if display:
-            print('\n' + str(self))
+            title = str(self.chords)
+            print('\n' + title)
             # border between title and df:
-            title_width = len(str(self))
+            title_width = len(title)
             df_width = df.total_width(up_to_row=None, header=False, margin_size=0)
             print('=' * max([title_width, df_width]))
             df.show(header=False, header_border=False, margin='')
@@ -664,6 +671,11 @@ class Progression:
     @property
     def numerals(self):
         return self.as_numerals()
+
+    @property
+    def simple_numerals(self):
+        """just raw upper/lowercase numerals, no modifiers or diacritics etc."""
+        return self.as_numerals(sep=None, marks=False, diacritics=False, modifiers=False)
 
     def in_key(self, key, **kwargs):
         """returns a ChordProgression with these chords over a specified Key object"""

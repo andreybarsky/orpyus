@@ -542,17 +542,23 @@ class ScaleChord(AbstractChord):
             else:
                 diacritic = _settings.DIACRITICS['chord_not_in_scale']
 
+
         # next, decide whether the numeral should be upper or lowercase:
         if self.quality.major_ish:
-            numeral = parsing.numerals_roman[root_factor].upper()
+            uppercase = True
         elif self.quality.minor_ish:
-            numeral = parsing.numerals_roman[root_factor].lower()
+            uppercase = False
         else:
-            # chords of ambiguous quality (sus chords etc) use the scale's quality:
-            if self.scale.quality.minor_ish:
-                numeral = parsing.numerals_roman[root_factor].lower()
-            else: # falling back on uppercase if even the SCALE is ambiguous:
-                numeral = parsing.numerals_roman[root_factor].upper()
+            # chords of ambiguous quality (sus chords etc) use their respective scale triad quality:
+            if self.scale.chord(self.scale_degree).quality.minor_ish:
+                uppercase = False
+            else:
+                uppercase = True # falling back on uppercase if even the scale triad is ambiguous:
+
+        if uppercase:
+            numeral = parsing.numerals_roman[root_factor].upper()
+        else:
+            numeral = parsing.numerals_roman[root_factor].lower()
 
         # get the chord suffix, but ignore any suffix that means 'minor'
         # because minor-ness is already communicated by the numeral's case
@@ -624,6 +630,15 @@ class ScaleChord(AbstractChord):
             key = self.scale.on_tonic(tonic_note)
             return KeyChord(root=root_note, factors=self.factors, inversion=self.inversion, key=key, degree=self.scale_degree)
 
+    @property
+    def scale_triad(self):
+        """as Chord.simplify(), but always simplifies to the parent scale's respective triad on this degree"""
+        return self.scale.chord(self.scale_degree, order=3)
+
+    def __hash__(self):
+        """ScaleChords hash depending on their chord hash as well as their scale and degree"""
+        return hash((self.factors, self.inversion, self.scale, self.scale_degree))
+
     def __str__(self):
         return self.name
 
@@ -636,8 +651,10 @@ class ScaleChord(AbstractChord):
         return f'{super().short_name} {self.simple_numeral}'
 
     def __repr__(self):
+        ### compact repr for ScaleChord class since it turns up in markov models etc. a lot:
         # in_str = 'not ' if not self.in_scale else ''
-        return f'{self.name} {self.intervals} ({self.simple_numeral} of: {self.scale._marker}{self.scale.name})'
+        # return f'{self.name} {self.intervals} ({self.simple_numeral} of: {self.scale._marker}{self.scale.name})'
+        return f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
 
 ### Scale class that spans diatonic scales, subscales, blues scales, octatonic scales and all the rest:
 

@@ -1805,6 +1805,11 @@ class ChordList(list):
         rotated_items = rotate_list(list(self), N)
         return ChordList(rotated_items)
 
+    @property
+    def roots(self):
+        """returns the root notes of the chords in this list, in order"""
+        return NoteList([ch.root for ch in self])
+
     def root_degrees_in(self, key):
         from src.keys import Key
         if isinstance(key, str):
@@ -1864,6 +1869,23 @@ class ChordList(list):
         play_melody(chord_waves, delay=chord_delay, falloff=falloff, block=block)
         # prog_wave = arrange_melody(chord_waves, delay=delay, **kwargs)
         # play_wave(prog_wave, block=block)
+
+    @property
+    def diagram(self):
+        """wrapper around Guitar.standard.show_chord for each chord in this list"""
+        from . import guitar
+        for ch in self:
+            guitar.standard.show_chord(ch)
+
+    def on_guitar(self, tuning='EADGBE'):
+        """displays these chords on a guitar in specified tuning"""
+        from . import guitar
+        if tuning == 'EADGBE':
+            g = guitar.standard
+        else:
+            g = guitar.Guitar(tuning=tuning)
+        for ch in self:
+            g.show_chord(ch)
 
 # convenience alias:
 Chords = ChordList

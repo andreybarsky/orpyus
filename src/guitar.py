@@ -292,6 +292,10 @@ class Guitar: ### TBI: allow ukelele tunings?
             cells = {loc: note.chroma for loc in note_locs}
         Fretboard(cells, title=f'Note: {note.name} on tuning:{self.name}').disp(**kwargs)
 
+    def show_notes(self, notes, show_octave=True, max_fret=15, min_fret=0, preserve_accidental=True, **kwargs):
+        pass
+
+
     def show_chord(self, chord, intervals_only=False, notes_only=False, max_fret=13, min_fret=0, preserve_accidental=True, title=None, show_index=True, **kwargs): # preserve accidentals?
         """for a given Chord object (or name that casts to Chord),
         show where the notes of that chord fall on the fretboard, starting from open."""

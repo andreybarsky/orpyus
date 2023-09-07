@@ -661,7 +661,7 @@ relative_co5_distances = IntervalList([0, 5, 2, 3, 4, 1, 6, 1, 4, 3, 2, 5])
 
 
 
-def matching_keys(chords=None, notes=None, tonic=None,
+def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None,
                   exact=False, exhaustive=None, modes=False, scale_lengths=[7],
                   min_precision=0, min_recall=0.9,
                   min_likelihood=0.7, max_likelihood=1.0, max_rarity=None, min_rarity=None,
@@ -678,6 +678,10 @@ def matching_keys(chords=None, notes=None, tonic=None,
         if None, becomes set by default to True for notelists and False for chordlists.
     tonic: default None, but can be set to a note (or list of notes) to restrict searches
         to keys only with that tonic. (overrides 'exhaustive')
+    tonic_guess: default None, but if provided, will prioritise keys with the specified tonic,
+        unless none are found at all, in which case ignore the guess.
+        incompatible with 'tonic' arg above - the difference is that 'tonic' will
+        return an empty list if no tonic-matching keys are found.
     natural_only: if True, only scores natural major and minor keys.
     modes: if True, returns all named modes of all matches.
         if False, only returns base keys and their relative keys.
@@ -751,6 +755,7 @@ def matching_keys(chords=None, notes=None, tonic=None,
 
     #### TONIC RESTRICTION
     if tonic is not None:
+        assert tonic_guess is None, f"Incompatible 'tonic' and 'tonic_guess' args provided to function matching_keys"
         # set explicit tonics only
         possible_tonics = NoteList(tonic).unique()
 
@@ -848,6 +853,10 @@ def matching_keys(chords=None, notes=None, tonic=None,
         #         if key.relative.likelihood >= min_likelihood and key.relative.consonance >= min_consonance:
         #             relative_scores[key.relative] = scores
         # filtered_scores.update(relative_scores)
+
+    # filter by tonic guess if needed:
+    if tonic_guess is not None:
+        pass ### TBI
 
     # sort matches according to desired order:
     sort_funcs = {'length': lambda x: len(x),

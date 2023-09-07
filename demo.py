@@ -15,4 +15,5 @@ from src.scales import *
 from src.keys import *
 from src.guitar import *
 from src.progressions import *
+from src.harmony import *
 from src.audio import *
