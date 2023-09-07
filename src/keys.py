@@ -12,23 +12,22 @@ from pdb import set_trace
 
 class Key(Scale):
     """a Scale that is also rooted on a tonic, and therefore associated with a set of notes"""
-    # def __init__(self, scale_name=None, intervals=None, tonic=None, notes=None, mode=1, chromatic_intervals=None, chromatic_notes=None, stacked=True, alias=None):
-    """Initialised in one of three ways:
-
-    1. from 'notes' arg, as a list or string of Notes or Note-like objects,
-    in which case we parse the tonic and intervals from there
-
-    2. from 'name' arg, when as a proper Key name (like "C#" or "Bb harmonic minor" or "Gbb lydian b5"),
-        in which case we extract the tonic note from the string and initialise the rest as with Scale class.
-
-    3. from 'tonic' arg, as a Note or string that casts to Note,
-        in combination with any other args that would initialise a valid Scale object.
-        i.e. one of 'scale_name' or 'intervals'."""
 
     def __init__(self, name=None, intervals=None, factors=None,
                     alterations=None, chromatic_intervals=None,
                     notes=None, chromatic_notes=None, tonic=None,
                     mode=1):
+        """a Key can be Initialised in one of three ways:
+
+        1. from 'notes' arg, as a list or string of Notes or Note-like objects,
+            from which we parse the tonic and intervals
+
+        2. from 'name' arg, when as a proper Key name (like "C#" or "Bb harmonic minor" or "Gbb lydian b5"),
+            in which case we extract the tonic note from the string and initialise the rest as with Scale class.
+
+        3. from 'tonic' arg, as a Note or string that casts to Note,
+            in combination with any other args that would initialise a valid Scale object.
+            i.e. 'intervals' or 'factors', or a valid scale name for 'name'."""
 
         name, intervals, factors, notes, tonic = self._reparse_key_args(name, intervals, factors, notes, tonic)
 
@@ -187,11 +186,8 @@ class Key(Scale):
             new_notes = [self.tonic]
 
             which_chromatic = self.which_intervals_chromatic()
-            # non_chromatic_notes = [n for i,n in enumerate(self.notes) if not which_chromatic[i]]
 
-            # for d in self.degrees[1:]:
             for i,n in enumerate(self.notes[1:]):
-                # n = non_chromatic_notes[int(d)-1]
                 if not which_chromatic[i]:
                     # degree note
                     if n.name == next_nat:
@@ -216,7 +212,6 @@ class Key(Scale):
                     # chromatic note, just append without changing
                     new_notes.append(n)
             # combine with existing chromatic notes (which are not changed)
-            # new_notes = [new_degree_notes[i]  if not which_chromatic[i]  else self.notes[i] for i in range(len(self.notes))]
             self.notes = NoteList(new_notes)
 
     def _set_note_mappings(self):
@@ -229,8 +224,6 @@ class Key(Scale):
         self.degree_notes = ModDict({d: n for d,n in zip(self.degrees, non_chromatic_notes)}, index=1, raise_values=False)
         self.factor_notes = ModDict({f: n for f,n in zip(self.factors, non_chromatic_notes)}, index=1, raise_values=False)
         self.interval_notes = ModDict({iv:n for iv,n in zip(self.intervals, self.notes)}, index=0, max_key=11, raise_values=False)
-        # self.degree_notes = {d: self.tonic + iv for d,iv in self.degree_intervals.items()}
-        # self.factor_notes = {f: self.tonic + iv for f,iv in self.factor_intervals.items()}
 
         self.note_degrees = reverse_dict(self.degree_notes)
         self.note_factors = reverse_dict(self.factor_notes)
@@ -333,20 +326,14 @@ class Key(Scale):
         else:
             return chords # already in sorted order by valid_chords_on method
 
-    def clockwise(self, value=1):
+    def clockwise(self, steps=1):
         """fetch the next key from clockwise around the circle of fifths,
-        or if value>1, go clockwise that many steps"""
-        return Key(factors=self.factors, tonic=self.tonic + (7*value))
-        # reference_key = self if self.major else self.relative_major
-        # new_co5s_pos = (co5s_positions[reference_key] + value) % 12
-        # # instantiate new key object: (just in case???)
-        # new_key = co5s[new_co5s_pos]
-        # new_key = new_key if self.major else new_key.relative_minor
-        # # set_trace(context=30)
-        # return Key(new_key.name)
+        or if steps>1, go clockwise that many steps"""
+        return Key(factors=self.factors, tonic=self.tonic + (7*steps))
 
-    def counterclockwise(self, value=1):
-        return self.clockwise(-value)
+    def counterclockwise(self, steps=1):
+        return self.clockwise(-steps)
+    anticlockwise = counterclockwise # convenience alias
 
     def mode(self, N):
         """as Scale.mode, but returns a Key with transposed tonics too.
@@ -357,32 +344,17 @@ class Key(Scale):
         mode_tonic = self.degree_notes[N]
         return scale_mode.on_tonic(mode_tonic)
 
-    # @property
-    # def modes(self):
-    #     return [self.rotate(m) for m in range(1,8)]
-
-
-    # @property
-    # def parallel_modes(self):
-    #     """the 'parallel' modes of a Key are all its modes that start on the same tonic"""
-    #     return [self.rotate(m) for m in range(1,8)]
-
-
     def get_modes(self):
         """the modes of a Key are the relative keys that share its notes but start on a different tonic
         i.e. modes of C major are D dorian, E phrygian, etc."""
         return [self.mode(n) for n in range(2,self.order+1)]
-        # return [Key(notes=Key('C').notes.rotate(i)) for i in range(1,8)]
+
     @property
     def modes(self):
         return self.get_modes()
-    # def subscale(self, degrees=None, omit=None, chromatic_intervals=None, name=None):
-    #     """as Scale.subscale, but adds this key's tonic as well and initialises a Subkey instead"""
-    #     return Subkey(parent_scale=self, degrees=degrees, omit=omit, chromatic_intervals=chromatic_intervals, assigned_name=name, tonic=self.tonic) # [self[s] for s in degrees]
 
     def subscale(self, keep=None, omit=None):
         """as Scale.subscale, but returns a Key instead (a subkey?)"""
-        # should we leave subscale as is and implement Key.subkey instead?
         sub = Scale.subscale(self, keep=keep, omit=omit)
         return sub.on_tonic(self.tonic)
 
@@ -397,6 +369,9 @@ class Key(Scale):
             return self.compute_best_pentatonic(preserve_character=True)
 
     def compute_pentatonics(self, *args, display=True, **kwargs):
+        """as Scale.compute_pentatonics, but returns Keys instead of Scales.
+            tries to find pentatonic subkeys of this key that preserve scale character
+            while minimising dissonant pairwise intervals"""
         sorted_pentatonic_scales = Scale.compute_pentatonics(self, *args, display=False, **kwargs)
         if display:
             from .display import DataFrame
@@ -505,6 +480,15 @@ class Key(Scale):
         else:
             raise TypeError(f'Cannot add Key with {type(other)}')
 
+    def __sub__(self, other):
+        """Subtraction over Keys:
+        1. Subtraction with interval (or int) transposes onto a new tonic."""
+        if isinstance(other, (Interval, int)):
+            new_tonic = self.tonic - other
+            return Key(tonic=new_tonic, factors=self.factors)
+        else:
+            raise TypeError(f'Cannot subtract Key with {type(other)}')
+
     def __eq__(self, other):
         if isinstance(other, Key):
             return self.notes == other.notes
@@ -520,7 +504,12 @@ class Key(Scale):
         so this method is also inherited by all Scale subclasses"""
         from .guitar import Guitar
         Guitar(tuning).show_key(self, **kwargs)
-    on_guitar = show
+    on_guitar = show # convenience alias
+
+    @property
+    def fretboard(self):
+        return self.show()
+    diagram = fretboard
 
     def play(self, *args, **kwargs):
         # plays the notes in this key (we also add an octave over root on top for resolution)
@@ -546,7 +535,8 @@ class Key(Scale):
             if not isinstance(degrees, ChordList):
                 degrees = ChordList(degrees)
             return ChordProgression(degrees, key=self)
-        # return Progression(*degrees, scale=self.scale, order=order).on_tonic(self.tonic)
+
+    #### display methods:
 
     @property
     def suffix(self):
@@ -559,7 +549,6 @@ class Key(Scale):
             return 'm'
         else:
             return ' ' + self.scale_name
-
 
     @property
     def name(self):
@@ -638,7 +627,6 @@ class KeyChord(Chord, ScaleChord):
         return f'{self.name} ({self.simple_numeral})'
 
     def __repr__(self):
-        # in_str = 'not ' if not self.in_scale else ''
         return f'{self.name} {self.notes} ({self.simple_numeral} of: {self.key._marker}{self.key.name})'
 
     # overwrites Chord.from_cache:
@@ -648,18 +636,18 @@ class KeyChord(Chord, ScaleChord):
 
 
 # natural notes in order of which are flattened/sharpened in a key signature:
+# (also implicitly contains circle-of-fifths ordering)
 flat_order = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
 sharp_order = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
 
 relative_co5_distances = IntervalList([0, 5, 2, 3, 4, 1, 6, 1, 4, 3, 2, 5])
 # this list looks funny, but it's the circle-of-fifths distance for each key with tonic
-# N+i, with respect to the key that has tonic N.
+# N+i, with respect to the key that has tonic N, in semitones.
 # e.g. co5_distance between E and D is based on the interval between E and D,
 # i.e. Note('E') - Note('D'), which is 2, or Note('D') - Note('E'), which is 10
 # so the co5_distance is relative_co5_distances[2] (or [10]), which either way is 2.
-# this works for any diatonic key, and is just a property of how the notes are arranged
-
-
+# this works for any diatonic key, and is just a property of how the notes are arranged,
+# which is why it's hardcoded instead of being computed at init
 
 def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None,
                   exact=False, exhaustive=None, modes=False, scale_lengths=[7],

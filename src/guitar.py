@@ -18,7 +18,7 @@ class String(OctaveNote):
 
 tuning_note_names = {   # names/aliases for common tunings:
         'standard': ( 'E2',  'A2',  'D3',  'G3',  'B3',  'E4' ),
-              'Eb': ( 'Eb2', 'Ab2', 'Db3', 'Gb3', 'Bb3', 'Eb4'), # the GnR tuning
+       'half-step': ( 'Eb2', 'Ab2', 'Db3', 'Gb3', 'Bb3', 'Eb4'), # the GnR tuning
            'dropD': ( 'D2',  'A2',  'D3',  'G3',  'B3',  'E4' ),
            'dropC': ( 'C2',  'G2',  'C3',  'F3',  'A3',  'D4' ),
            'dropB': ( 'B1',  'Gb2', 'B2',  'E3',  'Ab3', 'Db4'),

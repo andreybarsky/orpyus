@@ -1,3 +1,6 @@
+#### experimental/unfinished module
+#### please do not judge the quality of my code by this file in particular
+
 from .notes import OctaveNote
 from .util import log
 

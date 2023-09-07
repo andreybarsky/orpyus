@@ -641,13 +641,8 @@ class IntervalList(list):
     def __sub__(self, other):
         """subtracts a scalar from each interval in this list,
         or accepts an iterable of scalars and performs point-wise subtraction."""
-        # if isinstance(other, (int, Interval)):
-        #     return IntervalList([i - other for i in self])
-        # elif isinstance(other, (list, tuple)):
-        #     assert len(other) == len(self), f'IntervalLists can only be subtracted with scalars or with other iterables of the same length'
-        #     return IntervalList([i - j for i,j in zip(self, other)])
-        # else:
-        #     raise TypeError(f'IntervalLists can only be subtracted with ints, Intervals, or iterables of either, but got type: {type(other)}')
+        if isinstance(other, (list, tuple)):
+            return IntervalList([iv - other_item for iv,other_item in zip(self, other)])
         return self + (-other)
 
     def __isub__(self, other):
@@ -820,10 +815,6 @@ class IntervalList(list):
         ascending = rotated.make_ascending()
         # then recentre by subtracting by the first interval:
         recentred = ascending - ascending[0]
-        # positive = abs(recentred) # inverts any negative intervals to their positive inversions
-        # inverted = positive.unique().sorted()
-        # inverted = recentred.flatten()   # inverts negative intervals to their correct values
-        # inverted = IntervalList(list(set([~i if i < 0 else i for i in recentred]))).sorted()
         return recentred
 
     def stack(self):
@@ -1011,22 +1002,6 @@ class IntervalList(list):
 # quality-of-life alias:
 Intervals = IntervalList
 
-# # from a list of intervals-from-tonic (e.g. a key specification), get the corresponding stacked intervals:
-# def stacked_intervals(tonic_intervals):
-#     stack = [tonic_intervals[0]]
-#     steps_traversed = 0
-#     for i, interval in enumerate(tonic_intervals[1:]):
-#         prev_interval_value = stack[-1].value
-#         next_interval_value = interval.value - prev_interval_value- steps_traversed
-#         steps_traversed += prev_interval_value
-#         stack.append(Interval(next_interval_value))
-#     return stack
-# # opposite operation: from a list of stacked intervals, get the intervals-from-tonic:
-# def intervals_from_tonic(interval_stack):
-#     tonic_intervals = [interval_stack[0]]
-#     for i in interval_stack[1:]:
-#         tonic_intervals.append(tonic_intervals[-1] + i)
-#     return tonic_intervals
 
 # which intervals are considered perfect/major:
 # perfect_intervals = {0, 5, 7}
@@ -1095,13 +1070,7 @@ allowable_degree_intervals = ModDict({
                 7: [9,10,11],
                 }, index=1, raise_values=True, raise_by=12)
 
-# # defaults of degrees in higher octaves, just in case:
-# higher_defaults = {k+(7*o):v+(12*o) for k,v in default_degree_intervals.items() for o in range(1,3)}
-# default_degree_intervals.update(higher_defaults)
-
-
 # interval aliases:
-
 Unison = PerfectFirst = Perfect1st = Perfect1 = Per1 = Per1st = P1 = Rt = Interval(0)
 
 MinorSecond = MinSecond = Minor2nd = Minor2 = Min2 = Min2nd = m2 = Interval(1)

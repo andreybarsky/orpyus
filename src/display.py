@@ -2,40 +2,32 @@ from . import parsing, _settings
 from .util import log
 import math
 
-class Keyboard:
-    ...
-    # example:
-    # | C  Db  D Eb   E   F  Gb  G  Ab  A Ab   B   C  Db  D Eb   E   F  Gb  G  Ab  A Ab   B   C |
-    # |░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|
-    # |░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|
-    # |░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|
-    # |░░░░░|░░░░░|░░░░░|░░░░░|░░░░░░|░░░░░|░░░░░|░░░░░|░░░░░|░░░░░|░░░░░|░░░░░░|░░░░░|░░░░░|░░░|
-    # | C  Db  D Eb   E   F  Gb  G  Ab  A Ab   B   C  Db  D Eb   E   F  Gb  G  Ab  A Ab   B   C |
-
-    # □■
+#### this module handles ASCII display outputs
+#### for e.g. showing chord diagrams in console
 
 class Fretboard:
-    ### a guitar fretboard display class that is initialised with its data
-    ### and then called to display that data with some display parameters
+    """ a guitar fretboard display class that is initialised with its data
+    and then called to display that data with some display parameters as ASCII
 
-    # example:
-    ### open chord:
-    #        E |---|---|---|--
-    #        B | C |---|---|--
-    #        G |---|---|---|--
-    #        D |   | E |---|--
-    #        A |   |   | C |--
-    #        E X   |   |   |--
-    #            1   2   3
-    #
-    #        ### high chord: x5453x
-    #        E --|---|---|---|--
-    #        B   | C |---|---|--
-    #        G   |   |   | C |--
-    #        D   |   | F#|---|--
-    #        A   |   |   | D |--
-    #        E X |   |   |   |--
-    #              3   4   5
+    nut display is different depending on where min_fret is cut off
+    for example, open chord: 'x32010'
+           E ‖---|---|---|--
+           B ‖ C |---|---|--
+           G ‖---|---|---|--
+           D ‖   | E |---|--
+           A ‖   |   | C |--
+           E X   |   |   |--
+               1   2   3
+
+    or high chord: 'x5453x'
+           E --|---|---|---|--
+           B   | C |---|---|--
+           G   |   |   | C |--
+           D   |   | F#|---|--
+           A   |   |   | D |--
+           E X |   |   |   |--
+                 3   4   5
+    """
 
     def __init__(self, cells, index='EADGBE', highlight=None, mute=None, open=None, title=None, num_strings=6):
         """args:
@@ -127,7 +119,7 @@ class Fretboard:
         hl_left, hl_right = highlight_chars
 
         if start_fret == 1:
-            open_leftborder    = '‖'
+            open_leftborder    = '‖' # the nut
             played_leftborder  = '‖'
             muted_leftborder   = 'X'
             footer_leftborder   = ' ' * (index_width-1)
@@ -494,3 +486,19 @@ def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
         df.append(df_row)
 
     df.show(max_rows=max_results, **kwargs)
+
+
+
+class Keyboard:
+    pass
+    ### TBI, need to work out a nice way to present this
+
+    # example:
+    # | C  Db  D Eb   E   F  Gb  G  Ab  A Ab   B   C  Db  D Eb   E   F  Gb  G  Ab  A Ab   B   C |
+    # |░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|
+    # |░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|
+    # |░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░|▓▓▓|░░░|░░░|▓▓▓|░░|▓▓▓|░|▓▓▓|░░░|░░░|
+    # |░░░░░|░░░░░|░░░░░|░░░░░|░░░░░░|░░░░░|░░░░░|░░░░░|░░░░░|░░░░░|░░░░░|░░░░░░|░░░░░|░░░░░|░░░|
+    # | C  Db  D Eb   E   F  Gb  G  Ab  A Ab   B   C  Db  D Eb   E   F  Gb  G  Ab  A Ab   B   C |
+
+    # □■

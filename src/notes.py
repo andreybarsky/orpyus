@@ -12,31 +12,36 @@ from . import _settings
 
 import math
 
-# relative values (positions within scale) with respect to C major, starting with 0=C:
-# parsing.note_positions = {note_name:i for i, note_name in enumerate(note_names['generic'])}
-# parsing.note_positions.update({note_name:i for i, note_name in enumerate(note_names['flat'])})
-# parsing.note_positions.update({note_name:i for i, note_name in enumerate(note_names['sharp'])})
-#
-# parsing.note_positions.update({note_name:i for i, note_name in enumerate(note_names['flat_unicode'])})
-# parsing.note_positions.update({note_name:i for i, note_name in enumerate(note_names['sharp_unicode'])})
-# parsing.note_positions.update({note_name:i for i, note_name in enumerate(note_names['natural_unicode'])})
-
-# get note name string from position in octave:
-def preferred_name(pos, prefer_sharps=_settings.DEFAULT_SHARPS):
-    """Gets the note name for a specific position according to preferred sharp/flat notation,
-    or just the natural note name if a a white note"""
-    # if we've accidentally been given an Interval object for position, we quietly parse it:
-    if isinstance(pos, Interval):
-        pos = pos.value
-    name = parsing.preferred_note_names[fl][pos] if not prefer_sharps else parsing.preferred_note_names[sh][pos]
-    return name
-
 
 class Note:
     """a note/chroma/pitch-class defined in the abstract,
     i.e. not associated with a specific note inside an octave,
     such as: C or D#"""
     def __init__(self, name=None, position=None, prefer_sharps=None, case_sensitive=True, strip_octave=False):
+        """a Note can be initialised in one of two ways:
+            1. by passing to 'name' a valid note name, such as C or D# or Ebb
+            2. by passing to 'position' an integer between 0 and 11 (inclusive),
+                denoting a semitone offset from C.
+                i.e. position 0 is C, 1 is C#, 2 is D... 11 is B
+
+        optional args:
+        'prefer_sharps':
+            if True, this note will be displayed with sharps where applicable.
+            if False, will be displayed with flats where applicable.
+            if None (default), will infer sharp/flat preference from 'name' arg,
+                or else fall back on global default (defined in _settings module)
+        'case_sensitive':
+            if True (default), requires note names to be capitalised and will
+                throw an error otherwise.
+            if False, will accept lowercase chromas like 'c#' as well as ambiguous
+                names like 'bb'
+        'strip_octave':
+            if True, will ignore integers in the note name that may
+                have been supplied by mistake.
+                e.g. Note('C5') will be interpreted as Note('C')
+            if False (default), will throw an error, as this looks like a mistaken
+                attempt to initialise an OctaveNote instead of a Note.
+        """
 
         if isinstance(name, Note):
             # accept re-casting: just take the input note's name
@@ -46,7 +51,6 @@ class Note:
             # which is fine, silently correct:
             position = name
             name = None
-
 
         # detect if we've been fed an OctaveNote name by accident:
         if name is not None and name[-1].isdigit():
@@ -60,8 +64,7 @@ class Note:
         self.chroma, self.position, self.prefer_sharps = self._parse_input(name, position, prefer_sharps, case_sensitive)
         # 'chroma' is the string denoting pitch class: ('C#', 'Db', 'E', etc.)
 
-
-
+        # store sharp and flat names of this note in case they are needed:
         self.sharp_name = preferred_name(self.position, prefer_sharps=True)
         self.flat_name = preferred_name(self.position, prefer_sharps=False)
 
@@ -148,13 +151,6 @@ class Note:
         else:
             raise Exception(f'Note init from cache must include one of "name" or "position"')
 
-    ## private utility functions:
-
-    #### removed due to caching interaction
-    # def _set_sharp_preference(self, prefer_sharps):
-    #     """modify sharp preference in place"""
-    #     self.prefer_sharps = prefer_sharps
-    #     self.chroma = preferred_name(self.position, prefer_sharps=self.prefer_sharps)
 
     #### magic methods and note constructors:
     def __add__(self, other):
@@ -204,11 +200,11 @@ class Note:
         """instantiates an OctaveNote object corresponding to this Note played in a specific octave"""
         return OctaveNote(f'{self.chroma}{int(octave)}')
 
-    # # quick accessor for in_octave method defined above:
-    # def __getitem__(self, octave):
-    #     """returns OctaveNote in the specified octave"""
-    #     assert isinstance(octave, int)
-    #     return self.in_octave(octave)
+    # quick accessor for in_octave method defined above:
+    def __getitem__(self, octave):
+        """returns OctaveNote in the specified octave"""
+        assert isinstance(octave, int)
+        return self.in_octave(octave)
 
     ## comparison operators:
     def __eq__(self, other):
@@ -258,31 +254,41 @@ class Note:
     def natural(self):
         return self.is_natural()
 
-    @property
-    def properties(self):
-        """Describe all the useful properties this Note has"""
+    def summary(self):
+        """list all the properties this Note has"""
 
-        prop_str = """<{str(self)}
+        prop_str = f"""
+        {str(self)}
         name: {self.name}
         position: {self.position}
         sharp preference: {self.prefer_sharps}
         type: {type(self)}
-        id: {id(self)}>"""
-        return prop_str
+        id: {id(self)}"""
+        print(prop_str)
 
-    def summary(self):
-        """Prints all the properties of this Note object"""
-        print(self.properties)
+    @property
+    def properties(self):
+        """print all the properties of this Note object"""
+        return self.summary()
 
-    ## chord constructors:
-    def chord(self, arg='maj'):
+    ## chord constructor:
+    def chord(self, modifier=None, intervals=None):
         """instantiate Chord object by parsing either:
-        1) a string denoting a Chord quality, like 'major' or 'minor' or 'dom7'
+        1) a string denoting a Chord modifier, like 'major' or 'minor' or 'dom7'
         2) an iterable of semitone intervals relative to this Note as root
         in the exact same way as Chord.__init__ (we pass this arg there directly)"""
-
         from src.chords import Chord
-        return Chord(self.chroma + arg)
+        if modifier is None:
+            if intervals is None:
+                # major by default:
+                return Chord(root=self)
+            else:
+                return Chord(root=self, intervals=intervals)
+        elif modifier is not None:
+            if isinstance(modifier, str):
+                return Chord(self.chroma + modifier)
+            elif isinstance(modifier, ChordModifier):
+                return Chord(self.chroma, modifiers=modifier)
 
     def _wave(self, duration, falloff=True, **kwargs):
         """Outputs a sine wave corresponding to this note,
@@ -291,19 +297,14 @@ class Note:
         # non-OctaveNotes have no pitch defined,
         # so instantiate a child OctaveNote in default octave=4 and return its wave method instead:
         return self[4]._wave(duration=duration, falloff=falloff, **kwargs)
-        # wave = sine_wave(freq=wave_note.pitch, duration=duration)
-        # if falloff:
-        #     wave = exp_falloff(wave, **kwargs)
-        # return wave
 
-    def play(self, duration=3, falloff=True):
-        # from audio import play_wave
-        return self[4].play(duration=duration, falloff=falloff)
-        # wave = self._wave(duration=duration, falloff=falloff)
-        # play_wave(wave)
+
+    def play(self, duration=3, octave=4, type='KS', falloff=True):
+        """plays this Note as audio in a desired octave, 4 by default"""
+        return self.in_octave(octave).play(duration=duration, type=type, falloff=falloff)
 
     def __str__(self):
-        # e.g. is of form: '♩C#'
+        # e.g. '♩C#'
         return f'{self._marker}{self.name}'
 
     def __repr__(self):
@@ -314,11 +315,11 @@ class Note:
 
 
 
-#### subclass for specific notes on keyboard
+#### subclass for specific notes at specific pitches
 class OctaveNote(Note):
     """a note in a specific octave, rounded to twelve-tone equal temperament, such as C4 or D#2.
 
-    this class functions as a Note in every respect,
+    this class inherits everything from Note,
     except it also has .octave, .value, .pitch attrs defined on top,
     and its addition/subtraction operators respect octave/value as well as position.
     """
@@ -335,8 +336,6 @@ class OctaveNote(Note):
         self.chroma, self.value, self.pitch, self.prefer_sharps = self._parse_input(name, value, pitch, prefer_sharps)
         # compute octave, position, and name:
         self.octave, self.position = conv.oct_pos(self.value)
-
-        # self.prefer_sharps = prefer_sharps
 
     #### main input/arg-parsing private method:
     @staticmethod
@@ -366,8 +365,6 @@ class OctaveNote(Note):
 
         ### the following block defines: chroma, value, and pitch
         if name is not None:
-            # log(f'Initialising OctaveNote with name: {name}')
-
             # detect if sharp or flat:
             if prefer_sharps is None:
                 # if no preference is set then we infer from the name argument supplied
@@ -398,13 +395,6 @@ class OctaveNote(Note):
             octave, position = conv.oct_pos(value)
             chroma = preferred_name(position, prefer_sharps=prefer_sharps)
         return chroma, value, pitch, prefer_sharps
-
-    #### removed due to caching interaction
-    # ## private utility function:
-    # def _set_sharp_preference(self, preference):
-    #     """modify sharp preference in place"""
-    #     self.prefer_sharps = preference
-    #     self.chroma = preferred_name(self.position, prefer_sharps=self.prefer_sharps)
 
     #### operators & magic methods:
     def __add__(self, interval):
@@ -464,27 +454,6 @@ class OctaveNote(Note):
         """returns the parent class Note object
         associated with this OctaveNote"""
         return Note.from_cache(self.chroma)
-
-    # ## ChordVoicing constructor (TBI)
-    # def chord(self, *args):
-    #     """instantiate ChordVoicing object by parsing either:
-    #     1) a string denoting a Chord quality, like 'major' or 'minor' or 'dom7'
-    #     2) a list of semitone intervals relative to this Note as root
-    #     in the exact fashion as ChordVoicing.__init__, since we pass our args there directly"""
-    #
-    #     from chords import ChordVoicing # specific chord subclass defined on positions and octaves
-    #     return ChordVoicing(self, *args)
-        # # case 1:
-        # if len(args) == 1 and isinstance(args[0], str):
-        #     quality = args[0]
-        #     return chords.ChordVoicing(self.name, quality, octave=self.octave)
-        #
-        # # case 2:
-        # else:
-        #     intervals = args
-        #     # positions = [root] + [(self + interval).position for interval in intervals]
-        #     return chords.ChordVoicing(self.name, intervals, octave=self.octave)
-
 
 
     #### utility methods for name-value-pitch conversion
@@ -570,10 +539,9 @@ class OctaveNote(Note):
         wave = synth_wave(freq=self.pitch, duration=duration, type=type, falloff=falloff, cache=cache)
         return wave
 
-    def play(self, duration=2, falloff=True, block=False):
+    def play(self, duration=2, type='KS', falloff=True, block=False):
         from .audio import play_wave
-        # return self[4].play(duration=duration, falloff=falloff)
-        wave = self._wave(duration=duration, falloff=falloff)
+        wave = self._wave(duration=duration, type=type, falloff=falloff)
         play_wave(wave, block=block)
 
     @property
@@ -785,16 +753,6 @@ class NoteList(list):
                 # append the next ascending OctaveNote of that chroma:
                 octavenotes.append(octavenotes[-1].next(note.chroma))
 
-        # if (auto_octave) and (octavenotes[-1].octave > max_octave):
-            # keep the chord below c5 if it's ended up too high:
-
-            ### TBI: sort out what I was trying to do here
-            # octave_shift = int(octavenotes[-1] - max_octave)
-            # if octavenotes[0] - (12*octave_shift) < min_octave:
-            #     raise ValueError(f"NoteList's notes span too great of a pitch range: {octave_shift} octaves exceeds min={min_octave} and max={max_octave}")
-
-            # octavenotes = [n - (12*octave_shift) for n in octavenotes]
-
         return octavenotes
 
     def matching_chords(self, *args, **kwargs):
@@ -867,6 +825,17 @@ class NoteList(list):
         return str(self)
 
     _brackets = _settings.BRACKETS['NoteList']
+
+
+# get note name string from position in octave:
+def preferred_name(pos, prefer_sharps=_settings.DEFAULT_SHARPS):
+    """Gets the note name for a specific position according to preferred sharp/flat notation,
+    or just the natural note name if a a white note"""
+    # if we've accidentally been given an Interval object for position, we quietly parse it:
+    if isinstance(pos, Interval):
+        pos = pos.value
+    name = parsing.preferred_note_names[fl][pos] if not prefer_sharps else parsing.preferred_note_names[sh][pos]
+    return name
 
 # quality-of-life alias:
 Notes = NoteList
