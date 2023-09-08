@@ -94,12 +94,6 @@ class Progression:
             self.root_degrees = [d[0] for d in base_degree_chord_params]
             base_degree_chords = [(deg, AbstractChord(modifiers=mods, inversion=inv)) for deg, (mods, inv) in base_degree_chord_params]
 
-            # chord_modifiers = [d[1][0] for d in base_degree_chord_params]
-            # chord_inversions = [d[1][1] for d in base_degree_chord_params]
-            # chord_qualities = [Major if Quality.from_cache('minor') in cm
-            #                    else Minor
-            #                    for cm in chord_modifiers]
-            # chord_degree_qualities = zip(self.root_degrees, chord_qualities)
             chord_degree_qualities = [(deg, ch.quality) for deg,ch in base_degree_chords]
 
             # determine scale from numerals provided, if scale not given:

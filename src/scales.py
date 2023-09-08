@@ -2,7 +2,7 @@ from .intervals import *
 # from scales import interval_scale_names, key_name_intervals
 from .util import ModDict, rotate_list, reverse_dict, reverse_mod_dict, unpack_and_reverse_dict, numeral_subscript, reduce_aliases, check_all, log
 from .chords import Factors, AbstractChord, Chord, ChordList, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
-from .qualities import ChordModifier, Quality, Maj, Min, Dim, minor_mod, parse_chord_modifiers
+from .qualities import ChordModifier, Quality, Maj, Min, Dim, minor_mod, dim_mod, parse_chord_modifiers
 from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental, sh, fl
 from .display import chord_table
 from . import notes, _settings, parsing
@@ -1772,25 +1772,34 @@ class ScaleChord(AbstractChord):
             # roman_value = parsing.begins_with_roman_numeral(name, return_value=True)
             if parsing.begins_with_roman_numeral(name):
                 # name indeed begins with a roman numeral
-                deg, abs_chord = parse_roman_numeral(name)
                 init_by_numeral = True # ignore usual init routine
+                degree, chord_params = parse_roman_numeral(name, return_params=True)
+                # don't initialise chord yet, but do get its quality:
+                modifiers, inversion = chord_params
+                if dim_mod in modifiers:
+                    chord_qual = Dim
+                elif minor_mod in modifiers:
+                    chord_qual = Min
+                else:
+                    chord_qual = Maj
 
                 if scale is None:
                     # auto detect major/minor scale from chord quality
                     # if not otherwise specified
-                    scale = _detect_scale((deg, abs_chord))
+                    scale = infer_chord_scale(degree, chord_qual)
+                elif not isinstance(scale, Scale):
+                    scale = Scale(scale)
+
+                # finally, initialise ScaleChord using detected chord modifiers/inversion:
+                AbstractChord.__init__(self, modifiers=modifiers, inversion=inversion)
 
 
+        if not init_by_numeral: # i.e. if we have not already been initialised from a single string
 
-
-        if _init_abs:
-            AbstractChord.__init__(self, *args, **kwargs)
-
-        if not isinstance(scale, Scale):
-            scale = Scale(scale)
-
-
-
+            if _init_abs: # initialise abstract chord from supplied args
+                AbstractChord.__init__(self, *args, **kwargs)
+            if not isinstance(scale, Scale):
+                scale = Scale(scale)
 
         self.scale = scale
 
@@ -1817,8 +1826,6 @@ class ScaleChord(AbstractChord):
             assert isinstance(factor, int), f"ScaleChord only understands integer factors, not {type(factor)}"
             self.scale_factor = factor
             self.scale_degree = scale.factor_degrees[factor]
-
-
 
         if self.root_in_scale:
             self.in_scale = scale.contains_degree_chord(degree, self)
@@ -2022,7 +2029,7 @@ class ScaleChord(AbstractChord):
 
     def __repr__(self):
         # in_str = 'not ' if not self.in_scale else ''
-        return f'{self.name} {self.intervals} ({self.simple_numeral} of: {self.scale._marker}{self.scale.name})'
+        return f'{self.name} {self.intervals} ({self.numeral} of: {self.scale._marker}{self.scale.name})'
         # return f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
 
 
