@@ -1824,7 +1824,7 @@ class ScaleChord(AbstractChord):
         from src.progressions import parse_roman_numeral, Progression
         deg, abs_chord = parse_roman_numeral(numeral)
         if scale is None:
-            scale = Progression._detect_scale(self=None, degree_chords=[(deg, abs_chord)])
+            scale = infer_chord_scale(deg, abs_chord.quality)
         else:
             if not isinstance(scale, Scale):
                 scale = Scale(scale)

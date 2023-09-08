@@ -1034,16 +1034,16 @@ class ScaleChordMotion:
                 self.scale = ch1.scale
             else:
                 # determine it from roots and qualities:
-                chord_tuples = [(ch1.scale_degree, ch1), (ch2.scale_degree, ch2)]
-                self.scale = infer_scale(chord_tuples)
+                chord_quality_tuples = [(ch1.scale_degree, ch1.quality), (ch2.scale_degree, ch2.quality)]
+                self.scale = infer_scale(chord_quality_tuples)
 
             # interpret it from given ScaleChords:
-            assert isinstance(start_chord, KeyChord)
-            assert isinstance(end_chord, KeyChord)
-            assert start_chord.key == end_chord.key
-            key = start_chord.key
-        self.key = key
-        self.scale = key.scale
+            assert isinstance(ch1, ScaleChord)
+            assert isinstance(ch2, ScaleChord)
+            if ch2.scale != ch1.scale: # force second chord's scale into first one if mismatched
+                ch2 = ScaleChord(intervals=ch2.intervals, inversion=ch2.inversion, scale=ch1.scale, degree=ch2.scale_degree)
+
+        self.start_chord, self.end_chord = ch1, ch2
 
 
     def _build_tables(self):
