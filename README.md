@@ -39,7 +39,7 @@ If that seems to run correctly, you should be able to import the rest of the mod
 ```
 # import some useful classes and functions for the examples:
 from orpyus.chords import Chord, AbstractChord, matching_chords
-from orpyus.scales import Scale, Subscale
+from orpyus.scales import Scale
 from orpyus.keys import Key, matching_keys
 from orpyus.progressions import Progression, ChordProgression
 from orpyus.guitar import Guitar
@@ -98,13 +98,11 @@ Scale(intervals=[2, 3, 5, 7, 9, 10])      # unison-intervals of 0 and 12 on eith
 Scale('major').parallel
 # pentatonic Subscales of natural scales:
 Scale('major').pentatonic
-# or (hexatonic) blues Subscales:
-Scale('major').blues
 
 # pentatonic subscales of non-natural scales are not well-defined,
 # but orpyus tries to construct them anyway by choosing the most consonant subset of intervals
 # while preserving a scale's character: (experimental)
-Scale('phrygian').pentatonic   # gives the subscale [1 ♭2 ♭3 4 ♭6], in an attempt to preserve the characteristic phrygian ♭2
+Scale('phrygian').pentatonic   # gives the subscale  1 ♭2 ♭3 4 ♭6 (in an attempt to preserve the characteristic phrygian ♭2)
 
 # explore scale harmony by building triads on every degree of a chosen scale:
 Scale('harmonic minor').chords()
@@ -113,8 +111,8 @@ Scale('harmonic minor').chords(order=4)
 
 # or list ALL the chords that can be reasonably built on a chosen degree of a scale,
 # while staying in that scale:
-Scale('harmonic minor').valid_chords(1) # on the root
-Scale('harmonic minor').valid_chords(2) # on the second, etc.
+Scale('harmonic minor').valid_chords_on(1) # on the root
+Scale('harmonic minor').valid_chords_on(2) # on the second, etc.
 ```
 
 ```
@@ -128,11 +126,13 @@ Key('Dbb altered dominant')
 # (but return Notes and Chords, instead of Intervals and AbstractChords)
 Key('Bb').pentatonic
 Key('G harmonic minor').chords(order=4)
-Key('Dbb altered dominant).valid_chords(1)
+Key('Dbb phrygian dominant').valid_chords_on(1)
+# and Scales can be cast to Keys using the on_tonic method:
+Scale('phrygian dominant').on_tonic('C')  
 
 # in addition, we can identify matching keys from an unordered set of chords (e.g. a progression):
 matching_keys(['C', 'G', 'Am', 'E'])
-matching_keys(['Dm', 'Am', 'E7'])
+matching_keys('Dm, Am, E7')   # raw strings are fine if clearly demarcated
 
 # or from raw (partial) notes:
 matching_keys(notes='ABCEGb')
@@ -232,7 +232,7 @@ g2('x32013')
 g.find_key({1:[3], 2:[0,2,3], 3:[0,1]})
     # meaning: fret 3 on the 1st (E) string, frets 0, 2 and 3 and open on the 2nd (A) string, 
     # and frets 0 and 1 on the 3rd (D) string
-    # which happens to match the keys of G harmonic major or C melodic minor
+    # which happens to match the keys of G harmonic/melodic major, or C melodic minor
 
 # but most useful: a Guitar object can show a Note, Chord, Scale, or Progression object on its fretboard:
 # (which displays chord/scale degrees and note names by default)
