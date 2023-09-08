@@ -239,6 +239,56 @@ def begins_with_valid_note_name(name: str):
     else:
         return False
 
+def begins_with_accidental(name: str):
+    """checks if a string begins with an accidental substring.
+        returns 1 for a single-char accidental (e.g. # or 𝄫), 2 for a two-character accidental (e.g. ## or bb)
+        and False if not an accidental."""
+    if len(name) >= 2 and name[:2] in accidental_offsets:
+        return 2
+    elif len(name) >= 1 and name[:1] in accidental_offsets:
+        return 1
+    else:
+        return False
+
+
+def begins_with_roman_numeral(name: str, allow_accidental=True, return_value=False):
+    """checks if a string begins with a valid roman numeral, returns boolean.
+    if allow_accidental is True, still returns True if the roman numeral
+        is prefaced with a leading accidental (like 'bIII'). otherwise 'bIII' returns False.
+    if return_value is True, returns the value of the numeral, including any accidental alterations as half-degrees.
+        i.e. 'VII' returns 7, and 'bVII' returns 6.5
+        otherwise, if return_value is False, returns the LENGTH of the numeral instead.
+        i.e. a one-character numeral (like 'i') gives 1, and longer numerals give 2,3, or 4 (counting the accidental if allowed)
+    in either case, returns False if the substring does not start with a numeral."""
+    if allow_accidental:
+        # only start measuring from where the accidental ends,
+        # if this string starts with one:
+        acc_idx = begins_with_accidental(name)
+        acc_value = accidental_offsets[name[:acc_idx]] / 2 # i.e. 0.5 or -0.5 for a sharp or flat
+        if acc_value % 1 == 0:
+            acc_value = int(acc_value) # keep as integer if possible
+        else:
+            acc_value = round(acc_value, 1) # try and avoid floating point errors
+    else:
+        acc_idx = acc_value = 0
+    substring = name[acc_idx:]
+    # check decreasing lengths for matches to uppercase roman numeral substrings
+    for l in [3,2,1]:
+        contains_numeral = False
+        if len(substring) >= l:
+            upper_numeral = substring[:l].upper()
+            if upper_numeral in roman_numerals:
+                # this is a match, store length/value and break out of loop
+                length, value = l, roman_numerals[upper_numeral]
+                contains_numeral = True
+                break
+    if not contains_numeral:
+        return False
+    elif return_value:
+        return value + acc_value
+    else:
+        return length + acc_idx
+
 def parse_out_note_names(note_string, graceful_fail=False):
     """for some string of valid note letters, of undetermined length,
     such as e.g.: 'CAC#ADbGbE', parse out the individual notes and return
