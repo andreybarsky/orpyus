@@ -956,8 +956,6 @@ class Scale:
         if no5s:
             non_no5_intervals = set()
 
-        if len(shortlist) == 0:
-            import ipdb; ipdb.set_trace()
 
         for candidate in shortlist:
             if candidate.order <= max_order and candidate.order >= min_order:
@@ -1512,16 +1510,11 @@ class ScaleFactors(Factors):
             temp_dct = {d: (d in chromatic_intervals) for d in degree_intervals+chromatic_intervals}
             sorted_tmp_keys = sorted(temp_dct.keys())
 
-            # temp_dct = {k:v for k,v in self.items()}
-            # add chromatic factors in the half-integer
-            # temp_dct.update({k + 0.1 + (v*0.5) : 0 for k,v in self.chromatic.items()})
+
             prefer_sharps = self._sharp_preference()
             factor_strs = []
             clb, crb = _settings.BRACKETS['chromatic_intervals']
-            # for f,v in temp_dct.items():
-            #
-            # if log.verbose:
-            #     import ipdb; ipdb.set_trace()
+
             for d in sorted_tmp_keys:
                 is_chromatic = temp_dct[d]
                 integer_degree = int(round(d))
@@ -1532,11 +1525,7 @@ class ScaleFactors(Factors):
                 if is_chromatic:
                     factor_str = f'{clb}{factor_str}{crb}'
                 factor_strs.append(factor_str)
-                # else: # half degree, i.e. chromatic 'factor'
-                #     # render as sharpened floor of float if prefer sharps, else as flattened ceil:
-                #     f, v = (floor(f), 1) if prefer_sharps else (ceil(f), -1)
-                #     factor_str = f'{clb}{offset_accidentals[v][0]}{f}{crb}'
-                #     factor_strs.append(factor_str)
+
         lb, rb = self._brackets
         return f'{lb}{", ".join(factor_strs)}{rb}'
 
@@ -2314,7 +2303,7 @@ base_scale_mode_names = {
                      # pentatonic base scales and their modes:
 'major pentatonic': {1: ['pentatonic', 'natural major pentatonic', 'ryo'],
                      2: ['egyptian pentatonic'],
-                     3: ['blues minor pentatonic', 'phrygian pentatonic', 'minyo', 'man gong'],
+                     3: ['blues minor pentatonic', 'minyo', 'man gong'],
                      4: ['yo', 'ritsu', 'ritusen', 'major pentatonic II'],
                      5: ['minor pentatonic', 'natural minor pentatonic']},
        'hirajoshi': {

@@ -195,9 +195,10 @@ class Guitar:
         min_precision = len(include_notes) / 7
 
         log(f'Requiring min_precision of: {min_precision}')
-        matches = matching_keys(notes=include_notes, exclude=exclude_notes, min_precision=0, require_tonic=(tonic is not None), return_matches=True)
+        matches = matching_keys(notes=include_notes, exclude=exclude_notes, min_precision=0, tonic=tonic, display=False)
 
         if display:
+            matching_keys(notes=include_notes, exclude=exclude_notes, min_precision=0, tonic=tonic, display=True, max_results=3)
             # show fretboard on the first 3 matches
             for m in list(matches.keys())[:3]:
                 print() # i.e. newline

@@ -2,7 +2,7 @@ from . import notes, scales, parsing, _settings
 from .parsing import fl, sh, nat, dfl, dsh
 from .intervals import Interval, IntervalList
 from .notes import Note, NoteList, chromatic_notes
-from .scales import Scale, ScaleFactors, ScaleDegree, ScaleChord
+from .scales import Scale, ScaleFactors, ScaleDegree, ScaleChord, common_scales
 from .chords import Chord, AbstractChord, ChordList
 from .util import ModDict, check_all, precision_recall, reverse_dict, unpack_and_reverse_dict, log
 
@@ -903,13 +903,11 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None,
         df.show(max_rows=max_results, margin=' ', **kwargs)
 
 
-
-
-# def most_likely_key(*args, **kwargs):
-#     """wrapper around matching_keys that simply returns the single most likely Key as an object"""
-#     matches = matching_keys(*args, display=False, return_matches=True, **kwargs)
-#     if len(matches) == 0:
-#         # re run with no minimums
-#         matches = matching_keys(*args, display=False, min_recall=0, min_precision=0, min_likelihood=0, return_matches=True, **kwargs)
-#     # return top match:
-#     return list(matches.keys())[0]
+def most_likely_key(*args, **kwargs):
+    """wrapper around matching_keys that simply returns the single most likely Key as an object"""
+    matches = matching_keys(*args, display=False, **kwargs)
+    if len(matches) == 0:
+        # re run with no minimums
+        matches = matching_keys(*args, display=False, min_recall=0, min_precision=0, min_likelihood=0, return_matches=True, **kwargs)
+    # return top match:
+    return list(matches.keys())[0]
