@@ -128,260 +128,6 @@ progression_aliases['dim'] = 'dim'
 
 minor_mod = ChordModifier('minor')
 
-def parse_roman_numeral(numeral, ignore_alteration=False):
-    """given a (string) roman numeral, in upper or lower case,
-    with a potential chord modifier at the end,
-    parse into a (degree, AbstractChord) tuple, where degree is an int between 1-7"""
-
-    if ignore_alteration and parsing.is_accidental(numeral[0]):
-        # if required, disregard accidentals in the start of this degree, like bIII -> III
-        numeral = numeral[1:]
-
-    out = reduce_aliases(numeral, progression_aliases)
-    assert isinstance(out[0], tuple) # an integer, quality tuple
-    deg, quality = out[0]
-
-    modifiers = []
-    inversion = 0
-
-    if quality.minor:
-        modifiers.append(minor_mod)
-
-    if len(out) > 1: # got one or more additional modifiers as well
-        rest = ''.join(out[1:])
-
-        rest_inv = rest.split('/')
-        if len(rest_inv) > 1:
-            assert len(rest_inv) == 2 # chord part and inversion part
-            rest, inversion = rest_inv[0], int(rest_inv[1])
-
-        if len(rest) > 0:
-            rest_mods = parse_chord_modifiers(rest, catch_duplicates=True)
-            modifiers.extend(rest_mods)
-
-    chord = AbstractChord(modifiers=modifiers, inversion=inversion)
-
-    return deg, chord
-
-
-class DegreeMotion:
-    """class representing (unsigned) movement between two notes,
-    intended to model the movement of chord roots in a progression"""
-    def __init__(self, start, end, scale=None):
-        """accepts one of two input schemes:
-            1. 'start' and 'end' should both be integers between 1 and 7,
-                denoting the root degrees of the starting and ending scale chords.
-            2. 'start' should be an integer, 'direction' should be either "D" or "S",
-                and degree should be one of 2, 3, or 5.
-
-            scale can optionally be provided, which matters only for the
-            intervallic distance (not the scale-degree distance) involved
-            in this movement. otherwise those attributes are left un-set."""
-
-        if scale is not None:
-            if isinstance(scale, str):
-                # instantiate Scale object if it is not already instantiated
-                scale = Scale(scale)
-            assert isinstance(scale, Scale), f"DegreeMotion expected a Scale object, or string that casts to Scale, but got: {type(scale)}"
-        self.scale = scale
-
-        # if end is not None:
-        if isinstance(start, int) and isinstance(end, int):
-            # regular integer degree movement
-            assert (start in range(1,scale.factors.max_degree+1)) and (end in range(1,scale.factors.max_degree+1))
-            # cast ScaleDegrees to ints:
-            start, end = int(start), int(end)
-            self.fractional = False
-        else:
-            # movement involving one or more fractional degrees
-            # which might get strange?
-            log(f'Parsed a fractional degree movement from {start} to {end}')
-            # cast the non-float ones to int anyway, because you can't add ScaleDegrees
-            start = int(start) if not isinstance(start, float) else start
-            end = int(end) if not isinstance(end, float) else end
-            self.fractional = True
-
-        self.start, self.end = start, end
-
-        self._set_degree_distances()
-        if scale is not None:
-            self._set_interval_distances(scale)
-
-    def _set_degree_distances(self):
-        if self.start > self.end:
-            # more down than up
-            self.up = 7-(self.start - self.end)
-            self.down = self.start - self.end
-        elif self.start < self.end:
-            # more up than down
-            self.up = self.end - self.start
-            self.down = 7-(self.end - self.start)
-        else:
-            self.up = self.down = 0
-
-        # the 'size' of the movement: 2 to 1 has less magnitude than 5 to 1, but the same as 7 to 1
-        self.magnitude = min([self.up, self.down])
-        # signed/directional shortest distance up or down:
-        self.distance = self.up if self.up == self.magnitude else -self.down
-
-
-    def _set_interval_distances(self, scale_obj):
-        if not self.fractional:
-            self.start_iv, self.end_iv = (scale_obj.degree_intervals[d] for d in [self.start, self.end])
-        else:
-            self.start_iv = scale_obj.degree_intervals[self.start] if self.start in scale_obj.degree_intervals else scale_obj.fractional_degree_intervals[self.start]
-            self.end_iv = scale_obj.degree_intervals[self.end] if self.end in scale_obj.degree_intervals else scale_obj.fractional_degree_intervals[self.end]
-
-        if self.start > self.end:
-            # more down than up
-            self.iv_up = 12-(self.start_iv - self.end_iv)
-            self.iv_down = self.start_iv - self.end_iv
-        elif self.start < self.end:
-            # more up than down
-            self.iv_up = self.end_iv - self.start_iv
-            self.iv_down = 12-(self.end_iv - self.start_iv)
-        else:
-            self.iv_up = self.iv_down = 0
-
-    @property
-    def direction_str(self):
-        if self.up == 0: # no direction
-            return ' 0'
-
-        if self.descending_fifth:
-            direction_char = self._down_arrow
-            distance_char = 5
-        elif self.ascending_fifth:
-            direction_char = self._up_arrow
-            distance_char = 5
-        else:
-            distance, upward = self.magnitude, (self.distance > 0)
-            direction_char = self._up_arrow if upward else self._down_arrow
-            distance_char = self.magnitude + 1
-
-        return f'{direction_char}{distance_char}'
-
-    @property
-    def degrees(self):
-        return f'{self.start}{self._movement_marker}{self.end}'
-
-    def __str__(self):
-        return(f'{self.degrees}:{self.direction_str}')
-
-    def __repr__(self):
-        return str(self)
-
-    _movement_marker = _settings.MARKERS['right']
-    _up_arrow = _settings.MARKERS['up']
-    _down_arrow = _settings.MARKERS['down']
-
-
-class RootMotion(DegreeMotion):
-    """degree motion specifically between chord roots,
-    defined with extra properties like harmonic function"""
-
-    def __init__(self, *args, **kwargs):
-
-        DegreeMotion.__init__(self, *args, **kwargs)
-        self._set_harmonic_functions()
-
-    def _set_harmonic_functions(self):
-        self.descending_fifth = self.down == 4
-        self.ascending_fifth = self.down == 3
-        # self.function = ('primary ' if self.primary else 'substitute ') + ('dominant' if self.dominant else 'subdominant')
-
-
-        # experimental chord function flags: (based on major scale harmony theory, but should apply to minor as well?)
-        self.dominant = self.down in {4,2} or self.up in {3,1} # descending by fifth or third
-        self.subdominant = self.down in {3,1} or self.up in {4,2}
-        self.primary = 4 in {self.down, self.up}
-        self.substitute = not self.primary
-
-        if self.scale is not None:
-            self.start_function = scale_functions[int(self.start_iv)]
-            self.end_function = scale_functions[int(self.end_iv)]
-
-        self.resolved = (self.end == 1) and (self.start != 1) # maybe?
-        self.hanging = self.end_function in {"D", "L"}
-
-        self.authentic_cadence = (self.start in {5,7} and self.end == 1)
-        self.authentic_half_cadence = (self.start in {1, 2, 4, 6}) and (self.end == 5)
-        self.plagal_cadence = (self.start == 4 and self.end == 1)
-        self.plagal_half_cadence = (self.start in {1, 2, 5, 6}) and (self.end == 4) # does this follow the same rules as authentic half cadences?
-        self.deceptive_cadence = (self.start == 5) and (self.end not in {5,1})
-
-    @property
-    def cadence(self):
-        if self.authentic_cadence:
-            return 'authentic cadence'
-        elif self.authentic_half_cadence:
-            return 'authentic half cadence'
-        elif self.plagal_cadence:
-            return 'plagal cadence'
-        elif self.plagal_half_cadence:
-            return 'plagal half cadence'
-        elif self.deceptive_cadence:
-            return 'deceptive cadence'
-        else:
-            return False
-
-    @property
-    def cadence_score(self):
-        # extremely fuzzy score used for checking the grammaticity of progressions
-        if self.authentic_cadence:
-            return 1
-        elif self.authentic_half_cadence:
-            return 0.5
-        elif self.plagal_cadence:
-            return 0.75
-        elif self.plagal_half_cadence:
-            return 0.25
-        elif self.deceptive_cadence:
-            return 0.1
-        else:
-            return 0
-
-    @property
-    def cadence_short_name(self):
-        if self.cadence:
-            # capitalise first character of the words in the cadence name:
-            words = self.cadence.split(' ')
-            chars = [w[0].upper() for w in words]
-            return ''.join(chars)
-        else:
-            return ''
-
-    @property
-    def function(self):
-        """returns a string that describes the function of this DegreeMotion as a root movement,
-        and names the cadence if this is a cadence that we know about."""
-        func_str = []
-        # dominant/subdominant direction:
-        func_str.append(('primary ' if self.primary else 'substitute ') + ('dominant' if self.dominant else 'subdominant'))
-        # cadence:
-        if self.cadence:
-            func_str.append(f'({self.cadence})')
-        # tension/resolution:
-        if self.hanging:
-            func_str.append('(hanging)')
-        return ' '.join(func_str)
-
-    @property
-    def function_char(self):
-        if self.dominant:
-            return 'D'
-        elif self.subdominant:
-            return 'S'
-        elif self.fractional:
-            return '?'
-        else:
-            return '='
-
-    def __str__(self):
-        return(f'[{self.function_char}]{self.degrees}:{self.direction_str}')
-
-
-
 class Progression:
     """A theoretical progression between AbstractChords in a particular scale,
     initialised as list: e.g. Progression(['I', 'IV', 'iii', 'V'])
@@ -1249,6 +995,227 @@ class ChordProgression(Progression): # , ChordList):
     # def __repr__(self):
     #     return str(self)
 
+
+
+class DegreeMotion:
+    """class representing (unsigned) movement between two notes,
+    intended to model the movement of chord roots in a progression"""
+    def __init__(self, start, end, scale=None):
+        """accepts one of two input schemes:
+            1. 'start' and 'end' should both be integers between 1 and 7,
+                denoting the root degrees of the starting and ending scale chords.
+            2. 'start' should be an integer, 'direction' should be either "D" or "S",
+                and degree should be one of 2, 3, or 5.
+
+            scale can optionally be provided, which matters only for the
+            intervallic distance (not the scale-degree distance) involved
+            in this movement. otherwise those attributes are left un-set."""
+
+        if scale is not None:
+            if isinstance(scale, str):
+                # instantiate Scale object if it is not already instantiated
+                scale = Scale(scale)
+            assert isinstance(scale, Scale), f"DegreeMotion expected a Scale object, or string that casts to Scale, but got: {type(scale)}"
+        self.scale = scale
+
+        # if end is not None:
+        if isinstance(start, int) and isinstance(end, int):
+            # regular integer degree movement
+            assert (start in range(1,scale.factors.max_degree+1)) and (end in range(1,scale.factors.max_degree+1))
+            # cast ScaleDegrees to ints:
+            start, end = int(start), int(end)
+            self.fractional = False
+        else:
+            # movement involving one or more fractional degrees
+            # which might get strange?
+            log(f'Parsed a fractional degree movement from {start} to {end}')
+            # cast the non-float ones to int anyway, because you can't add ScaleDegrees
+            start = int(start) if not isinstance(start, float) else start
+            end = int(end) if not isinstance(end, float) else end
+            self.fractional = True
+
+        self.start, self.end = start, end
+
+        self._set_degree_distances()
+        if scale is not None:
+            self._set_interval_distances(scale)
+
+    def _set_degree_distances(self):
+        if self.start > self.end:
+            # more down than up
+            self.up = 7-(self.start - self.end)
+            self.down = self.start - self.end
+        elif self.start < self.end:
+            # more up than down
+            self.up = self.end - self.start
+            self.down = 7-(self.end - self.start)
+        else:
+            self.up = self.down = 0
+
+        # the 'size' of the movement: 2 to 1 has less magnitude than 5 to 1, but the same as 7 to 1
+        self.magnitude = min([self.up, self.down])
+        # signed/directional shortest distance up or down:
+        self.distance = self.up if self.up == self.magnitude else -self.down
+
+
+    def _set_interval_distances(self, scale_obj):
+        if not self.fractional:
+            self.start_iv, self.end_iv = (scale_obj.degree_intervals[d] for d in [self.start, self.end])
+        else:
+            self.start_iv = scale_obj.degree_intervals[self.start] if self.start in scale_obj.degree_intervals else scale_obj.fractional_degree_intervals[self.start]
+            self.end_iv = scale_obj.degree_intervals[self.end] if self.end in scale_obj.degree_intervals else scale_obj.fractional_degree_intervals[self.end]
+
+        if self.start > self.end:
+            # more down than up
+            self.iv_up = 12-(self.start_iv - self.end_iv)
+            self.iv_down = self.start_iv - self.end_iv
+        elif self.start < self.end:
+            # more up than down
+            self.iv_up = self.end_iv - self.start_iv
+            self.iv_down = 12-(self.end_iv - self.start_iv)
+        else:
+            self.iv_up = self.iv_down = 0
+
+    @property
+    def direction_str(self):
+        if self.up == 0: # no direction
+            return ' 0'
+
+        if self.descending_fifth:
+            direction_char = self._down_arrow
+            distance_char = 5
+        elif self.ascending_fifth:
+            direction_char = self._up_arrow
+            distance_char = 5
+        else:
+            distance, upward = self.magnitude, (self.distance > 0)
+            direction_char = self._up_arrow if upward else self._down_arrow
+            distance_char = self.magnitude + 1
+
+        return f'{direction_char}{distance_char}'
+
+    @property
+    def degrees(self):
+        return f'{self.start}{self._movement_marker}{self.end}'
+
+    def __str__(self):
+        return(f'{self.degrees}:{self.direction_str}')
+
+    def __repr__(self):
+        return str(self)
+
+    _movement_marker = _settings.MARKERS['right']
+    _up_arrow = _settings.MARKERS['up']
+    _down_arrow = _settings.MARKERS['down']
+
+
+class RootMotion(DegreeMotion):
+    """degree motion specifically between chord roots,
+    defined with extra properties like harmonic function"""
+
+    def __init__(self, *args, **kwargs):
+
+        DegreeMotion.__init__(self, *args, **kwargs)
+        self._set_harmonic_functions()
+
+    def _set_harmonic_functions(self):
+        self.descending_fifth = self.down == 4
+        self.ascending_fifth = self.down == 3
+        # self.function = ('primary ' if self.primary else 'substitute ') + ('dominant' if self.dominant else 'subdominant')
+
+
+        # experimental chord function flags: (based on major scale harmony theory, but should apply to minor as well?)
+        self.dominant = self.down in {4,2} or self.up in {3,1} # descending by fifth or third
+        self.subdominant = self.down in {3,1} or self.up in {4,2}
+        self.primary = 4 in {self.down, self.up}
+        self.substitute = not self.primary
+
+        if self.scale is not None:
+            self.start_function = scale_functions[int(self.start_iv)]
+            self.end_function = scale_functions[int(self.end_iv)]
+
+        self.resolved = (self.end == 1) and (self.start != 1) # maybe?
+        self.hanging = self.end_function in {"D", "L"}
+
+        self.authentic_cadence = (self.start in {5,7} and self.end == 1)
+        self.authentic_half_cadence = (self.start in {1, 2, 4, 6}) and (self.end == 5)
+        self.plagal_cadence = (self.start == 4 and self.end == 1)
+        self.plagal_half_cadence = (self.start in {1, 2, 5, 6}) and (self.end == 4) # does this follow the same rules as authentic half cadences?
+        self.deceptive_cadence = (self.start == 5) and (self.end not in {5,1})
+
+    @property
+    def cadence(self):
+        if self.authentic_cadence:
+            return 'authentic cadence'
+        elif self.authentic_half_cadence:
+            return 'authentic half cadence'
+        elif self.plagal_cadence:
+            return 'plagal cadence'
+        elif self.plagal_half_cadence:
+            return 'plagal half cadence'
+        elif self.deceptive_cadence:
+            return 'deceptive cadence'
+        else:
+            return False
+
+    @property
+    def cadence_score(self):
+        # extremely fuzzy score used for checking the grammaticity of progressions
+        if self.authentic_cadence:
+            return 1
+        elif self.authentic_half_cadence:
+            return 0.5
+        elif self.plagal_cadence:
+            return 0.75
+        elif self.plagal_half_cadence:
+            return 0.25
+        elif self.deceptive_cadence:
+            return 0.1
+        else:
+            return 0
+
+    @property
+    def cadence_short_name(self):
+        if self.cadence:
+            # capitalise first character of the words in the cadence name:
+            words = self.cadence.split(' ')
+            chars = [w[0].upper() for w in words]
+            return ''.join(chars)
+        else:
+            return ''
+
+    @property
+    def function(self):
+        """returns a string that describes the function of this DegreeMotion as a root movement,
+        and names the cadence if this is a cadence that we know about."""
+        func_str = []
+        # dominant/subdominant direction:
+        func_str.append(('primary ' if self.primary else 'substitute ') + ('dominant' if self.dominant else 'subdominant'))
+        # cadence:
+        if self.cadence:
+            func_str.append(f'({self.cadence})')
+        # tension/resolution:
+        if self.hanging:
+            func_str.append('(hanging)')
+        return ' '.join(func_str)
+
+    @property
+    def function_char(self):
+        if self.dominant:
+            return 'D'
+        elif self.subdominant:
+            return 'S'
+        elif self.fractional:
+            return '?'
+        else:
+            return '='
+
+    def __str__(self):
+        return(f'[{self.function_char}]{self.degrees}:{self.direction_str}')
+
+
+
+
 class ChordMotion:
     """Movement of root and every other chord degree from one to another"""
     def __init__(self, start_chord, end_chord, key=None):
@@ -1287,6 +1254,43 @@ class ChordMotion:
 
 
 
+def parse_roman_numeral(numeral, ignore_alteration=False):
+    """given a (string) roman numeral, in upper or lower case,
+    with a potential chord modifier at the end,
+    parse into a (degree, AbstractChord) tuple, where degree is an int between 1-7"""
+
+    if ignore_alteration and parsing.is_accidental(numeral[0]):
+        # if required, disregard accidentals in the start of this degree, like bIII -> III
+        numeral = numeral[1:]
+
+    out = reduce_aliases(numeral, progression_aliases)
+    assert isinstance(out[0], tuple) # an integer, quality tuple
+    deg, quality = out[0]
+
+    modifiers = []
+    inversion = 0
+
+    if quality.minor:
+        modifiers.append(minor_mod)
+
+    if len(out) > 1: # got one or more additional modifiers as well
+        rest = ''.join(out[1:])
+
+        rest_inv = rest.split('/')
+        if len(rest_inv) > 1:
+            assert len(rest_inv) == 2 # chord part and inversion part
+            rest, inversion = rest_inv[0], int(rest_inv[1])
+
+        if len(rest) > 0:
+            rest_mods = parse_chord_modifiers(rest, catch_duplicates=True)
+            modifiers.extend(rest_mods)
+
+    chord = AbstractChord(modifiers=modifiers, inversion=inversion)
+
+    return deg, chord
+
+
+
 # TODO: key recognition routine that respects progression logic,
 # i.e. looking for cadences or half cadences in the final root movement
 
@@ -1310,8 +1314,8 @@ common_progressions = {
     Progression('I III IV iv') : '134m4',
     Progression('I ii iii IV V') : '12345',
 
-    Progression('I  V  vi  IV' ) : 'common',
-    Progression('I  V ♭VII IV' ) : 'common (variant)',
+    Progression('I  V  vi  IV' ) : 'axis', # 'axis' progression
+    Progression('I  V ♭VII IV' ) : 'axis (variant)',
     Progression('I  vi IV  V'  ) : '50s',
     Progression('vi V  IV III' ) : 'andalusian',
     Progression('i VII VI  V'  ) : 'andalusian minor',

@@ -673,6 +673,19 @@ class AbstractChord:
     def __hash__(self):
         return hash(((tuple(self.factors.items())), self.inversion))
 
+    # enharmonic equality:
+    def enharmonic_to(self, other):
+        """Compares enharmonic equivalence between AbstractChords,
+        which is: do they contain the exact same flattened intervals from bass?
+        by this definition, m7/1 is enharmonic to maj6, maj7add4 is enharmonic to maj7add11, etc."""
+
+        if isinstance(other, AbstractChord) and not isinstance(other, Chord):
+            return set(self.intervals.flatten().unique()) == set(other.intervals.flatten().unique())
+        else:
+            raise TypeError(f'Enharmonic equivalence operator & not defined between AbstractChord and: {type(other)}')
+
+    ### display methods:
+
     def show(self, tuning='EADGBE'):
         """just a wrapper around the Guitar.show method, which is generic to most musical classes,
         so this method is also inherited by all Scale subclasses"""
@@ -1034,19 +1047,10 @@ class Chord(AbstractChord):
     # enharmonic equality:
     def enharmonic_to(self, other):
         """Compares enharmonic equivalence between Chords,
-        i.e. whether they contain the exact same notes (but not necessarily in the same order),
-        or between Chord and AbstractChord, i.e. do they contain the same intervals"""
+        which is: do they contain the exact same unique notes? (if not in the same order)"""
+
         if isinstance(other, Chord):
-            matching_notes = 0
-            for note in self.notes:
-                if note in other.notes:
-                    matching_notes += 1
-            if matching_notes == len(self.notes) and len(self.notes) == len(other.notes):
-                return True
-            else:
-                return False
-        elif isinstance(other, AbstractChord):
-            return self.intervals == other.intervals
+            return set(self.notes.unique()) == set(other.notes.unique())
         else:
             raise TypeError(f'Enharmonic equivalence operator & not defined between Chord and: {type(other)}')
 

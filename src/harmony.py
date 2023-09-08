@@ -1,3 +1,5 @@
+### WIP (incomplete) module, I promise structure and documentation here will get better
+
 from .chords import AbstractChord, Chord
 from .scales import Scale, NaturalMajor, NaturalMinor, HarmonicMinor, ScaleChord
 from .progressions import Progression
