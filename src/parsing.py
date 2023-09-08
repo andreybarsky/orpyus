@@ -194,6 +194,28 @@ modifier_marks.update({c: superscript_symbols[c] for c in '/+-!?'})
 # but not chord alterations: (because we can't superscript sharps/flats)
 modifier_marks.update({f'{acc}{i}' : f'{acc}{i}' for i in range(3,14) for acc in [sh, fl, nat]})
 
+roman_degree_chords = {}
+# render as an alias dict linking numerals to major/minor qualities:
+for arabic,roman in numerals_roman.items():
+    roman_degree_chords[roman] = (arabic, 'major')
+    roman_degree_chords[roman.lower()] = (arabic, 'minor')
+# and the reverse mapping, for SDC.__repr__:
+degree_chords_roman = reverse_dict(roman_degree_chords)
+
+progression_aliases = dict(roman_degree_chords)
+# fractional degrees for bIII chords etc:
+accidental_progression_aliases = {}
+for num, (deg, qual) in progression_aliases.items():
+    if deg > 1:
+        for flat_sign in offset_accidentals[-1]:
+            accidental_progression_aliases[flat_sign + num] = (round(deg-0.5, 1), qual)
+    if 1 < deg < 8:
+        for sharp_sign in offset_accidentals[1]:
+            accidental_progression_aliases[sharp_sign + num] = (round(deg+0.5, 1), qual)
+progression_aliases.update(accidental_progression_aliases)
+# kludge: we have to specifically ignore 'dim' when reading roman numerals,
+# because it is the only modifier that contains a roman numeral ('i')
+progression_aliases['dim'] = 'dim'
 
 #####  CURSED MUSIC THEORY  #####
 

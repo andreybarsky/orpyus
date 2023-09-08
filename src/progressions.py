@@ -3,8 +3,8 @@
 from .intervals import Interval
 from .notes import Note, NoteList, chromatic_notes
 from .chords import Chord, AbstractChord, ChordList
-from .qualities import Major, Minor, Perfect, Diminished, parse_chord_modifiers, ChordModifier, modifier_aliases
-from .scales import infer_scale_quality, _detect_scale, Scale, ScaleChord, NaturalMajor, NaturalMinor
+from .qualities import Major, Minor, Perfect, Diminished, parse_chord_modifiers, ChordModifier, modifier_aliases, minor_mod, dim_mod
+from .scales import infer_chord_scale, infer_scale, parse_roman_numeral, Scale, ScaleChord, NaturalMajor, NaturalMinor
 from .keys import Key, KeyChord, matching_keys# , most_likely_key
 from .util import reduce_aliases, rotate_list, check_all, reverse_dict, log
 from .parsing import roman_numerals, numerals_roman, modifier_marks, auto_split, superscript, fl, sh, nat
@@ -33,30 +33,9 @@ scale_functions = { 0: "T", # 1st, tonic
                     11: "L", # M7, leading tone
                     }
 
-roman_degree_chords = {}
-# render as an alias dict linking numerals to major/minor qualities:
-for arabic,roman in numerals_roman.items():
-    roman_degree_chords[roman] = (arabic, Major)
-    roman_degree_chords[roman.lower()] = (arabic, Minor)
-# and the reverse mapping, for SDC.__repr__:
-degree_chords_roman = reverse_dict(roman_degree_chords)
 
-progression_aliases = dict(roman_degree_chords)
-# fractional degrees for bIII chords etc:
-accidental_progression_aliases = {}
-for num, (deg, qual) in progression_aliases.items():
-    if deg > 1:
-        for flat_sign in parsing.offset_accidentals[-1]:
-            accidental_progression_aliases[flat_sign + num] = (round(deg-0.5, 1), qual)
-    if 1 < deg < 8:
-        for sharp_sign in parsing.offset_accidentals[1]:
-            accidental_progression_aliases[sharp_sign + num] = (round(deg+0.5, 1), qual)
-progression_aliases.update(accidental_progression_aliases)
-# kludge: we have to specifically ignore 'dim' when reading roman numerals,
-# because it is the only modifier that contains a roman numeral ('i')
-progression_aliases['dim'] = 'dim'
 
-minor_mod = ChordModifier('minor')
+
 
 class Progression:
     """A theoretical progression between AbstractChords in a particular scale,
@@ -111,12 +90,21 @@ class Progression:
             # roman numeral strings
             # which we parse into AbstractChords based on their case and suffixes
 
-            base_degree_chords = [parse_roman_numeral(n) for n in numerals] # degree, AbstractChord tuples
-            self.root_degrees = [d[0] for d in base_degree_chords]
+            base_degree_chord_params = [parse_roman_numeral(n, return_params=True) for n in numerals] # degree, AbstractChord tuples
+            self.root_degrees = [d[0] for d in base_degree_chord_params]
+            base_degree_chords = [(deg, AbstractChord(modifiers=mods, inversion=inv)) for deg, (mods, inv) in base_degree_chord_params]
+
+            # chord_modifiers = [d[1][0] for d in base_degree_chord_params]
+            # chord_inversions = [d[1][1] for d in base_degree_chord_params]
+            # chord_qualities = [Major if Quality.from_cache('minor') in cm
+            #                    else Minor
+            #                    for cm in chord_modifiers]
+            # chord_degree_qualities = zip(self.root_degrees, chord_qualities)
+            chord_degree_qualities = [(deg, ch.quality) for deg,ch in base_degree_chords]
 
             # determine scale from numerals provided, if scale not given:
             if scale is None:
-                self.scale = _detect_scale(base_degree_chords)
+                self.scale = infer_scale(chord_degree_qualities)
             elif isinstance(scale, str):
                 self.scale = Scale(scale)
             else:
@@ -1053,7 +1041,7 @@ class ScaleChordMotion:
             else:
                 # determine it from roots and qualities:
                 chord_tuples = [(ch1.scale_degree, ch1), (ch2.scale_degree, ch2)]
-                self.scale = _detect_scale(chord_tuples)
+                self.scale = infer_scale(chord_tuples)
 
             # interpret it from given ScaleChords:
             assert isinstance(start_chord, KeyChord)
@@ -1102,40 +1090,6 @@ def chord_motion(start_chord, end_chord, scale=None):
     else:
         raise TypeError(f'Cannot make a ChordMotion object from incompatible types: {type(start_chord)} and {type(end_chord)}')
 
-def parse_roman_numeral(numeral, ignore_alteration=False):
-    """given a (string) roman numeral, in upper or lower case,
-    with a potential chord modifier at the end,
-    parse into a (degree, AbstractChord) tuple, where degree is an int between 1-7"""
-
-    if ignore_alteration and parsing.is_accidental(numeral[0]):
-        # if required, disregard accidentals in the start of this degree, like bIII -> III
-        numeral = numeral[1:]
-
-    out = reduce_aliases(numeral, progression_aliases)
-    assert isinstance(out[0], tuple) # an integer, quality tuple
-    deg, quality = out[0]
-
-    modifiers = []
-    inversion = 0
-
-    if quality.minor:
-        modifiers.append(minor_mod)
-
-    if len(out) > 1: # got one or more additional modifiers as well
-        rest = ''.join(out[1:])
-
-        rest_inv = rest.split('/')
-        if len(rest_inv) > 1:
-            assert len(rest_inv) == 2 # chord part and inversion part
-            rest, inversion = rest_inv[0], int(rest_inv[1])
-
-        if len(rest) > 0:
-            rest_mods = parse_chord_modifiers(rest, catch_duplicates=True)
-            modifiers.extend(rest_mods)
-
-    chord = AbstractChord(modifiers=modifiers, inversion=inversion)
-
-    return deg, chord
 
 
 
@@ -1145,8 +1099,7 @@ def parse_roman_numeral(numeral, ignore_alteration=False):
 def propose_root_motions(start, direction):
     """Given a root degree 'from', and a direction which should be one of 'D' (dominant)
     or 'SD' (subdominant), propose RootMotion continuations in that direction"""
-    ...
-
+    ... # TBI
 
 
 
@@ -1162,12 +1115,13 @@ common_progressions = {
     Progression('I III IV iv') : '134m4',
     Progression('I ii iii IV V') : '12345',
 
-    Progression('I  V  vi  IV' ) : 'axis', # 'axis' progression
-    Progression('I  V ♭VII IV' ) : 'axis (variant)',
-    Progression('I  vi IV  V'  ) : '50s',
-    Progression('vi V  IV III' ) : 'andalusian',
-    Progression('i VII VI  V'  ) : 'andalusian minor',
-    Progression('vi IV V  I '  ) : 'komuro', # better as rotation/transposition of 50s progression?
+    Progression('I  V    vi   IV' ) : 'axis',
+    Progression('I  V   ♭VII  IV' ) : 'axis (variant)',
+    Progression('vi IV   I    V'  ) : 'axis minor', # rotation of axis progression
+    Progression('I  vi   IV   V'  ) : '50s', # aka doo-wop
+    Progression('vi V    IV   III') : 'andalusian',
+    Progression('i ♭VII ♭VI   V'  ) : 'andalusian minor',
+    Progression('vi IV   V    I'  ) : 'komuro',
 
     Progression('ii⁷ V⁷  Iᐞ⁷ V⁷') : 'jazz turnaround',
     Progression('Iᐞ⁷ vi⁷ ii⁷ V⁷') : 'rhythm changes',

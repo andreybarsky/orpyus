@@ -2,7 +2,7 @@ from .intervals import *
 # from scales import interval_scale_names, key_name_intervals
 from .util import ModDict, rotate_list, reverse_dict, reverse_mod_dict, unpack_and_reverse_dict, numeral_subscript, reduce_aliases, check_all, log
 from .chords import Factors, AbstractChord, Chord, ChordList, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
-from .qualities import ChordModifier, Quality, Maj, Min, Dim
+from .qualities import ChordModifier, Quality, Maj, Min, Dim, minor_mod, parse_chord_modifiers
 from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental, sh, fl
 from .display import chord_table
 from . import notes, _settings, parsing
@@ -238,6 +238,22 @@ class Scale:
     def fractional_degree_intervals(self):
         """reverse mapping of self.fractional_interval_degrees"""
         return reverse_mod_dict(self.fractional_interval_degrees, index=1, max_key=7, raise_values=True)
+
+    def _get_arbitrary_degree_interval(self, deg):
+        """retrieves the interval for any degree relative to this scale,
+        whether or not that degree is in this scale"""
+        if deg in self.degree_intervals:
+            return self.degree_intervals[deg]
+        else:
+            return self.fractional_degree_intervals[deg]
+
+    def _get_arbitrary_interval_degree(self, iv):
+        """retrieves the degree for any interval relative to this scale,
+        whether or not that degree is in this scale"""
+        if iv in self.interval_degrees:
+            return self.interval_degrees[iv]
+        else:
+            return self.fractional_interval_degrees[iv]
 
     ###### scale production methods (and related subroutines):
 
@@ -1753,16 +1769,17 @@ class ScaleChord(AbstractChord):
         if len(args) == 1 and isinstance(args[0], str):
             # if initialised with a single string, this could be a roman numeral:
             name = args[0]
-            roman_value = parsing.begins_with_roman_numeral(name, return_value=True)
-            if roman_value != False:
-                # name indeed begins with a roman numeral, and roman_value is the root degree
-                degree = roman_value
+            # roman_value = parsing.begins_with_roman_numeral(name, return_value=True)
+            if parsing.begins_with_roman_numeral(name):
+                # name indeed begins with a roman numeral
+                deg, abs_chord = parse_roman_numeral(name)
                 init_by_numeral = True # ignore usual init routine
 
                 if scale is None:
                     # auto detect major/minor scale from chord quality
                     # if not otherwise specified
-                    scale = infer_scale_quality(...)
+                    scale = _detect_scale((deg, abs_chord))
+
 
 
 
@@ -2009,84 +2026,105 @@ class ScaleChord(AbstractChord):
         # return f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
 
 
-def infer_scale_quality(degree_chord_pairs, ):
-    """from a series of (single root_degree, AbstractChord) pairs, guess at whether each chord
-    most likely sits in the natural major or natural minor scale,
-    sum the evidence, and return that scale"""
+def parse_roman_numeral(numeral, ignore_alteration=False, return_params=False):
+    """given a (string) roman numeral, in upper or lower case,
+    with a potential chord modifier at the end,
+    parse into a (degree, AbstractChord) tuple, where degree is an int between 1-7.
 
-    major_quality_roots_in_major = {1,4,5}
-    minor_quality_roots_in_major = {2,3,6}
+    if return_params is False, returns the AbstractChord object itself.
+        if True, returns the modifiers/inversion parameters used to initialise it.
+        (in case we want to avoid double-initialising downstream)"""
 
-    major_scale_root_qualities = {1: Maj,
-    2: Min,
-    3: Min,
-    4: Maj,
-    5: Maj,
-    6: Min,
-    7: Dim,
-    5.5: Maj, # bVI and bVII are used in major keys occasionally, as major chords
-    6.5: Maj,
-    }
+    if ignore_alteration and parsing.is_accidental(numeral[0]):
+        # if required, disregard accidentals in the start of this degree, like bIII -> III
+        numeral = numeral[1:]
 
-    minor_scale_root_qualities = {1: Min,
-    2: Dim,
-    3: Maj,
-    4: Min,
-    5: Min,
-    6: Maj,
-    7: Maj}
+    out = reduce_aliases(numeral, parsing.progression_aliases)
+    assert isinstance(out[0], tuple) # an integer, quality tuple
+    deg, quality_str = out[0]
+    quality = Quality.from_cache(name=quality_str)
 
-    for root_degree, abs_chord in degree_chord_pairs:
-        ...
+    modifiers = []
+    inversion = 0
 
-    if abs_chord.quality.major_ish:
-        probably_major = root_degree in {1,4,5}
-    elif abs_chord.quality.minor:
-        probably_major = root_degree in {3,6}
+    if quality.minor:
+        modifiers.append(minor_mod)
+
+    if len(out) > 1: # got one or more additional modifiers as well
+        rest = ''.join(out[1:])
+
+        rest_inv = rest.split('/')
+        if len(rest_inv) > 1:
+            assert len(rest_inv) == 2 # chord part and inversion part
+            rest, inversion = rest_inv[0], int(rest_inv[1])
+
+        if len(rest) > 0:
+            rest_mods = parse_chord_modifiers(rest, catch_duplicates=True)
+            modifiers.extend(rest_mods)
+
+    if not return_params:
+        chord = AbstractChord(modifiers=modifiers, inversion=inversion)
+        return deg, chord
+    else:
+        return deg, (modifiers, inversion)
 
 
-    if root_degree == 1 and abs_chord.quality.major_ish:
-        major_evidence += 3
-    elif root_degree == 1 and abs_chord.quality.minor_ish:
-        minor_evidence += 3
+def infer_chord_scale(degree, quality, return_evidence=False):
+    """from a single (degree, Quality) pair representing a scale chord's
+    root degree and triad quality, determine whether it might be in the natural
+        major or minor scale.
+    if return_evidence is False, returns the most likely scale.
+        if True, returns a (major_evidence, minor_evidence) tuple."""
 
-def _detect_scale(degree_chords, natural_only=True):
-    """from a provided list of chord tuples of form: (root_degree, AbstractChord)
+    major_evidence, minor_evidence = 0, 0
+    # just an ugly block of conditionals, wish I could think of a more elegant way:
+    if degree == 1 and quality.major_ish:
+        major_evidence = 3
+    elif degree == 1 and quality.minor_ish:
+        minor_evidence = 3
+    elif quality.major:
+        if degree in {4,5}:
+            major_evidence = 1
+        elif degree in {2,3,6}:
+            minor_evidence = 1
+    elif quality.minor:
+        if degree in {4,5}:
+            minor_evidence = 1
+        elif degree in {3,6,7}:
+            major_evidence = 1
+    elif quality.diminished:
+        if degree == 2:
+            minor_evidence = 2
+        elif degree == 7:
+            major_evidence = 2
+
+    if return_evidence:
+        return (major_evidence, minor_evidence)
+    else:
+        return NaturalMajor if major_evidence >= minor_evidence else NaturalMinor
+
+
+def infer_scale(degree_qualities):
+    """from a provided list of chord tuples of form: (root_degree, Quality)
     determine whether they most likely correspond to a major or minor scale by summing evidence
     and returns the resulting scale as an object"""
+    # just a loop wrapper around infer_chord_scale
     major_evidence, minor_evidence = 0, 0
-    for root, chord in degree_chords:
-        if root == 1 and chord.quality.major_ish:
-            major_evidence += 3
-        elif root == 1 and chord.quality.minor_ish:
-            minor_evidence += 3
-        elif chord.quality.major:
-            if root in {4,5}:
-                major_evidence += 1
-            elif root in {2,3,6}:
-                minor_evidence += 1
-        elif chord.quality.minor:
-            if root in {4,5}:
-                minor_evidence += 1
-            elif root in {3,6,7}:
-                major_evidence += 1
-        elif chord.quality.diminished:
-            if root == 2:
-                minor_evidence += 2
-            elif root == 7:
-                major_evidence += 2
-    log(f'For scale chords: {[(r,c.quality) for r,c in degree_chords]}')
-    if natural_only or major_evidence == 0 or minor_evidence == 0:
-        log(f'  Evidence for major scale: {major_evidence}')
-        log(f'  Evidence for minor scale: {minor_evidence}')
-        inferred_scale = NaturalMajor if major_evidence >= minor_evidence else NaturalMinor
-        log(f'    (inferred: {inferred_scale})\n')
-    else:
-        raise Exception('non-natural scale detection not yet implemented')
+    for degree, quality in degree_qualities:
+        ev1, ev2 = infer_chord_scale(degree, quality, return_evidence=True)
+        major_evidence += ev1
+        minor_evidence += ev2
+    log(f'For scale chords: {[f"{d}:{q.short_name}" for d,q in degree_qualities]}')
+    log(f'  Evidence for major scale: {major_evidence}')
+    log(f'  Evidence for minor scale: {minor_evidence}')
+    inferred_scale = NaturalMajor if major_evidence >= minor_evidence else NaturalMinor
+    log(f'    (inferred: {inferred_scale})\n')
     return inferred_scale
 
+
+
 def matching_scales(degree_chord_pairs, major_roots=None):
-    """accepts a list of degree-chord pairs, of the form: [(root degree, AbstractChord), ...]
+    """accepts a list of degree-chord pairs, of the form: [(root degree, AbstractChord), etc.]
         and returns a list of matching Scales based on which intervals/factors correspond to those chords
     if major_roots is True, interpret chords like III and VII as being rooted on their major intervals
         (i.e. the major 3rd and major 7th), unless specified bIII and bVII etc.
@@ -2094,9 +2132,22 @@ def matching_scales(degree_chord_pairs, major_roots=None):
         (i.e. the minor 3rd and 7th), unless specified #III and #VII.
     if major_roots is None, we make a best guess - use the tonic's quality if there, or
         assume major if not otherwise specified."""
+    degrees = [d for d,ch in degree_chord_pairs]
+    abs_chords = [ch for d,ch in degree_chord_pairs]
+    if major_roots is None:
+        # try and guess from tonic if present:
+        if 1 in degrees:
+            which_1 = [i for i,d in enumerate(degrees) if d==1][0]
+            tonic_chord = abs_chords[which_1]
+            major_roots = not tonic_chord.quality.minor_ish # assume major for maj/aug/ind tonic chords
+        else:
+            major_roots = True # assume major since not otherwise specified
+
+    input_intervals_from_tonic = [MajorScale.get_degree]
+
     input_intervals_from_tonic = []
     for root_degree, abs_chord in degree_chord_pairs:
-        pass
+        pass # ... TBI
 
 
 # 'standard' scales are: naturals, harmonic majors/minors, and melodic minor, the most commonly used in pop music

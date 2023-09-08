@@ -103,10 +103,19 @@ class Quality:
         else:
             raise ValueError(f'Tried to initialise a Quality with offset_wrt_perfect={offset}, which is too far to be doubly augmented or diminished')
 
-
     @staticmethod
     def from_value(value):
         return value_qualities[value]
+
+    @staticmethod
+    def from_cache(name=None, value=None):
+        """efficient Quality object retrieval without init"""
+        if value is not None:
+            return value_qualities[value]
+        elif name is not None:
+            canonical_name = alias_qualities[name]
+            value = quality_values[canonical_name]
+            return value_qualities[value]
 
     def __invert__(self):
         """invert major to minor, aug to dim, or vice versa"""
@@ -618,6 +627,7 @@ modifier_aliases = { 'maj' : ['major', 'M', 'Δ', 'ᐞ'],
 alias_modifiers = unpack_and_reverse_dict(modifier_aliases)
 
 
+
 def parse_chord_modifiers(mod_str, aliases=modifier_aliases, verbose=False, allow_note_names=False, catch_duplicates=False):
     """given a string of modifiers that typically follows a chord root,
     e.g. 7sus4add11♯5,
@@ -765,3 +775,8 @@ def cast_alterations(name):
         mod = ChordModifier(make={degree: acc_value})
         modifiers.append(mod)
     return modifiers
+
+# pre-initialised modifiers used in progressions etc:
+minor_mod = ChordModifier('minor')
+dim_mod = ChordModifier('diminished')
+aug_mod = ChordModifier('augmented')
