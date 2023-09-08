@@ -2,7 +2,7 @@ from .intervals import *
 # from scales import interval_scale_names, key_name_intervals
 from .util import ModDict, rotate_list, reverse_dict, reverse_mod_dict, unpack_and_reverse_dict, numeral_subscript, reduce_aliases, check_all, log
 from .chords import Factors, AbstractChord, Chord, ChordList, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
-from .qualities import ChordModifier, Quality
+from .qualities import ChordModifier, Quality, Maj, Min, Dim
 from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental, sh, fl
 from .display import chord_table
 from . import notes, _settings, parsing
@@ -299,7 +299,7 @@ class Scale:
                 possible_degrees_to_exclude = [d for d, iv in self.degree_intervals.items() if d != 1]
 
             if preserve_quality:
-                ... # preserve the (major or minor) third in this scale if it has one?
+                pass # TBI? preserve the (major or minor) third in this scale if it has one
 
             for deg1 in possible_degrees_to_exclude:
                 other_degrees_to_exclude = [d for d in possible_degrees_to_exclude if (d not in {1, deg1} and d > deg1)]
@@ -449,7 +449,7 @@ class Scale:
         else:
             nearest_natural = self.find_nearest_natural_scale(tiebreak=False)
             if nearest_natural is None:
-                # if equally close to both natural scales...
+                # if equally close to both natural scales
                 # TBI: find a better solution than just returning major scale?
                 nearest_natural = MajorScale # this is technically equivalent to tiebreak=True
 
@@ -683,8 +683,7 @@ class Scale:
                 else:
                     return AbstractChord(inervals=chord_intervals - root_interval)
 
-        # otherwise...
-        # could not construct a tertian chord using available scale degrees,
+        # otherwise, could not construct a tertian chord using available scale degrees,
         # so generate all valid chords and make a shortlist from those
 
         valid_chords_on_root = self.valid_chords_on(root_degree, min_likelihood=0.7, min_consonance=0.5, min_order=order, max_order=order, no5s=False, inversions=True, display=False)
@@ -821,6 +820,45 @@ class Scale:
     @property
     def tertian_harmony(self):
         return self.harmonise_tertian()
+
+    # accessors for notable chords of this scale:
+    def get_dominant(self, order=4, linked=True):
+        """return the ScaleChord built on the fifth"""
+        # intervals of a dominant chord are always dominant:
+        intervals_from_root = MajorScale.chord(5, order=order).intervals
+        if linked:
+            return ScaleChord(intervals=intervals_from_root, scale=self, degree=5)
+        else:
+            return AbstractChord(intervals=intervals_from_root)
+    @property
+    def dominant(self):
+        return self.get_dominant(order=4)
+    @property
+    def dominant_triad(self):
+        return self.get_dominant(order=3)
+
+    def get_secondary_dominant(self, of=5, order=3, linked=True):
+        "return the ScaleChord built on the fifth's fifth (or other non-tonic degree)"
+        # note that a scale's major/minor quality does not influence the secondary dominant
+        # but we do this calculation anyway in case it matters for more exotic scales
+        secondary_interval_from_tonic = (self.degree_intervals[of] + 7).flatten()
+        intervals_from_root = MajorScale.chord(5, order=order, linked=False).intervals
+
+        if secondary_interval_from_tonic in self.interval_degrees:
+            secondary_root_degree = self.interval_degrees[secondary_interval_from_tonic]
+        else:
+            secondary_root_degree = self.fractional_interval_degrees[secondary_interval_from_tonic]
+        if linked:
+            return ScaleChord(intervals=intervals_from_root, scale=self, degree=secondary_root_degree)
+        else:
+            return AbstractChord(intervals=intervals_from_root)
+    @property
+    def secondary_dominant(self):
+        return self.get_secondary_dominant(order=4)
+    @property
+    def secondary_dominant_triad(self):
+        return self.get_secondary_dominant(order=3)
+
 
     def progression(self, *degrees, order=3):
         """given a list of numeric integer degrees,
@@ -1690,7 +1728,7 @@ class ScaleChord(AbstractChord):
     """AbstractChord that lives in a Scale, and understands a few things about
     harmony within the scale as well as its relative position inside it.
     Used inside Progression class."""
-    def __init__(self, *args, scale, degree=None, factor=None, _init_abs=True, **kwargs):
+    def __init__(self, *args, scale=None, degree=None, factor=None, _init_abs=True, **kwargs):
         """as AbstractChord, except for the additional required args:
         scale: a Scale object, or string that casts to Scale
             denoting the scale this chord lives in.
@@ -1710,11 +1748,32 @@ class ScaleChord(AbstractChord):
         (e.g. with ScaleChord('V', scale='minor'))"""
 
         # initialise everything else as AbstractChord: (if not being inherited by KeyChord)
+
+        init_by_numeral = False # control flow flag
+        if len(args) == 1 and isinstance(args[0], str):
+            # if initialised with a single string, this could be a roman numeral:
+            name = args[0]
+            roman_value = parsing.begins_with_roman_numeral(name, return_value=True)
+            if roman_value != False:
+                # name indeed begins with a roman numeral, and roman_value is the root degree
+                degree = roman_value
+                init_by_numeral = True # ignore usual init routine
+
+                if scale is None:
+                    # auto detect major/minor scale from chord quality
+                    # if not otherwise specified
+                    scale = infer_scale_quality(...)
+
+
+
         if _init_abs:
             AbstractChord.__init__(self, *args, **kwargs)
 
         if not isinstance(scale, Scale):
             scale = Scale(scale)
+
+
+
 
         self.scale = scale
 
@@ -1939,13 +1998,105 @@ class ScaleChord(AbstractChord):
     def short_name(self):
         return f'{super().short_name} {self.simple_numeral}'
 
-    def __repr__(self):
+    @property
+    def compact_name(self):
         ### compact repr for ScaleChord class since it turns up in markov models etc. a lot:
+        f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
+
+    def __repr__(self):
         # in_str = 'not ' if not self.in_scale else ''
-        # return f'{self.name} {self.intervals} ({self.simple_numeral} of: {self.scale._marker}{self.scale.name})'
-        return f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
+        return f'{self.name} {self.intervals} ({self.simple_numeral} of: {self.scale._marker}{self.scale.name})'
+        # return f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
 
 
+def infer_scale_quality(degree_chord_pairs, ):
+    """from a series of (single root_degree, AbstractChord) pairs, guess at whether each chord
+    most likely sits in the natural major or natural minor scale,
+    sum the evidence, and return that scale"""
+
+    major_quality_roots_in_major = {1,4,5}
+    minor_quality_roots_in_major = {2,3,6}
+
+    major_scale_root_qualities = {1: Maj,
+    2: Min,
+    3: Min,
+    4: Maj,
+    5: Maj,
+    6: Min,
+    7: Dim,
+    5.5: Maj, # bVI and bVII are used in major keys occasionally, as major chords
+    6.5: Maj,
+    }
+
+    minor_scale_root_qualities = {1: Min,
+    2: Dim,
+    3: Maj,
+    4: Min,
+    5: Min,
+    6: Maj,
+    7: Maj}
+
+    for root_degree, abs_chord in degree_chord_pairs:
+        ...
+
+    if abs_chord.quality.major_ish:
+        probably_major = root_degree in {1,4,5}
+    elif abs_chord.quality.minor:
+        probably_major = root_degree in {3,6}
+
+
+    if root_degree == 1 and abs_chord.quality.major_ish:
+        major_evidence += 3
+    elif root_degree == 1 and abs_chord.quality.minor_ish:
+        minor_evidence += 3
+
+def _detect_scale(degree_chords, natural_only=True):
+    """from a provided list of chord tuples of form: (root_degree, AbstractChord)
+    determine whether they most likely correspond to a major or minor scale by summing evidence
+    and returns the resulting scale as an object"""
+    major_evidence, minor_evidence = 0, 0
+    for root, chord in degree_chords:
+        if root == 1 and chord.quality.major_ish:
+            major_evidence += 3
+        elif root == 1 and chord.quality.minor_ish:
+            minor_evidence += 3
+        elif chord.quality.major:
+            if root in {4,5}:
+                major_evidence += 1
+            elif root in {2,3,6}:
+                minor_evidence += 1
+        elif chord.quality.minor:
+            if root in {4,5}:
+                minor_evidence += 1
+            elif root in {3,6,7}:
+                major_evidence += 1
+        elif chord.quality.diminished:
+            if root == 2:
+                minor_evidence += 2
+            elif root == 7:
+                major_evidence += 2
+    log(f'For scale chords: {[(r,c.quality) for r,c in degree_chords]}')
+    if natural_only or major_evidence == 0 or minor_evidence == 0:
+        log(f'  Evidence for major scale: {major_evidence}')
+        log(f'  Evidence for minor scale: {minor_evidence}')
+        inferred_scale = NaturalMajor if major_evidence >= minor_evidence else NaturalMinor
+        log(f'    (inferred: {inferred_scale})\n')
+    else:
+        raise Exception('non-natural scale detection not yet implemented')
+    return inferred_scale
+
+def matching_scales(degree_chord_pairs, major_roots=None):
+    """accepts a list of degree-chord pairs, of the form: [(root degree, AbstractChord), ...]
+        and returns a list of matching Scales based on which intervals/factors correspond to those chords
+    if major_roots is True, interpret chords like III and VII as being rooted on their major intervals
+        (i.e. the major 3rd and major 7th), unless specified bIII and bVII etc.
+    if major_roots is False, interpret those chords as rooted on their minor intervals,
+        (i.e. the minor 3rd and 7th), unless specified #III and #VII.
+    if major_roots is None, we make a best guess - use the tonic's quality if there, or
+        assume major if not otherwise specified."""
+    input_intervals_from_tonic = []
+    for root_degree, abs_chord in degree_chord_pairs:
+        pass
 
 
 # 'standard' scales are: naturals, harmonic majors/minors, and melodic minor, the most commonly used in pop music

@@ -4,7 +4,7 @@ from .intervals import Interval
 from .notes import Note, NoteList, chromatic_notes
 from .chords import Chord, AbstractChord, ChordList
 from .qualities import Major, Minor, Perfect, Diminished, parse_chord_modifiers, ChordModifier, modifier_aliases
-from .scales import Scale, ScaleChord, NaturalMajor, NaturalMinor, MelodicMinor, HarmonicMinor, MelodicMajor, HarmonicMajor
+from .scales import infer_scale_quality, _detect_scale, Scale, ScaleChord, NaturalMajor, NaturalMinor
 from .keys import Key, KeyChord, matching_keys# , most_likely_key
 from .util import reduce_aliases, rotate_list, check_all, reverse_dict, log
 from .parsing import roman_numerals, numerals_roman, modifier_marks, auto_split, superscript, fl, sh, nat
@@ -17,44 +17,6 @@ from collections import Counter
 # global defaults:
 default_diacs = _settings.DEFAULT_PROGRESSION_DIACRITICS
 default_marks = _settings.DEFAULT_PROGRESSION_MARKERS
-
-### TBI: progression completion feature that incorporates T-S-D-T progression logic:
-# I is tonic
-# V and viio are dominant
-# ii and IV are subdominant
-# vi is pre-subdominant
-# syntactic progressions go from tonic to subdominant to dominant to tonic
-# the first subdominant in a T-S-D-T progression can optionally be preceded by a pre-subdominant
-# "It is allowable to move between functionally identical chords only
-#   when the root of the first chord lies a third above the root of the
-#   second." (i.e. IV-ii, viio-V)
-# "Dominant chords can also progress to vi as part of a 'deceptive' progression."
-
-# c.f. root-motion theory (Meeus):
-# root motion by fifth is primary: descending-fifth motion represents the
-# prototypical “dominant” progression, while ascending-fifth motion is prototypically
-# “subdominant.” Meeus additionally allows two classes of “substitute” progression:
-# rootprogression by third can “substitute” for a fifth-progression in the same direction; and
-# root-progression by step can “substitute” for a fifth-progression in the opposite direction
-
-
-### harmonic flowchart in major:
-
-major_harmonic_model_functions = {'T': ['TP', 'PD', 'D'],  # tonic to tonic prolongation, predominant, or dominant
-                        'TP': ['TP', 'PD'],
-                        'PD': ['PD', 'D'],
-                        'D': ['D', 'T']}
-major_harmonic_model_degrees = {1: [3,6,4,2,7,5],
-                                3: [6,4,2],
-                                6: [4,2],
-                                4: [2,7,5],
-                                2: [7,5],
-                                7: [5,1],
-                                5: [1]}
-major_harmonic_model_degrees_exceptions = {4: [1], 5: [6]}
-
-
-major_function_chords = {'T': [1], 'TP': [3,6], 'PD': [4,2], 'D': [7,5]}
 
 # functions of (major?) scale chords, indexed by interval (not degree)
 scale_functions = { 0: "T", # 1st, tonic
@@ -70,30 +32,6 @@ scale_functions = { 0: "T", # 1st, tonic
                     10: "ST", # m7, subtonic
                     11: "L", # M7, leading tone
                     }
-
-scale_function_names = {0: "tonic", # 1st
-                        1: "supertonic", # 2nd (phrygian/locrian)
-                        2: "supertonic", # 2nd
-                        3: "mediant", # 3rd (minor)
-                        4: "mediant", # 3rd (major)
-                        5: "subdominant", # 4th
-                        6: "tritone",
-                        7: "dominant", # 5th
-                        8: "submediant", # 6th (minor)
-                        9: "submediant", # 6th (major)
-                        10: "subtonic", # 7th (minor)
-                        11: "leading tone", # 7th (major)
-                        }
-
-
-#
-# # all numerals also get turned into modifier marks:
-# modifier_marks.update({str(i): parsing.superscript_integers[i] for i in range(10)})
-# # as well as some select superscriptable symbols:
-# modifier_marks.update({c: parsing.superscript_symbols[c] for c in '/+-!?'})
-# # but not chord alterations: (because we can't superscript sharps/flats)
-# modifier_marks.update({f'{acc}{i}' : f'{acc}{i}' for i in range(3,14) for acc in [sh, fl, nat]})
-
 
 roman_degree_chords = {}
 # render as an alias dict linking numerals to major/minor qualities:
@@ -117,14 +55,6 @@ progression_aliases.update(accidental_progression_aliases)
 # kludge: we have to specifically ignore 'dim' when reading roman numerals,
 # because it is the only modifier that contains a roman numeral ('i')
 progression_aliases['dim'] = 'dim'
-
-# prog_modifier_aliases = dict(modifier_aliases) # a variant of modifier_aliases that includes
-#                                                # progression-specific superscript shorthand
-# for mod,mark in modifier_marks.items():
-#     if mod in prog_modifier_aliases:
-#         prog_modifier_aliases[mod].append(mark)
-#     else:
-#         prog_modifier_aliases[mod] = [mark]
 
 minor_mod = ChordModifier('minor')
 
@@ -186,7 +116,7 @@ class Progression:
 
             # determine scale from numerals provided, if scale not given:
             if scale is None:
-                self.scale = self._detect_scale(base_degree_chords)
+                self.scale = _detect_scale(base_degree_chords)
             elif isinstance(scale, str):
                 self.scale = Scale(scale)
             else:
@@ -215,62 +145,6 @@ class Progression:
                 scale_chords = scale.chords(self.root_degrees, order=order)
                 degree_chords = [(d,c) for d,c in zip(self.root_degrees, scale_chords)]
                 self.chords = degree_chords
-
-            # log(f'Base (unscaled) degree chords:')
-            # for r,c in base_degree_chords:
-                # log(f'{r}: {c}')
-            #
-            # if scale is None:
-            #     # detect scale from base AbstractChords and then instantiate ScaleChords
-            #     # abs_chords = ChordList([ch for d,ch in base_degree_chords])
-            #     self.scale = self._detect_scale(degree_chords)
-            #
-            #     # # catch a special case: have we been given flat degrees (like bVI) in a minor key,
-            #     # # which cannot be found because e.g. the minor VI is already flat?
-            #     # for i in range(len(degree_chords)):
-            #     #     deg, ch = degree_chords[i]
-            #     #     if isinstance(deg, float) and deg not in self.scale.fractional_degree_intervals:
-            #     #         # quietly re-parse but ignore accidental:
-            #     #         log(f'Progression given chord: {numerals[i]} but that altered root is already in scale')
-            #     #         deg, ch = parse_roman_numeral(numerals[i], ignore_alteration=True)
-            #     #         degree_chords[i] = deg, ch
-            #     #         log(f'So quietly replaced with {numerals[i][1:]} (in scale: {self.scale.name}')
-            #     #         self.root_degrees = [d[0] for d in degree_chords]
-            #
-            #     self.chords = ChordList([ch.in_scale(self.scale, degree=d) for d,ch in degree_chords])
-            #
-            # else:
-            #     # scale is provided, so we simply instantiate it
-            #     # and, if needed, check degree chords against it
-            #     if isinstance(scale, str):
-            #         scale = Scale(scale)
-            #     # assert isinstance(scale, Scale)
-            #     self.scale = scale
-            #
-            #
-            #
-            #     if ignore_conflicting_case:
-            #         # ignore case (but not modifiers) of roman numeral chords provided
-            #         # and instantiate them from scale instead:
-            #         scale_chords = ChordList([self.scale.chord(d, linked=True) for d in self.root_degrees])
-            #         self.chords = scale_chords
-            #         log(f'Ignoring conflicting case in chord numerals:')
-            #         for (d, bc), sc in zip(degree_chords, self.chords):
-            #             if bc == sc:
-            #                 log(f'{d}: Provided {bc.short_name:{5}}, computed {sc.short_name:{5}}')
-            #             else:
-            #                 log(f'{d}: Provided {bc.short_name:{5}}, computed {sc.short_name:{5}} [CONFLICT, using computed scale chord]')
-            #
-            #     else:
-            #         # do not ignore case; instantiate chords in provided case
-            #         self.chords = ChordList([ch.in_scale(self.scale, degree=d) for d,ch in degree_chords])
-            #         # log(f'Ignoring conflicting case in chord numerals:')
-            #         # for (d, bc), sc in zip(degree_chords, scale_chords):
-            #             # if bc == sc:
-            #                 # log(f'{d}: Provided {bc.short_name:{5}}, computed {sc.short_name:{5}}')
-            #             # else:
-            #                 # log(f'{d}: Provided {bc.short_name:{5}}, computed {sc.short_name:{5}} [CONFLICT, using provided chord]')
-            #     # print()
 
         elif check_all(numerals, 'isinstance', int):
             assert scale is not None, f'Progression chords given as integers but scale arg not provided'
@@ -303,13 +177,6 @@ class Progression:
         else:
             raise ValueError(f'Progression init ended up with an iterable of mixed types, expected all ints or all strings but got: {numerals}')
 
-        # self.abstract_chords = self.chords # true for Progression class, not for ChordProgression
-
-        # scaledegree, chord pairs:
-        # self.degree_chords = [(self.root_degrees[i], self.chords[i]) for i in range(len(self))]
-
-        # self.numerals = self.as_numerals(sep=None)
-
         # note movements between each chord root:
         self.chord_root_intervals_from_tonic = [self.scale.degree_intervals[d] if d in self.scale.degree_intervals else self.scale.fractional_degree_intervals[d]  for d in self.root_degrees]
         self.root_movements = [RootMotion(self.root_degrees[i], self.root_degrees[i+1], scale=self.scale) for i in range(len(self)-1)]
@@ -317,38 +184,7 @@ class Progression:
         assert check_all(self.chords, 'isinstance', ScaleChord) # sanity check: progression chords are always ScaleChords
 
 
-    # TO DO: replace with a (simpler?) case statement?
-    def _detect_scale(self, degree_chords):
-        """from a provided list of chord tuples of form: (root_degree, AbstractChord)
-        determine whether they most likely correspond to a major or minor scale by summing evidence
-        and returns the resulting scale as an object"""
-        major_evidence, minor_evidence = 0, 0
-        for root, chord in degree_chords:
-            if root == 1 and chord.quality.major_ish:
-                major_evidence += 3
-            elif root == 1 and chord.quality.minor_ish:
-                minor_evidence += 3
-            elif chord.quality.major:
-                if root in {4,5}:
-                    major_evidence += 1
-                elif root in {2,3,6}:
-                    minor_evidence += 1
-            elif chord.quality.minor:
-                if root in {4,5}:
-                    minor_evidence += 1
-                elif root in {3,6,7}:
-                    major_evidence += 1
-            elif chord.quality.diminished:
-                if root == 2:
-                    minor_evidence += 2
-                elif root == 7:
-                    major_evidence += 2
-        log(f'For scale chords: {[(r,c.quality) for r,c in degree_chords]}')
-        log(f'  Evidence for major scale: {major_evidence}')
-        log(f'  Evidence for minor scale: {minor_evidence}')
-        inferred_scale = NaturalMajor if major_evidence >= minor_evidence else NaturalMinor
-        log(f'    (inferred: {inferred_scale})\n')
-        return inferred_scale
+
 
     def analyse(self, display=False, ret=True, roots=None):
         """shows the harmonic functions of the chords in this progression"""
@@ -383,7 +219,8 @@ class Progression:
                             dist, '  ', cadence])
 
         if display:
-            title = str(self.chords)
+            # construct dataframe object for human viewing
+            title = str(self)
             print('\n' + title)
             # border between title and df:
             title_width = len(title)
@@ -402,8 +239,6 @@ class Progression:
     def as_numerals(self, sep=' ', modifiers=True, marks=default_marks, diacritics=default_diacs):
         """returns this Progression's representation in roman numeral form
         with respect to its Scale"""
-
-        # scale_chords = [ch.in_scale(self.scale, degree=self.root_degrees[i]) for i,ch in enumerate(self)]
 
         numerals = [ch.get_numeral(modifiers=modifiers, marks=marks, diacritics=diacritics) for ch in self.chords]
 
@@ -629,7 +464,6 @@ class ChordProgression(Progression): # , ChordList):
             valid_chords.append(ch)
 
         base_chords = ChordList(valid_chords)
-        # self.abstract_chords = [c.abstract() for c in base_chords]
 
         if key is None:
             # detect most likely key:
@@ -654,10 +488,6 @@ class ChordProgression(Progression): # , ChordList):
             self.chords = base_chords
         else:
             self.chords = ChordList([KeyChord(factors=ch.factors, inversion=ch.inversion, root=ch.root, key=self.key, degree=d, assigned_name=ch.assigned_name) for ch,d in zip(base_chords, self.root_degrees)])
-
-        # self.degree_chords = [(self.root_degrees[i], self.chords[i]) for i in range(len(self))]
-
-        # self.numerals = self.as_numerals(sep=None)
 
         # note movements between each chord root:
         self.chord_root_intervals_from_tonic = [self.key.degree_intervals[d]  if d in self.key.degree_intervals  else self.key.fractional_degree_intervals[d]  for d in self.root_degrees]
@@ -705,13 +535,6 @@ class ChordProgression(Progression): # , ChordList):
         if isinstance(other, (int, Interval)):
             new_key = self.key + other
             return self.in_key(new_key)
-            # new_root_degrees = [r + other for r in self.root_degrees]
-            # # mod to range 1-7:
-            # new_root_degrees = [((r-1) % 7) + 1
-            #                     if isinstance(r, float) # i.e. catch fractional (float) degrees
-            #                     else r                  # use ScaleDegree as normal
-            #                     for r in new_root_degrees]
-            # return Progression(new_root_degrees, chords=self.scale_chords, scale=self.scale)
         elif isinstance(other, str):
             # check if a roman numeral:
             if other.upper() in roman_numerals:
@@ -764,11 +587,6 @@ class ChordProgression(Progression): # , ChordList):
         self.chords.play(*args, **kwargs)
 
     _brackets = _settings.BRACKETS['ChordProgression']
-
-    # def __str__(self):
-    #     # chord_set_str = '-'.join(['♬ ' + c.name for c in self.chords])
-    #     chords_str = '-'.join([c.name for c in self.chords])
-    #     return f'ChordProgression: {chords_str} \n or Progression:  𝄆 {self.as_numerals()} 𝄇  (in {self.key.name})'
 
     def long_str(self):
         # numerals = self.as_numerals()
@@ -1214,15 +1032,30 @@ class RootMotion(DegreeMotion):
         return(f'[{self.function_char}]{self.degrees}:{self.direction_str}')
 
 
+class ScaleChordMotion:
+    """Movement of root and every other chord degree from one to another,
+    understood within the context of a scale and the chords built on its degrees"""
+    def __init__(self, start_chord, end_chord, scale=None):
+        scale_chords = []
+        for ch in (start_chord, end_chord):
+            if not isinstance(ch, ScaleChord):
+                # cast to ScaleChord from roman numeral
+                assert isinstance(ch, str), f"Inputs to ScaleChordMotion must be either ScaleChords or strings denoting roman numerals, but got: {ch} ({type(ch)})"
+                ch = ScaleChord.from_numeral(ch, scale=scale)
+            scale_chords.append(ch)
+        ch1, ch2 = scale_chords
 
+        if scale is None:
+            # auto-determine scale if not explicitly provided
+            if ch1.scale == ch2.scale:
+                # use the ScaleChords' scales if they match
+                self.scale = ch1.scale
+            else:
+                # determine it from roots and qualities:
+                chord_tuples = [(ch1.scale_degree, ch1), (ch2.scale_degree, ch2)]
+                self.scale = _detect_scale(chord_tuples)
 
-class ChordMotion:
-    """Movement of root and every other chord degree from one to another"""
-    def __init__(self, start_chord, end_chord, key=None):
-        self.start_chord = start_chord
-        self.end_chord = end_chord
-        if key is None:
-            # interpret it from given KeyChords:
+            # interpret it from given ScaleChords:
             assert isinstance(start_chord, KeyChord)
             assert isinstance(end_chord, KeyChord)
             assert start_chord.key == end_chord.key
@@ -1230,6 +1063,8 @@ class ChordMotion:
         self.key = key
         self.scale = key.scale
 
+
+    def _build_tables(self):
         # experimental, WIP
         import numpy as np
         degree_distance_matrix = np.zeros((len(start_chord), len(end_chord)), dtype=float)
@@ -1253,6 +1088,19 @@ class ChordMotion:
                                         index=[f'{n.chroma:<2}  ' for n in start_chord.notes])
 
 
+class KeyChordMotion(ScaleChordMotion):
+    pass
+
+
+# generic constructor method for motion either between ScaleChords or KeyChords:
+def chord_motion(start_chord, end_chord, scale=None):
+    if type(start_chord) in (AbstractChord, ScaleChord) and (type(end_chord) == type(start_chord)):
+        # this will be a ScaleChordMotion
+        return ScaleChordMotion(start_chord, end_chord, scale=scale)
+    elif type(start_chord) in (Chord, KeyChord) and (type(end_chord) == type(start_chord)):
+        return KeyChordMotion(start_chord, end_chord, scale=scale)
+    else:
+        raise TypeError(f'Cannot make a ChordMotion object from incompatible types: {type(start_chord)} and {type(end_chord)}')
 
 def parse_roman_numeral(numeral, ignore_alteration=False):
     """given a (string) roman numeral, in upper or lower case,
