@@ -1,6 +1,7 @@
 import time
 import inspect
 
+
 VERBOSE = False
 
 global_init_time = time.time()
@@ -10,14 +11,43 @@ class Log:
     def __init__(self, verbose=VERBOSE):
         self.verbose=verbose
 
-    def __call__(self, msg):
-        if self.verbose:
-            cur_frame = inspect.currentframe()
-            call_frame = inspect.getouterframes(cur_frame, 2)
+    def __call__(self, msg, force=False, depth=1):
+        if self.verbose or force:
             wall_time = time.time() - global_init_time
 
-            context = f'[{wall_time:.06f}]({call_frame[1][3]}) '
-            print(context + msg)
+            cur_frame = inspect.currentframe()
+            call_frame = inspect.getouterframes(cur_frame, 2)
+
+            # provide frames as deep as asked for:
+            depths = range(1, depth+1)
+            frames = [{} for i in depths]
+
+            for depth, frame in zip(depths, frames):
+                module_path = call_frame[depth][1]
+                frame['module'] = module_path.split('/')[-1]
+                frame['function'] = call_frame[depth][3]
+
+                frame['line_num'] = call_frame[depth][2]
+
+                if call_frame[depth][4] is not None:
+                    frame['prev_line'], frame['cur_line'] = call_frame[depth][4]
+                else:
+                    frame['prev_line'], frame['cur_line'] = '', ''
+
+            context_lines = [f"[WALLTIME:{wall_time:.06f}]"]
+
+            # build stack trace with increasing indents:
+            for depth, frame in zip(depths, frames):
+                if depth == 1:
+                    line_contents = frame['prev_line'] # i.e. the line BEFORE the log call
+                else:
+                    line_contents = frame['cur_line'] # i.e. the outer function
+                indent = ('-'*depth) + (' '*depth)
+                context_lines.append(f"{indent}[ {frame['module']}({frame['line_num']-1}):{frame['function']} ] {line_contents.strip()}")
+
+            # append log message itself and print:
+            context_lines.append('='*(depth+1) + ' '*(depth+1) + msg + '\n')
+            print('\n'.join(context_lines))
 
 log = Log()
 
