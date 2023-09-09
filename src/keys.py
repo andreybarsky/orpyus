@@ -138,9 +138,9 @@ class Key(Scale):
             else:
                 assert tonic is not None, f'Key object initiated by Scale name ({name}) but no tonic note provided'
                 scale_name = name
-            tonic = Note(tonic)
+            tonic = Note.from_cache(tonic)
         elif tonic is not None:
-            tonic = Note(tonic)
+            tonic = Note.from_cache(tonic)
             scale_name = name # i.e. None
         else:
             raise Exception('neither scale_name nor tonic provided to Key init, we need one or the other!')
@@ -170,12 +170,12 @@ class Key(Scale):
         if self.tonic.prefer_sharps != prefer_sharps:
             # replace the tonic if it has a different sharp preference.
             # n.b. we reinitialise note objects (to avoid caching interactions)
-            self.tonic = Note(self.tonic.position, prefer_sharps=prefer_sharps)
+            self.tonic = Note.from_cache(position=self.tonic.position, prefer_sharps=prefer_sharps)
 
         if self.is_natural() or self.is_natural_pentatonic():
             # no complex computation needed for non-natural scales
             # just assign same sharp preference as tonic to every note.
-            self.notes = NoteList([Note(n.position, prefer_sharps=prefer_sharps) if n.prefer_sharps!=prefer_sharps  else n  for n in self.notes ])
+            self.notes = NoteList([Note.from_cache(position=n.position, prefer_sharps=prefer_sharps) if n.prefer_sharps!=prefer_sharps  else n  for n in self.notes ])
 
         else:
             # compute flat/sharp preference of individual notes
@@ -193,19 +193,19 @@ class Key(Scale):
                     if n.name == next_nat:
                         # this is a natural note, so its sharp preference shouldn't matter,
                         # but set it to the tonic's anyway for consistency
-                        n = Note(n.position, prefer_sharps=prefer_sharps)
+                        n = Note.from_cache(position=n.position, prefer_sharps=prefer_sharps)
                     else:
                         # which accidental would make this note's chroma include the next natural note?
                         if n.flat_name[0] == next_nat:
-                            n = Note(n.position, prefer_sharps=False)
+                            n = Note.from_cache(position=n.position, prefer_sharps=False)
                         elif n.sharp_name[0] == next_nat:
-                            n = Note(n.position, prefer_sharps=True)
+                            n = Note.from_cache(position=n.position, prefer_sharps=True)
                         else:
                             # this note needs to be a double sharp or double flat or something
                             log(f'Found a possible case for a double-sharp or double-flat: note {i+2} ({n}) of {self}')
                             log(f'  because neither its sharp name ({n.sharp_name}) or its flat name ({n.flat_name}) starts with the desired natural note: {next_nat}')
                             # fall back on same as tonic:
-                            n = Note(n.position, prefer_sharps=prefer_sharps)
+                            n = Note.from_cache(position=n.position, prefer_sharps=prefer_sharps)
                     new_notes.append(n)
                     next_nat = parsing.next_natural_note[next_nat]
                 else:
@@ -649,7 +649,7 @@ relative_co5_distances = IntervalList([0, 5, 2, 3, 4, 1, 6, 1, 4, 3, 2, 5])
 # this works for any diatonic key, and is just a property of how the notes are arranged,
 # which is why it's hardcoded instead of being computed at init
 
-def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None,
+def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_tonic=False,
                   exact=False, exhaustive=None, modes=False, scale_lengths=[7],
                   min_precision=0, min_recall=0.9,
                   min_likelihood=0.7, max_likelihood=1.0, max_rarity=None, min_rarity=None,
@@ -670,6 +670,12 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None,
         unless none are found at all, in which case ignore the guess.
         incompatible with 'tonic' arg above - the difference is that 'tonic' will
         return an empty list if no tonic-matching keys are found.
+    assume_tonic: if True, will take the tonic to be the first chord's root, or the first note
+        in the supplied notelist.
+        if False, makes no assumptions about key tonics.
+        if None (default), and no other tonic args are provided,switches depending on
+            input type: becomes True for notelists, False for chordlists.
+        this cannot be True if either 'tonic' or 'tonic_guess' are set.
     natural_only: if True, only scores natural major and minor keys.
     modes: if True, returns all named modes of all matches.
         if False, only returns base keys and their relative keys.
@@ -742,7 +748,22 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None,
         log(f'Restricted to {len(scales_to_search)} of length/s {scale_lengths}: {", ".join([s.name for s in scales_to_search])}')
 
     #### TONIC RESTRICTION
+    if assume_tonic is None and tonic is None and tonic_guess is None:
+        # assume tonic by default if NoteList is given as input and no other tonic args are set
+        if notes is not None:
+            assume_tonic = True
+
+    # set assumed tonic, if we are asked to assume one:
+    if tonic is None and assume_tonic is True:
+        # assume the first note is the tonic:
+        if chords is not None:
+            tonic = chords[0].root
+        elif notes is not None:
+            tonic = notes[0]
+        assume_tonic = None
+
     if tonic is not None:
+        assert assume_tonic is None, f"Incompatible 'tonic' and 'assume_tonic' args provided to function matching_keys"
         assert tonic_guess is None, f"Incompatible 'tonic' and 'tonic_guess' args provided to function matching_keys"
         # set explicit tonics only
         possible_tonics = NoteList(tonic).unique()
@@ -844,7 +865,9 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None,
 
     # filter by tonic guess if needed:
     if tonic_guess is not None:
-        pass ### TBI
+        ### filter list to only include keys of that tonic, unless none exist
+        if not isinstance(tonic_guess, Note):
+            tonic_guess = Note.from_cache(tonic_guess)
 
     # sort matches according to desired order:
     sort_funcs = {'length': lambda x: len(x),

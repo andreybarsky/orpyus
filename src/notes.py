@@ -43,6 +43,8 @@ class Note:
                 attempt to initialise an OctaveNote instead of a Note.
         """
 
+
+
         if isinstance(name, Note):
             # accept re-casting: just take the input note's name
             name, prefer_sharps = name.chroma, name.prefer_sharps
@@ -67,6 +69,7 @@ class Note:
         # store sharp and flat names of this note in case they are needed:
         self.sharp_name = preferred_name(self.position, prefer_sharps=True)
         self.flat_name = preferred_name(self.position, prefer_sharps=False)
+
 
     #### main input/arg-parsing private method:
     @staticmethod
@@ -128,8 +131,10 @@ class Note:
                 prefer_sharps = False
 
         if name is not None:
-            if isinstance(name, Note): # recast note object input to string
-                name = name.chroma
+            if type(name) is Note:
+                # no need to fetch from cache: just return the passed object
+                return name
+                # name = name.chroma
 
             if (name, prefer_sharps) in cached_notes:
                 return cached_notes[(name, prefer_sharps)]
@@ -860,8 +865,8 @@ MiddleC = OctaveNote('C4')
 chromatic_notes = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
 
 # note cache by name for efficient init:
-cached_notes = {n: Note(n, prefer_sharps=s) for n in parsing.common_note_names for s in [None, False, True]}
-cached_notes.update({p : Note(position=p, prefer_sharps=s) for p in range(12) for s in [None, False, True]})
+cached_notes = {(n,s): Note(n, prefer_sharps=s) for n in parsing.common_note_names for s in [None, False, True]}
+cached_notes.update({(p,s) : Note(position=p, prefer_sharps=s) for p in range(12) for s in [None, False, True]})
 
 # relative minors/majors of all chromatic notes:
 relative_minors = {c.name : (c - 3).name for c in chromatic_notes}
@@ -875,14 +880,14 @@ sharp_tonic_names = ['G', 'D', 'A', 'E', 'B']
 flat_tonic_names = ['F', f'B{fl}', f'E{fl}', f'A{fl}', f'D{fl}']
 neutral_tonic_names = ['C', f'G{fl}'] # no sharp/flat preference, fall back on default
 
-sharp_major_tonics = [Note(t, prefer_sharps=True) for t in sharp_tonic_names]
-flat_major_tonics = [Note(t, prefer_sharps=False) for t in flat_tonic_names]
-neutral_major_tonics = [Note(t) for t in neutral_tonic_names]
+sharp_major_tonics = [Note.from_cache(t, prefer_sharps=True) for t in sharp_tonic_names]
+flat_major_tonics = [Note.from_cache(t, prefer_sharps=False) for t in flat_tonic_names]
+neutral_major_tonics = [Note.from_cache(t) for t in neutral_tonic_names]
 major_tonics = sorted(sharp_major_tonics + flat_major_tonics + neutral_major_tonics)
 
-sharp_minor_tonics = [Note(relative_minors[t], prefer_sharps=True) for t in sharp_tonic_names]
-flat_minor_tonics = [Note(relative_minors[t], prefer_sharps=False) for t in flat_tonic_names]
-neutral_minor_tonics = [Note(relative_minors[t]) for t in neutral_tonic_names]
+sharp_minor_tonics = [Note.from_cache(relative_minors[t], prefer_sharps=True) for t in sharp_tonic_names]
+flat_minor_tonics = [Note.from_cache(relative_minors[t], prefer_sharps=False) for t in flat_tonic_names]
+neutral_minor_tonics = [Note.from_cache(relative_minors[t]) for t in neutral_tonic_names]
 minor_tonics = sorted(sharp_minor_tonics + flat_minor_tonics + neutral_minor_tonics)
 
 ### TBI: improved recognition of double-sharp and double-flat notes for exotic keys?

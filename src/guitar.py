@@ -56,7 +56,7 @@ class Guitar:
             # interpret a string that casts to a NoteList, like 'EADGBE'
 
             # separate out individual note chromas from the input string:
-            tuning_chromas = NoteList([Note(n) for n in parsing.parse_out_note_names(tuning)])
+            tuning_chromas = NoteList([Note.from_cache(n) for n in parsing.parse_out_note_names(tuning)])
             # make into a strictly ascending series of OctaveNotes:
             tuned_strings = tuning_chromas.force_octave(start_octave=2)
             self.tuned_strings = [String(s) for s in tuned_strings]
@@ -574,4 +574,4 @@ standard_open_chord_names = {
                  'Fmaj7', # I still have trouble even with partial bars on Fmaj
                  'G', 'G7', 'Gmaj7',
                             }
-standard_open_chords = set([Chord(c) for c in standard_open_chord_names])
+standard_open_chords = set([Chord.from_cache(c) for c in standard_open_chord_names])

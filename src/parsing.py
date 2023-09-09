@@ -107,7 +107,7 @@ preferred_note_names['generic'] = generic_note_names # in rare cases where we wa
 natural_note_positions = set(note_positions[n] for n in natural_note_names)
 valid_note_names = set(note_positions.keys())
 # common note names are cached for chord init, they are just the natural notes plus the commonly typed sharp and flat accidentals:
-common_note_names = set(preferred_note_names[fl] + preferred_note_names[sh])
+common_note_names = set(preferred_note_names[fl] + preferred_note_names[sh]) # note that this contains duplicate notes! e.g. C# / Db
 
 
 

@@ -92,7 +92,7 @@ class Progression:
 
             base_degree_chord_params = [parse_roman_numeral(n, return_params=True) for n in numerals] # degree, AbstractChord tuples
             self.root_degrees = [d[0] for d in base_degree_chord_params]
-            base_degree_chords = [(deg, AbstractChord(modifiers=mods, inversion=inv)) for deg, (mods, inv) in base_degree_chord_params]
+            base_degree_chords = [(deg, AbstractChord.from_cache(modifiers=mods, inversion=inv)) for deg, (mods, inv) in base_degree_chord_params]
 
             chord_degree_qualities = [(deg, ch.quality) for deg,ch in base_degree_chords]
 
@@ -432,9 +432,8 @@ class ChordProgression(Progression): # , ChordList):
             elif isinstance(item, Chord): # already a Chord object
                 ch = item
             elif isinstance(item, str): # string that we try to cast to Chord
-                ch = Chord(item)
-                if log.verbose and (ch == Chord('Cmaj7#11')):
-                    import ipdb; ipdb.set_trace()
+                ch = Chord.from_cache(item)
+
             elif isinstance(item, (list, tuple)): # unpackable parameters that we try to cast to Chord
                 ch = Chord(*item)
             elif isinstance(item, dict):
@@ -1045,17 +1044,24 @@ class ScaleChordMotion:
 
         self.start_chord, self.end_chord = ch1, ch2
 
+        self._build_tables()
+
+
+    def __repr__(self):
+        return f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name}\n{self.degree_df}\n{self.interval_df}'
 
     def _build_tables(self):
         # experimental, WIP
+
+        ### TBI: adjust degree_df to work for scales/intervals instead of keys/notes
         import numpy as np
-        degree_distance_matrix = np.zeros((len(start_chord), len(end_chord)), dtype=float)
-        interval_distance_matrix = np.zeros((len(start_chord), len(end_chord)), dtype=int)
-        for r, n1 in enumerate(start_chord.notes):
-            for c, n2 in enumerate(end_chord.notes):
+        degree_distance_matrix = np.zeros((len(self.start_chord), len(self.end_chord)), dtype=float)
+        interval_distance_matrix = np.zeros((len(self.start_chord), len(self.end_chord)), dtype=int)
+        for r, n1 in enumerate(self.start_chord.notes):
+            for c, n2 in enumerate(self.end_chord.notes):
                 deg1 = key.note_degrees[n1] if n1 in key.note_degrees else key.fractional_note_degrees[n1]
                 deg2 = key.note_degrees[n2] if n2 in key.note_degrees else key.fractional_note_degrees[n2]
-                motion = DegreeMotion(deg1, deg2, scale=key.scale)
+                motion = DegreeMotion(deg1, deg2, scale=self.scale)
                 degree_distance_matrix[r,c] = round(motion.distance,1)
 
                 iv_distance = (n2 - n1).signed_class # i.e. the interval or its inversion, whichever is narrower
@@ -1063,15 +1069,22 @@ class ScaleChordMotion:
 
         import pandas as pd
         self.degree_df = pd.DataFrame(degree_distance_matrix,
-                                      columns=[f'{n.chroma}' for n in end_chord.notes],
-                                      index=[f'{n.chroma:<2}  ' for n in start_chord.notes])
+                                      columns=[f'{n.chroma}' for n in self.end_chord.notes],
+                                      index=[f'{n.chroma:<2}  ' for n in self.start_chord.notes])
         self.interval_df = pd.DataFrame(interval_distance_matrix,
-                                        columns=[f'{n.chroma}' for n in end_chord.notes],
-                                        index=[f'{n.chroma:<2}  ' for n in start_chord.notes])
+                                        columns=[f'{n.chroma}' for n in self.end_chord.notes],
+                                        index=[f'{n.chroma:<2}  ' for n in self.start_chord.notes])
 
+
+    _arrow = _settings.MARKERS['right']
 
 class KeyChordMotion(ScaleChordMotion):
-    pass
+    def __init__(self, start_chord, end_chord, key=None):
+        ch1, ch2 = start_chord, end_chord
+        if key is None:
+            # requires KeyChords as input
+            assert isinstance(ch1, KeyChord) and isinstance(ch2, KeyChord), "KeyChordMotion must either be supplied KeyChords as input, or Chords plus a 'key' arg"
+
 
 
 # generic constructor method for motion either between ScaleChords or KeyChords:
@@ -1113,6 +1126,7 @@ common_progressions = {
     Progression('I  V   ♭VII  IV' ) : 'axis (variant)',
     Progression('vi IV   I    V'  ) : 'axis minor', # rotation of axis progression
     Progression('I  vi   IV   V'  ) : '50s', # aka doo-wop
+    Progression('I  vi   ii   V  ') : 'blue moon',
     Progression('vi V    IV   III') : 'andalusian',
     Progression('i ♭VII ♭VI   V'  ) : 'andalusian minor',
     Progression('vi IV   V    I'  ) : 'komuro',
@@ -1129,8 +1143,9 @@ common_progressions = {
     Progression('i⁷ iv⁷ i⁷ ♭VI⁷ V⁷') : 'minor blues',
     Progression('III⁷ VI⁷ II⁷ V⁷ I') : 'ragtime',
 
-    Progression('vi ii  V I' ) : 'circle',
-    Progression('VI ii° V i' ) : 'circle minor',
+    Progression('I ♭VII IV I' ) : 'mixolydian vamp',
+    Progression('vi ii  V I'  ) : 'circle',
+    Progression('VI ii° V i'  ) : 'circle minor',
     Progression('I IV vii° iii vi ii V'     ): 'full circle',
     Progression('i iv VII  III VI ii° V i'  ): 'full circle minor',
 

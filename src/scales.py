@@ -225,7 +225,7 @@ class Scale:
         """returns the mapping of NON-scale intervals to fractional degree numbers.
         covers the full 12-interval span for heptatonic scales, but not guaranteed
         to do so for smaller scales like pentatonics."""
-        non_scale_intervals = [Interval(v) for v in range(1,12) if v not in self.interval_degrees]
+        non_scale_intervals = [Interval.from_cache(v) for v in range(1,12) if v not in self.interval_degrees]
         fractional_interval_degrees = {}
         for iv in non_scale_intervals:
             if (iv-1).mod in self.interval_degrees and (iv+1).mod in self.interval_degrees:
@@ -611,16 +611,26 @@ class Scale:
             not necessarily for other scales like pentatonics.
         to produce tertian chords specifically (or their nearest equivalents),
             see Scale.get_tertian_chord """
+
+        # retrive from cache if already initialised:
+        if linked and (self, i, order) in cached_scale_chords:
+            return cached_scale_chords[(self, i, order)]
+
         root_offsets = [i] + [i + (o*2) for o in range(1, order)]
         scale_intervals = [self.get_interval_from_degree(i) for i in root_offsets]
         # shift left to get chord that starts on root:
         start_interval = scale_intervals[0]
         # drop degree from intervals (and cast away from IrregularInterval objects) to get nice chord names:
-        chord_intervals = IntervalList([Interval(iv.value) for iv in scale_intervals]) - start_interval
+        chord_intervals = IntervalList([Interval.from_cache(iv.value) for iv in scale_intervals]) - start_interval
         if linked:
-            return ScaleChord(chord_intervals, scale=self, degree=i)
+            chord_obj = ScaleChord(chord_intervals, scale=self, degree=i)
+            if _settings.DYNAMIC_CACHING:
+                log(f'Registering scale chord by {(self.name, i, order)} to cache')
+                cached_scale_chords[(self, i, order)] = chord_obj
+            return chord_obj
         else:
-            return AbstractChord(chord_intervals)
+            chord_factors = chord_intervals.as_factors
+            return AbstractChord.from_cache(factors=chord_factors)
 
     def chord(self, i, order=3, linked=True):
         """convenience wrapper around Scale.get_chord; see the documentation for that method
@@ -1815,6 +1825,7 @@ class ScaleChord(AbstractChord):
             assert isinstance(factor, int), f"ScaleChord only understands integer factors, not {type(factor)}"
             self.scale_factor = factor
             self.scale_degree = scale.factor_degrees[factor]
+            self.root_in_scale = True
 
         if self.root_in_scale:
             self.in_scale = scale.contains_degree_chord(degree, self)
@@ -1829,6 +1840,22 @@ class ScaleChord(AbstractChord):
             if not isinstance(scale, Scale):
                 scale = Scale(scale)
         return abs_chord.in_scale(scale, degree=deg)
+
+    @staticmethod
+
+    def from_cache(scale, degree, order=3):
+        # efficient scalechord init by cache lookup of scales and their degrees:
+        assert type(scale) is Scale
+        degree = int(degree)
+
+        if (scale, degree, order) in cached_scale_chords:
+            return cached_scale_chords[(scale, degree, order)]
+        else:
+            chord_obj = scale.chord(degree, order=order)
+            if _settings.DYNAMIC_CACHING:
+                log(f'Registering scale chord by scale {scale.name} and degree={degree} of order={order} to cache')
+                cached_scale_chords[(scale, degree, order)] = chord_obj
+            return chord_obj
 
     @property
     def numeral(self):
@@ -1996,6 +2023,10 @@ class ScaleChord(AbstractChord):
         """as Chord.simplify(), but always simplifies to the parent scale's respective triad on this degree"""
         return self.scale.chord(self.scale_degree, order=3)
 
+    def abstract(self):
+        """return the AbstractChord that this ScaleChord is associated with"""
+        return AbstractChord(factors=self.factors, inversion=self.inversion, assigned_name=self.assigned_name)
+
     def __hash__(self):
         """ScaleChords hash depending on their chord hash as well as their scale and degree"""
         return hash((self.factors, self.inversion, self.scale, self.scale_degree))
@@ -2014,7 +2045,7 @@ class ScaleChord(AbstractChord):
     @property
     def compact_name(self):
         ### compact repr for ScaleChord class since it turns up in markov models etc. a lot:
-        f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
+        return f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
 
     def __repr__(self):
         # in_str = 'not ' if not self.in_scale else ''
@@ -2059,7 +2090,7 @@ def parse_roman_numeral(numeral, ignore_alteration=False, return_params=False):
             modifiers.extend(rest_mods)
 
     if not return_params:
-        chord = AbstractChord(modifiers=modifiers, inversion=inversion)
+        chord = AbstractChord.from_cache(modifiers=modifiers, inversion=inversion)
         return deg, chord
     else:
         return deg, (modifiers, inversion)
@@ -2502,6 +2533,7 @@ canonical_scale_names_by_rarity[6] = {n for n in canonical_scale_name_factors if
 # initialise empty caches:
 cached_consonances = {}
 cached_pentatonics = {}
+cached_scale_chords = {}
 
 # pre-initialised scales for efficient import by other modules instead of re-init:
 NaturalMajor = MajorScale = Ionian = IonianScale = Scale('major')
@@ -2563,3 +2595,4 @@ parallel_scales.update(reverse_dict(parallel_scales))
 if _settings.PRE_CACHE_SCALES:
     cached_consonances.update({c: c.consonance for c in common_base_scales})
     cached_pentatonics.update({c: c.pentatonic for c in common_base_scales})
+    cached_scale_chords.update({(s,d,o): s.chord(d,order=o) for d in range(1,8) for s in [MajorScale, MinorScale] for o in [3,4]})

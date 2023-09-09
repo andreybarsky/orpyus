@@ -10,6 +10,7 @@ from itertools import permutations
 
 ################################################################################
 
+
 class AbstractChord:
     """a hypothetical chord not built on any specific note but having all the modifiers that a chord would,
     whose principal members are Intervals. see AbstractChord._parse_input for valid input schemas.
@@ -45,6 +46,12 @@ class AbstractChord:
                 (e.g. Cmaj7, inversion_degree=3 implies bass is on the 3rd of the chord, i.e. E)
         note that both are ignored if the 'name' arg contains a slash."""
 
+        # if self.__class__.__name__ == 'AbstractChord':
+        #     global ABS_CHORDS_INITIALISED
+        #     ABS_CHORDS_INITIALISED += 1
+        #     cache_size = len(cached_abstract_chords)
+        #     log(f'Initialising {self.__class__.__name__} #{ABS_CHORDS_INITIALISED} (cache size: {cache_size})', True, depth=3)
+
         if type(name) == str:
             self.assigned_name = name # record the name this chord was initialised by
         else:
@@ -62,6 +69,8 @@ class AbstractChord:
             self.intervals = self.root_intervals
 
         self.quality = self._determine_quality()
+
+
 
 
     # main logic for understanding input args:
@@ -443,7 +452,7 @@ class AbstractChord:
             inverted_intervals = intervals.invert(-inversion_place)
             if inverted_intervals in intervals_to_chord_names:
                 that_chord_name = intervals_to_chord_names[inverted_intervals]
-                candidates.append(AbstractChord(that_chord_name, inversion=inversion_place))
+                candidates.append(AbstractChord.from_cache(that_chord_name, inversion=inversion_place))
         candidates.sort(key = lambda x: x.rarity)
         return candidates
 
@@ -478,7 +487,7 @@ class AbstractChord:
     def on_root(self, root_note):
         """constructs a Chord object from this AbstractChord with respect to a
             desired root"""
-        return Chord(root=root_note, factors=self.factors, inversion=self.inversion, assigned_name=self.assigned_name)
+        return Chord.from_cache(root=root_note, factors=self.factors, inversion=self.inversion, assigned_name=self.assigned_name)
 
     def in_scale(self, scale, degree=None, factor=None):
         """constructs a ScaleChord from this AbstractChord on a desired degree or
@@ -495,7 +504,7 @@ class AbstractChord:
             # construct the root note from the desired bass note and this AbstractChord's inversion:
             root_to_bass_interval = self.root_intervals[self.inversion]
             root_note = Note.from_cache(bass_note) - root_to_bass_interval
-            return Chord(root=root_note, factors=self.factors, inversion=self.inversion)
+            return Chord.from_cache(root=root_note, factors=self.factors, inversion=self.inversion)
 
     @property
     def triad(self):
@@ -506,9 +515,9 @@ class AbstractChord:
     def simple_triad(self):
         """returns the simple major or minor triad associated with this AbstractChord"""
         if self.quality.major_ish:
-            return AbstractChord()
+            return AbstractChord.from_cache('')
         elif self.quality.minor_ish:
-            return AbstractChord('m')
+            return AbstractChord.from_cache('m')
         else:
             raise Exception(f'{self} has indeterminate quality and therefore has no associated triad')
 
@@ -628,7 +637,7 @@ class AbstractChord:
                 other = Note.from_cache(other)
             # otherwise as chord name:
             elif parsing.begins_with_valid_note_name(other):
-                other = Chord(other)
+                other = Chord.from_cache(other)
             else:
                 raise ValueError(f'{self.__class__}.__sub__ could not understand string operand: {other}')
 
@@ -683,6 +692,28 @@ class AbstractChord:
             return set(self.intervals.flatten().unique()) == set(other.intervals.flatten().unique())
         else:
             raise TypeError(f'Enharmonic equivalence operator & not defined between AbstractChord and: {type(other)}')
+
+    @staticmethod
+    def from_cache(name=None, factors=None, modifiers=None, inversion=None, assigned_name=None):
+        # efficient abstractchord init by cache lookup of proper name or proper ChordFactors object:
+        if name is not None:
+            cache_key = (name, None, None, inversion, assigned_name)
+        elif factors is not None:
+            cache_key = (None, factors, None, inversion, assigned_name)
+        elif modifiers is not None:
+            cache_key = (None, None, tuple(modifiers), inversion, assigned_name)
+        else:
+            raise Exception(f'Chord init from cache must include one of: "name" or "factors" or "modifiers" (and, optionally, "inversion")')
+
+        if cache_key in cached_abstract_chords:
+            return cached_abstract_chords[cache_key]
+        else:
+            chord_obj = AbstractChord(name=name, factors=factors, modifiers=modifiers, inversion=inversion, assigned_name=assigned_name)
+            if _settings.DYNAMIC_CACHING:
+                log(f'Registering abstract chord by key {cache_key} to cache')
+                cached_abstract_chords[cache_key] = chord_obj
+            return chord_obj
+
 
     ### display methods:
 
@@ -850,7 +881,6 @@ class Chord(AbstractChord):
             log(f'Confirmed registration: {self._is_registered()} (as: {self.name})')
 
 
-
     @staticmethod
     def _reparse_args(name, root, factors, intervals, notes):
         """re-parse args to detect if 'name' is a list of notes, a list of intervals, or a dict of chordfactors,
@@ -920,7 +950,7 @@ class Chord(AbstractChord):
             inversion_degree = self.root_intervals[inversion].extended_degree
             bass = self.root_notes[inversion]
         elif isinstance(inversion, (Note, str)):
-            bass = Note(inversion) # don't cache; we might change this note's sharp pref later
+            bass = Note.from_cache(inversion)
 
             ####################################################################
 
@@ -1008,8 +1038,8 @@ class Chord(AbstractChord):
 
         self.prefer_sharps = prefer_sharps
         # reinitialise note objects (to avoid caching/hashing interactions)
-        self.root = Note(self.root.position, prefer_sharps=prefer_sharps)
-        self.root_notes = NoteList([Note(n.position, prefer_sharps=prefer_sharps) for n in self.root_notes])
+        self.root = Note.from_cache(position=self.root.position, prefer_sharps=prefer_sharps)
+        self.root_notes = NoteList([Note.from_cache(position=n.position, prefer_sharps=prefer_sharps) for n in self.root_notes])
 
     @property
     def sharp_notes(self):
@@ -1152,7 +1182,7 @@ class Chord(AbstractChord):
 
     def abstract(self):
         """return the AbstractChord that this Chord is associated with"""
-        return AbstractChord(factors=self.factors, inversion=self.inversion, assigned_name=self.assigned_name)
+        return AbstractChord.from_cache(factors=self.factors, inversion=self.inversion, assigned_name=self.assigned_name)
 
     def in_key(self, key, degree=None, factor=None):
         """constructs a KeyChord from this Chord on a desired degree or
@@ -1188,32 +1218,26 @@ class Chord(AbstractChord):
         ID:             {id(self)}""")
 
     @staticmethod
-    def from_cache(name=None, factors=None, root=None):
+    def from_cache(name=None, factors=None, modifiers=None, root=None, inversion=None, assigned_name=None):
         # efficient chord init by cache lookup of proper name or proper ChordFactors object:
         if name is not None:
-            if name in cached_chord_names:
-                return cached_chord_names[name]
-            else:
-                chord_obj = Chord(name)
-                if _settings.DYNAMIC_CACHING:
-                    log(f'Registering chord by name {name} to cache')
-                    cached_chord_names[name] = chord_obj
-                return chord_obj
-
-        elif factors is not None:
-            if isinstance(root, Note): # cast Note obj to string for cache registration
-                root = root.chroma
-            if (factors,root) in cached_chord_factors:
-                return cached_chord_factors[(factors,root)]
-            else:
-                chord_obj = Chord(factors=factors, root=root)
-                if _settings.DYNAMIC_CACHING:
-                    log(f'Registering chord by root {root} and factors {factors} to cache')
-                    cached_chord_factors[(factors, root)] = chord_obj
-                return chord_obj
+            cache_key = (name, None, None, None, inversion, assigned_name)
+        elif factors is not None or modifiers is not None:
+            assert root is not None
+            root_chroma = root.chroma if isinstance(root,Note) else root # cast to string
+            cache_key = (None, factors, modifiers, root_chroma, inversion, assigned_name)
         else:
-            raise Exception(f'Chord init from cache must include one of: "name", or both "factors" and "root"')
+            raise Exception(f'Chord init from cache must include one of: "name", or  "root" plus "factors" or "modifiers"')
 
+        if cache_key in cached_chords:
+            return cached_chords[cache_key]
+        else:
+            chord_obj = Chord(name=name, factors=factors, modifiers=modifiers,
+                              root=root, inversion=inversion, assigned_name=assigned_name)
+            if _settings.DYNAMIC_CACHING:
+                log(f'Registering chord by key {cache_key}  to cache')
+                cached_chords[cache_key] = chord_obj
+            return chord_obj
 
     #### audio methods:
 
@@ -1605,18 +1629,24 @@ major_triads = {n: Chord(n.chroma) for n in notes.major_tonics}
 minor_triads = {n: Chord(n.chroma + 'm') for n in notes.minor_tonics}
 
 # empty caches to be filled later, by pre-caching and/or dynamic caching:
-cached_abstract_chord_names = {}
-cached_abstract_chord_factors = {}
-cached_chord_names = {}
-cached_chord_factors = {}
+cached_abstract_chords = {}
+cached_chords = {}
 cached_consonances_by_suffix = {}
 
 if _settings.PRE_CACHE_CHORDS: # initialise common chord objects in cache for faster access later
-    cached_abstract_chord_names.update({chord_name: AbstractChord(chord_name) for chord_name, rarity in chord_name_rarities.items() if rarity <= 1}) # not currently used
-    cached_abstract_chord_factors.update({c.factors: c for c in cached_abstract_chord_names.values()})  # not currently used
-    cached_chord_names.update({(tonic+chord_name): Chord(tonic+chord_name) for tonic in parsing.common_note_names for chord_name, rarity in chord_name_rarities.items() if rarity <= 1})
-    cached_chord_factors.update({(c.factors, c.root.chroma): c for c in cached_chord_names.values()})
-    cached_consonances_by_suffix.update({ac.suffix: ac.consonance for ac in cached_abstract_chord_names.values()}) # does this perform a double update if _settings.DYNAMIC_CACHING is on?
+    # cache abstract chords by name up to a certain rarity:
+    cached_abstract_chords.update({(chord_name,None,None,None,None): AbstractChord(chord_name) for chord_name, rarity in chord_name_rarities.items() if rarity <= 1}) # not currently used
+    # let the cache point to them by their factors as well:
+    cached_abstract_chords.update({(None,c.factors,None,None,None): c for c in cached_abstract_chords.values()})
+    cached_abstract_chords[(None, None, (), None, None)] = AbstractChord() # major triad
+    cached_abstract_chords[(None, None, (ChordModifier('minor')), None, None)] = AbstractChord('m') # minor triad
+
+    # cache rooted chords by name up to a certain rarity:
+    cached_chords.update({(tonic+chord_name,None,None,None,None,None): Chord(tonic+chord_name) for tonic in parsing.common_note_names for chord_name, rarity in chord_name_rarities.items() if rarity <= 1})
+    # and by factors:
+    cached_chords.update({(None,c.factors,None,c.root.chroma,None,None): c for c in cached_chords.values()})
+
+    cached_consonances_by_suffix.update({ac.suffix: ac.consonance for ac in cached_abstract_chords.values()}) # does this perform a double update if _settings.DYNAMIC_CACHING is on?
 
 cache_initialised = True
 
@@ -1656,9 +1686,9 @@ class ChordList(list):
             elif isinstance(c, str):
                 if parsing.begins_with_valid_note_name(c):
                     # chord
-                    valid_chords.append(Chord(c))
+                    valid_chords.append(Chord.from_cache(c))
                 else:
-                    valid_chords.append(AbstractChord(c))
+                    valid_chords.append(AbstractChord.from_cache(c))
 
         # initialise as list:
         super().__init__(valid_chords)
@@ -1695,9 +1725,9 @@ class ChordList(list):
         elif isinstance(c, str):
             if parsing.begins_with_valid_note_name(c):
                 # chord
-                super().append(Chord(c))
+                super().append(Chord.from_cache(c))
             else:
-                super().append(AbstractChord(c))
+                super().append(AbstractChord.from_cache(c))
         else:
             raise TypeError(f'Tried to append to ChordList, expected Chord or str but got: {type(other)}')
 
@@ -1705,9 +1735,9 @@ class ChordList(list):
         # if other is a str, try and parse it as a chord:
         if isinstance(other, str):
             if parsing.begins_with_valid_note_name(other):
-                other = Chord(other)
+                other = Chord.from_cache(other)
             else:
-                other = AbstractChord(other)
+                other = AbstractChord.from_cache(other)
 
         # appending a new chord:
         if isinstance(other, Chord):
@@ -1930,7 +1960,7 @@ def matching_chords(notes, display=True, return_scores=False,
         note_list_root = notes[0]
         candidate_chords = [Chord(cn, bass=note_list_root) for cn in candidate_names]
     else:
-        candidate_chords = [Chord(cn) for cn in candidate_names]
+        candidate_chords = [Chord.from_cache(cn) for cn in candidate_names]
 
     sorted_cands = sorted(candidate_chords,
                           key=lambda c: (c.likelihood,

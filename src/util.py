@@ -40,10 +40,12 @@ class Log:
             for depth, frame in zip(depths, frames):
                 if depth == 1:
                     line_contents = frame['prev_line'] # i.e. the line BEFORE the log call
+                    line_num = frame['line_num']-1
                 else:
                     line_contents = frame['cur_line'] # i.e. the outer function
+                    line_num = frame['line_num']
                 indent = ('-'*depth) + (' '*depth)
-                context_lines.append(f"{indent}[ {frame['module']}({frame['line_num']-1}):{frame['function']} ] {line_contents.strip()}")
+                context_lines.append(f"{indent}[ {frame['module']}({line_num}):{frame['function']} ] {line_contents.strip()}")
 
             # append log message itself and print:
             context_lines.append('='*(depth+1) + ' '*(depth+1) + msg + '\n')
