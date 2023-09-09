@@ -699,6 +699,8 @@ class AbstractChord:
         if name is not None:
             cache_key = (name, None, None, inversion, assigned_name)
         elif factors is not None:
+            if not isinstance(factors, ChordFactors):
+                factors = ChordFactors(factors)
             cache_key = (None, factors, None, inversion, assigned_name)
         elif modifiers is not None:
             cache_key = (None, None, tuple(modifiers), inversion, assigned_name)
