@@ -250,10 +250,10 @@ class Scale:
     def _get_arbitrary_interval_degree(self, iv):
         """retrieves the degree for any interval relative to this scale,
         whether or not that degree is in this scale"""
-        if iv in self.interval_degrees:
-            return self.interval_degrees[iv]
+        if iv.flatten() in self.interval_degrees:
+            return self.interval_degrees[iv.value] # gets raised
         else:
-            return self.fractional_interval_degrees[iv]
+            return self.fractional_interval_degrees[iv.flatten()] # does not get raised (since not a ScaleDegree)
 
     ###### scale production methods (and related subroutines):
 

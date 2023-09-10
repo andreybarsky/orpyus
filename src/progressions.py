@@ -1041,13 +1041,44 @@ class ScaleChordMotion:
             assert isinstance(ch2, ScaleChord)
             if ch2.scale != ch1.scale: # force second chord's scale into first one if mismatched
                 ch2 = ScaleChord(intervals=ch2.intervals, inversion=ch2.inversion, scale=ch1.scale, degree=ch2.scale_degree)
+        else:
+            if not isinstance(scale, Scale):
+                scale = Scale(scale)
+            self.scale = scale
 
         self.start_chord, self.end_chord = ch1, ch2
 
-        self._build_tables()
+        self.build_tables()
+
+    def build_tables(self):
+        import numpy as np
+        degree_distance_matrix = np.zeros((len(self.start_chord), len(self.end_chord)), dtype=float)
+        interval_distance_matrix = np.zeros((len(self.start_chord), len(self.end_chord)), dtype=int)
+        rt1 = self.start_chord.root_interval_from_tonic
+        rt2 = self.end_chord.root_interval_from_tonic
+        start_chord_relative_intervals = (self.start_chord.intervals + rt1).flatten()
+        for r, iv1 in enumerate(start_chord_relative_intervals):
+            end_chord_relative_intervals = (self.end_chord.intervals + rt2).flatten()
+            for c, iv2 in enumerate(end_chord_relative_intervals):
+                deg1 = self.scale._get_arbitrary_interval_degree(iv1) # note_degrees[n1] if n1 in self.key.note_degrees else key.fractional_note_degrees[n1]
+                deg2 = self.scale._get_arbitrary_interval_degree(iv2) # note_degrees[n2] if n2 in self.key.note_degrees else key.fractional_note_degrees[n2]
+                motion = DegreeMotion(deg1, deg2, scale=self.scale)
+                degree_distance_matrix[r,c] = round(motion.distance,1)
+
+                iv_distance = (iv2 - iv1).signed_class # i.e. the interval or its inversion, whichever is narrower
+                interval_distance_matrix[r,c] = iv_distance.value
+
+        import pandas as pd
+        self.degree_df = pd.DataFrame(degree_distance_matrix,
+                                      columns=[f'{iv.short_name}' for iv in end_chord_relative_intervals],
+                                      index=[f'{iv.short_name:<2}  ' for iv in start_chord_relative_intervals])
+        self.interval_df = pd.DataFrame(interval_distance_matrix,
+                                        columns=[f'{iv.short_name}' for iv in end_chord_relative_intervals],
+                                        index=[f'{iv.short_name:<2}  ' for iv in start_chord_relative_intervals])
+
 
     def __repr__(self):
-        return f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name}\nDegree distance:\n{self.degree_df}\nInterval distance:\n{self.interval_df}'
+        return f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name} (in {self.scale.name})\nDegree distance:\n{self.degree_df}\nInterval distance:\n{self.interval_df}'
 
 
 
