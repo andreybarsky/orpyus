@@ -501,20 +501,22 @@ class Scale:
     def pairwise_intervals(self):
         return self.get_pairwise_intervals(extra_tonic=False)
 
-    def get_pairwise_consonances(self, extra_tonic=False):
+    def get_pairwise_consonances(self, extra_tonic=False, intonation=None):
         # simply lifted from AbstractChord class:
-        return AbstractChord.get_pairwise_consonances(self, extra_tonic=extra_tonic)
+        return AbstractChord.get_pairwise_consonances(self, extra_tonic=extra_tonic, intonation=intonation)
         # (this internally calls self.pairwise_intervals, which is defined above)
     @property
     def pairwise_consonances(self):
         return self.get_pairwise_consonances(extra_tonic=True)
 
-    def get_consonance(self):
+    def get_consonance(self, intonation=None, raw=False):
         """Calculates the pairwise intervallic consonance of this scale as a float"""
-        if self in cached_consonances:
-            return cached_consonances[self]
+        if intonation is None:
+            intonation = tuning.get_intonation()
+        if (intonation,self) in cached_consonances:
+            return cached_consonances[(intonation,self)]
         else:
-            cons_list = list(self.get_pairwise_consonances(extra_tonic=True).values())
+            cons_list = list(self.get_pairwise_consonances(extra_tonic=True, intonation=intonation).values())
             raw_cons = sum(cons_list) / len(cons_list)
             # return raw_cons
             # the raw consonance comes out as maximum=0.759 for the most consonant scale (yo pentatonic)
@@ -522,12 +524,16 @@ class Scale:
             # so we set the former to be just below 1 and the latter to be just above 0,
             # and rescale the entire raw consonance range within those bounds:
             max_cons = 0.76
-            min_cons = 0.64
+            # min_cons = 0.64
+            min_cons = -2.12 # under equal temperament tuning
 
             rescaled_cons = (raw_cons - min_cons) / (max_cons - min_cons)
             if _settings.DYNAMIC_CACHING:
-                cached_consonances[self] = rescaled_cons
-            return rescaled_cons
+                cached_consonances[(intonation,self)] = rescaled_cons
+            if raw:
+                return round(raw_cons,3)
+            else:
+                return round(rescaled_cons,3)
     @property
     def consonance(self):
         # property wrapper around get_consonance method
@@ -2597,6 +2603,7 @@ parallel_scales.update(reverse_dict(parallel_scales))
 
 # cached scale attributes for performance:
 if _settings.PRE_CACHE_SCALES:
-    cached_consonances.update({c: c.consonance for c in common_base_scales})
+    intonation = tuning.get_intonation()
+    cached_consonances.update({(intonation,c): c.consonance for c in common_base_scales})
     cached_pentatonics.update({c: c.pentatonic for c in common_base_scales})
     cached_scale_chords.update({(s,d,o): s.chord(d,order=o) for d in range(1,8) for s in [MajorScale, MinorScale] for o in [3,4]})

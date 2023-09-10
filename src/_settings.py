@@ -114,11 +114,12 @@ CHARACTERS = {   'true': '+',    # e.g. displayed in 'Tertian' column if a chord
 ### A4_PITCH is the reference pitch from which all other notes' pitches are defined.
 ### in traditional 'concert tuning' this is 440 Hz, but other standards exist,
 ### such as 'baroque tuning' where A4 is 415 Hz
+### or the 'theoretically perfect' tuning where A4 is 432Hz
 A4_PITCH = 440.0
 
 ### TUNING_SYSTEM controls which system of tuning is used to
 ### calculate note/interval pitches. must be one of 'JUST' or 'EQUAL':
-TUNING_SYSTEM = 'JUST'
+TUNING_SYSTEM = 'RATIONAL'
 
 # under JUST-intonation tuning, intervals are built from clean integer ratios.
 # (in this case, restricted to ratios allowed by 5-limit tuning, i.e. powers of 2*3*5 )

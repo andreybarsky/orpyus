@@ -3,6 +3,8 @@ from .util import log, euclidean_gcd
 import math
 
 
+### TBI: implement meantone?
+
 # 12-TET ('equal') tuning:
 # find equal temperament by placing 13 notes in a line:
 root, octave = 1.0, 2.0

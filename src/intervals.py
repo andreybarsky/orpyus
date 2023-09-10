@@ -153,14 +153,13 @@ class Interval:
         # cache implementation that 'empties' when the intonation system is changed:
         current_intonation = tuning.get_intonation()
         if self.cached_consonance_intonation == current_intonation:
-            log(f'Retrieving {self.short_name} consonance from cache (intonation={self.cached_consonance_intonation})', force=False)
             return self.cached_consonance
         else:
             # calculate consonance, update cache and return:
             consonance = self.get_consonance(intonation = current_intonation)
             self.cached_consonance = consonance
             self.cached_consonance_intonation = current_intonation
-            log(f'Updating {self.short_name} consonance cache for intonation: {current_intonation}', force=True)
+            log(f'Updating {self.short_name} consonance cache for intonation: {current_intonation}')
 
             return consonance
 
@@ -1168,8 +1167,8 @@ cached_intervals.update({(iv.value, None):iv for iv in common_intervals})
 cached_intervals_by_degree = {(iv.extended_degree, None, iv.offset_from_default):iv for iv in common_intervals}
 cached_intervals_by_degree.update({(iv.extended_degree, iv.quality, None):iv for iv in common_intervals})
 
-# interval whole-number ratios according to five-limit just-intonation:
-interval_ratios = {0: (1,1),  1: (16,15),  2: (9,8),    3: (6,5),
-                   4: (5,4),  5: (4,3),    6: (25,18),  7: (3,2),
-                   8: (8,5),  9: (5,3),   10: (16,9),  11: (15,8),
-                   12: (2,1)}
+# # interval whole-number ratios according to five-limit just-intonation:
+# interval_ratios = {0: (1,1),  1: (16,15),  2: (9,8),    3: (6,5),
+#                    4: (5,4),  5: (4,3),    6: (25,18),  7: (3,2),
+#                    8: (8,5),  9: (5,3),   10: (16,9),  11: (15,8),
+#                    12: (2,1)}

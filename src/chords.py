@@ -3,7 +3,7 @@ from .intervals import Interval, IntervalList, P5, default_degree_intervals
 from .util import log, precision_recall, rotate_list, check_all, reverse_dict, unpack_and_reverse_dict, reduce_aliases
 from .qualities import Quality, ChordModifier, parse_chord_modifiers
 from .parsing import sh, fl, nat
-from . import notes, parsing, qualities, _settings
+from . import notes, parsing, qualities, tuning, _settings
 
 from collections import defaultdict, UserDict, Counter
 from itertools import permutations
@@ -401,11 +401,11 @@ class AbstractChord:
     def pairwise_intervals(self):
         return self.get_pairwise_intervals(extra_tonic=False)
 
-    def get_pairwise_consonances(self, extra_tonic=False):
+    def get_pairwise_consonances(self, extra_tonic=False, intonation=None):
         pw_intervals = self.get_pairwise_intervals(extra_tonic=extra_tonic)
         pw_consonances = {}
         for pair, diff in pw_intervals.items():
-            pw_consonances[pair] = diff.consonance
+            pw_consonances[pair] = diff.get_consonance(intonation=intonation)
         return pw_consonances
     @property
     def pairwise_consonances(self):
@@ -413,15 +413,19 @@ class AbstractChord:
 
     @property
     def consonance(self):
+        return self.get_consonance()
+    def get_consonance(self, intonation=None, raw=False):
         """the weighted mean of pairwise interval consonances"""
         # just retrieve cached consonance if it has already been computed:
-        if self._is_registered() and self.suffix in cached_consonances_by_suffix:
-            return cached_consonances_by_suffix[self.suffix]
+        if intonation is None:
+            intonation = tuning.get_intonation()
+        if self._is_registered() and (intonation, self.suffix) in cached_consonances_by_suffix:
+            return cached_consonances_by_suffix[(intonation, self.suffix)]
         else:
             tonic_weight = 2
 
             cons_list = []
-            for pair, cons in self.pairwise_consonances.items():
+            for pair, cons in self.get_pairwise_consonances(intonation=intonation).items():
                 if (tonic_weight != 1) and (pair[0].value == 0): # intervals from root are counted double
                     cons_list.extend([cons]*tonic_weight)
                 else:
@@ -440,8 +444,11 @@ class AbstractChord:
             min_cons = 0.49
             rescaled_cons = (raw_cons - min_cons) / (max_cons - min_cons)
             if _settings.DYNAMIC_CACHING:
-                cached_consonances_by_suffix[self.suffix] = rescaled_cons
-            return round(rescaled_cons, 3)
+                cached_consonances_by_suffix[(intonation,self.suffix)] = rescaled_cons
+            if raw:
+                return round(raw_cons, 3)
+            else:
+                return round(rescaled_cons, 3)
 
     @staticmethod
     def inversions_from_intervals(intervals):
@@ -1652,7 +1659,8 @@ if _settings.PRE_CACHE_CHORDS: # initialise common chord objects in cache for fa
     # and by factors:
     cached_chords.update({(None,c.factors,None,c.root.chroma,None,None): c for c in cached_chords.values()})
 
-    cached_consonances_by_suffix.update({ac.suffix: ac.consonance for ac in cached_abstract_chords.values()}) # does this perform a double update if _settings.DYNAMIC_CACHING is on?
+    # intonation = tuning.get_intonation()
+    # cached_consonances_by_suffix.update({(intonation, ac.suffix): ac.consonance for ac in cached_abstract_chords.values()}) # does this perform a double update if _settings.DYNAMIC_CACHING is on?
 
 cache_initialised = True
 
