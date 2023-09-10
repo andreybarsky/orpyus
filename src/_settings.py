@@ -111,14 +111,28 @@ CHARACTERS = {   'true': '+',    # e.g. displayed in 'Tertian' column if a chord
 
 ############# tuning settings:
 
-### TUNING_MODE controls which system of tuning is used to
+### A4_PITCH is the reference pitch from which all other notes' pitches are defined.
+### in traditional 'concert tuning' this is 440 Hz, but other standards exist,
+### such as 'baroque tuning' where A4 is 415 Hz
+A4_PITCH = 440.0
+
+### TUNING_SYSTEM controls which system of tuning is used to
 ### calculate note/interval pitches. must be one of 'JUST' or 'EQUAL':
-TUNING_MODE = 'JUST'
+TUNING_SYSTEM = 'JUST'
 
 # under JUST-intonation tuning, intervals are built from clean integer ratios.
 # (in this case, restricted to ratios allowed by 5-limit tuning, i.e. powers of 2*3*5 )
 # under EQUAL-temperament tuning, semitones are spaced equally on a log scale.
+# under RATIONAL tuning, semitones are spaced as close as possible to equal-temperament
+# while maintaining rational side lengths within certain constraints. this is the
+# recommended default, as a good numerical compromise between the other two systems.
 
+### NOTE_RANGE is the range of notes (by keyboard value) for which pitches
+### are calculated and defined according to specified tuning.
+### the default range 1-101 (exclusive) goes from A0 to C9, which is one octave more
+### than the traditional 88-key piano, but if you need notes beyond this range
+### you can expand the limits here.
+NOTE_RANGE = (1, 101)
 
 ############# performance settings:
 

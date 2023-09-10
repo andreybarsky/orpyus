@@ -573,7 +573,7 @@ modifier_aliases = { 'maj' : ['major', 'M', 'Δ', 'ᐞ'],
                       'dim': ['diminished', 'o', '°',],
                       'aug': ['augmented', '+', '⁺'],
                       # special case: the chord 'half-dim' is implicitly a 7th, but 'hdim7' is clearer than 'hdim'
-                    'hdim7': ['ø', 'ø7', 'hdim', 'half-diminished', 'half-dim', 'm7b5', 'm7♭5'],
+                    'hdim7': ['ø', 'ø7', 'hdim', 'half-diminished', 'half-dim', 'm7b5', 'm7♭5', 'tristan'],
                      'add' : ['added', 'ᵃ'],
                     '(no5)': ['no5', '(omit5)'],
 

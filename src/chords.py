@@ -732,8 +732,7 @@ class AbstractChord:
         return self.show()
     diagram = fretboard
 
-    @property
-    def short_name(self):
+    def get_short_name(self):
         if '/' in self.suffix:
             suffix, inv = self.suffix.split('/')
             inv = f'/{inv}'
@@ -746,10 +745,15 @@ class AbstractChord:
             return f'dom{suffix}{inv}'
         else:
             return f'{suffix}{inv}'
+    @property
+    def short_name(self):
+        return self.get_short_name()
 
+    def get_name(self):
+        return f'{self.short_name} chord'
     @property
     def name(self):
-        return f'{self.short_name} chord'
+        return self.get_name()
 
     def __str__(self):
         return f'{self._marker}{self.name}'
@@ -1276,8 +1280,8 @@ class Chord(AbstractChord):
                 true_name_str = ''
             return f'{self.root.name}{self.assigned_name}{comp_char}{true_name_str}'
 
-    @property
-    def short_name(self):
+
+    def get_short_name(self):
         # identical to self.name in the case of Chord class,
         # unless a compound slash chord (see self.name)
         return f'{self.root.name}{self.suffix}'

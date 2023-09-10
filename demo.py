@@ -4,9 +4,7 @@
 
 import ipdb
 
-from src import util
-from src import parsing
-from src import conversion
+from src import util, parsing, tuning, conversion, display, _settings
 from src.qualities import *
 from src.intervals import *
 from src.notes import *

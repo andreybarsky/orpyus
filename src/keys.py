@@ -434,6 +434,22 @@ class Key(Scale):
         """~ operator returns the parallel major/minor of a key"""
         return self.parallel
 
+    def _get_arbitrary_degree_note(self, deg):
+        """retrieves the note for any degree relative to this key,
+        whether or not that degree is in this key"""
+        if deg in self.degree_notes:
+            return self.degree_notes[deg]
+        else:
+            return self.fractional_degree_notes[deg]
+
+    def _get_arbitrary_note_degree(self, nt):
+        """retrieves the degree for any note in this key,
+        whether or not that degree is in this key"""
+        if nt in self.note_degrees:
+            return self.note_degrees[nt]
+        else:
+            return self.fractional_note_degrees[nt]
+
     def __contains__(self, item):
         """if item is an Interval, does it fit in our list of degree-intervals plus chromatic-intervals?
         if it is a Chord, can it be made using the notes in this key?"""
@@ -623,11 +639,31 @@ class KeyChord(Chord, ScaleChord):
         """return the ScaleChord that this KeyChord is associated with"""
         return ScaleChord(factors=self.factors, inversion=self.inversion, scale=self.key.scale, degree=self.scale_degree)
 
+
     def __str__(self):
-        return f'{self.name} ({self.simple_numeral})'
+        return self.name
+
+    @property
+    def name(self):
+        return self.short_name
+
+    @property
+    def short_name(self):
+        mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
+        return f'{Chord.get_short_name(self)} ({mod_numeral})'
+
+    @property
+    def compact_name(self):
+        ### compact repr for ScaleChord class since it turns up in markov models etc. a lot:
+        mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
+        return f'{self._marker}{self.root.chroma} {mod_numeral}'
 
     def __repr__(self):
-        return f'{self.name} {self.notes} ({self.simple_numeral} of: {self.key._marker}{self.key.name})'
+        # in_str = 'not ' if not self.in_scale else ''
+        mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
+        return f'{self._marker}{self.name} {self.intervals} (in: {self.key._marker}{self.key.name})'
+        # return f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
+
 
     # overwrites Chord.from_cache:
     def from_cache(self, *args, **kwargs):

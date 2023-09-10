@@ -5,11 +5,11 @@
 
 from .intervals import Interval, IntervalList
 from .parsing import fl, sh, nat, dfl, dsh
-from . import parsing
-from . import conversion as conv
 from .util import log, rotate_list
-from . import _settings
+from . import parsing, tuning, _settings
+from . import conversion as conv
 
+from functools import cached_property
 import math
 
 
@@ -335,12 +335,25 @@ class OctaveNote(Note):
         value: an integer denoting the note's position on an 88-note piano keyboard,
                 where A0 is 1, C4 is 40, and C8 is 88. (the core internal representation)
         pitch: an integer or float corresponding to the note's frequency in Hz,
-                where the reference note A4 is 440 Hz"""
+                where the reference note A4 is 440 Hz by default (though changeable in _settings)"""
 
         # set main object attributes from init args:
-        self.chroma, self.value, self.pitch, self.prefer_sharps = self._parse_input(name, value, pitch, prefer_sharps)
+        self.chroma, self.value, ref_pitch, self.prefer_sharps = self._parse_input(name, value, pitch, prefer_sharps)
         # compute octave, position, and name:
         self.octave, self.position = conv.oct_pos(self.value)
+
+        self.reference_pitch = self.get_pitch(intonation='EQUAL') # reference (12-TET) pitch calculated by formula
+
+    @property
+    def pitch(self):
+        return self.get_pitch()
+    def get_pitch(self, intonation=None):
+        """gets the pitch of this OctaveNote according to the specified tuning intonation,
+        which must be one of: EQUAL, JUST, or RATIONAL.
+        by default, this uses the global tuning mode specified in _settings.TUNING_SYSTEM"""
+        if intonation is None:
+            intonation = tuning.INTONATION
+        return conv.value_to_pitch(self.value, intonation)
 
     #### main input/arg-parsing private method:
     @staticmethod
@@ -453,6 +466,8 @@ class OctaveNote(Note):
 
     #### useful public methods:
 
+
+
     ## Note parent class constructor
     @property
     def note(self):
@@ -542,6 +557,7 @@ class OctaveNote(Note):
         # wave = sine_wave(freq=self.pitch, duration=duration)
         # use karplus-strong wave table synthesis for guitar-string timbre:
         wave = synth_wave(freq=self.pitch, duration=duration, type=type, falloff=falloff, cache=cache)
+        log(f'Adding note {self} with pitch {self.pitch}', force=True)
         return wave
 
     def play(self, duration=2, type='KS', falloff=True, block=False):

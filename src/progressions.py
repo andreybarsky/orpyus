@@ -1046,9 +1046,49 @@ class ScaleChordMotion:
 
         self._build_tables()
 
-
     def __repr__(self):
-        return f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name}\n{self.degree_df}\n{self.interval_df}'
+        return f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name}\nDegree distance:\n{self.degree_df}\nInterval distance:\n{self.interval_df}'
+
+
+
+    _arrow = _settings.MARKERS['right']
+
+class KeyChordMotion(ScaleChordMotion):
+    def __init__(self, start_chord, end_chord, key=None):
+        ch1, ch2 = start_chord, end_chord
+        if key is None:
+            # requires KeyChords as input
+            assert isinstance(ch1, KeyChord) and isinstance(ch2, KeyChord), "KeyChordMotion must either be supplied KeyChords as input, or Chords plus a 'key' arg"
+            assert ch1.key == ch2.key, "Keys of start and end KeyChords must be the same to initialise a KeyChordMotion"
+            key = ch1.key
+        else:
+            if not isinstance(key, Key):
+                key = Key(key)
+            valid_chords = []
+            for ch in [ch1, ch2]:
+                if not isinstance(ch, KeyChord):
+                    if isinstance(ch, str):
+                        # assume roman numeral
+                        deg, (modifiers, inversion) = parse_roman_numeral(ch, return_params=True)
+                        root = key._get_arbitrary_degree_note(deg)
+                        ch = KeyChord(modifiers=modifiers, inversion=inversion, root=root, key=key, degree=deg)
+                    elif isinstance(ch, ScaleChord):
+                        ch = ch.in_key(key)
+                    elif type(ch) is Chord:
+                        deg = key._get_arbitrary_note_degree(ch.root)
+                        ch = ch.in_key(key=key, degree=deg)
+                valid_chords.append(ch)
+        # now both are KeyChords in the correct key:
+        self.key = key
+        ch1, ch2 = valid_chords
+        assert isinstance(ch1, KeyChord) and isinstance(ch2, KeyChord)
+        assert ch1.key == ch2.key == key
+        self.start_chord, self.end_chord = ch1, ch2
+
+        self._build_tables()
+        # print(f'Degree distance:\n{self.degree_df}')
+        # print(f'Degree distance:\n{self.interval_df}')
+
 
     def _build_tables(self):
         # experimental, WIP
@@ -1059,9 +1099,9 @@ class ScaleChordMotion:
         interval_distance_matrix = np.zeros((len(self.start_chord), len(self.end_chord)), dtype=int)
         for r, n1 in enumerate(self.start_chord.notes):
             for c, n2 in enumerate(self.end_chord.notes):
-                deg1 = key.note_degrees[n1] if n1 in key.note_degrees else key.fractional_note_degrees[n1]
-                deg2 = key.note_degrees[n2] if n2 in key.note_degrees else key.fractional_note_degrees[n2]
-                motion = DegreeMotion(deg1, deg2, scale=self.scale)
+                deg1 = self.key._get_arbitrary_note_degree(n1) # note_degrees[n1] if n1 in self.key.note_degrees else key.fractional_note_degrees[n1]
+                deg2 = self.key._get_arbitrary_note_degree(n2) # note_degrees[n2] if n2 in self.key.note_degrees else key.fractional_note_degrees[n2]
+                motion = DegreeMotion(deg1, deg2, scale=self.key.scale)
                 degree_distance_matrix[r,c] = round(motion.distance,1)
 
                 iv_distance = (n2 - n1).signed_class # i.e. the interval or its inversion, whichever is narrower
@@ -1076,24 +1116,13 @@ class ScaleChordMotion:
                                         index=[f'{n.chroma:<2}  ' for n in self.start_chord.notes])
 
 
-    _arrow = _settings.MARKERS['right']
-
-class KeyChordMotion(ScaleChordMotion):
-    def __init__(self, start_chord, end_chord, key=None):
-        ch1, ch2 = start_chord, end_chord
-        if key is None:
-            # requires KeyChords as input
-            assert isinstance(ch1, KeyChord) and isinstance(ch2, KeyChord), "KeyChordMotion must either be supplied KeyChords as input, or Chords plus a 'key' arg"
-
-
-
 # generic constructor method for motion either between ScaleChords or KeyChords:
 def chord_motion(start_chord, end_chord, scale=None):
     if type(start_chord) in (AbstractChord, ScaleChord) and (type(end_chord) == type(start_chord)):
         # this will be a ScaleChordMotion
         return ScaleChordMotion(start_chord, end_chord, scale=scale)
     elif type(start_chord) in (Chord, KeyChord) and (type(end_chord) == type(start_chord)):
-        return KeyChordMotion(start_chord, end_chord, scale=scale)
+        return KeyChordMotion(start_chord, end_chord, key=scale)
     else:
         raise TypeError(f'Cannot make a ChordMotion object from incompatible types: {type(start_chord)} and {type(end_chord)}')
 

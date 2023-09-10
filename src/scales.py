@@ -2032,24 +2032,27 @@ class ScaleChord(AbstractChord):
         return hash((self.factors, self.inversion, self.scale, self.scale_degree))
 
     def __str__(self):
-        return self.name
+        return self.short_name
 
     @property
     def name(self):
-        return f'{super().short_name} chord ({self.simple_numeral})'
+        return f'{AbstractChord.get_short_name(self)} chord ({self.simple_numeral})'
 
     @property
     def short_name(self):
-        return f'{super().short_name} {self.simple_numeral}'
+        mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
+        return f'{AbstractChord.get_short_name(self)} {mod_numeral}'
 
     @property
     def compact_name(self):
         ### compact repr for ScaleChord class since it turns up in markov models etc. a lot:
-        return f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
+        mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
+        return f'{self._marker}{mod_numeral}'
 
     def __repr__(self):
         # in_str = 'not ' if not self.in_scale else ''
-        return f'{self.name} {self.intervals} ({self.numeral} of: {self.scale._marker}{self.scale.name})'
+        mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
+        return f'{self.name} {self.intervals} (in: {self.scale._marker}{self.scale.name})'
         # return f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
 
 
@@ -2265,6 +2268,7 @@ base_scale_factor_names = { # base scales are defined here, modes and subscales 
     ScaleFactors('1,  2,  3,  4,  5,  6, b7, 7'): ['bebop dominant', 'bebop dominant octatonic'],
     ScaleFactors('1,  2,  3,  4,  5, #5,  6, 7'): ['bebop', 'bebop major', 'barry harris', 'major 6th diminished', 'bebop major octatonic', 'bebop octatonic', ],
     ScaleFactors('1,  2, b3,  4,  5, #5,  6, 7'): ['bebop minor', 'bebop melodic minor', 'bebop minor octatonic', 'minor 6th diminished'],
+    ScaleFactors('1,  2, b3,  3,  4,  5,  6, 7'): ['bebop dorian', 'bebop dorian octatonic'],
 }
 
 base_scale_name_factors = unpack_and_reverse_dict(base_scale_factor_names)

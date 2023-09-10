@@ -2,7 +2,7 @@ from .qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
 from .parsing import degree_names, span_names, multiple_names, num_suffixes, offset_accidentals
 from .util import ModDict, rotate_list, least_common_multiple, euclidean_gcd, numeral_subscript, log
 from .conversion import value_to_pitch
-from . import _settings
+from . import _settings, tuning
 import math
 from functools import cached_property
 
@@ -30,6 +30,13 @@ class Interval:
         self._set_flags()
         # determine this interval's quality:
         self._set_quality()
+
+        # consonance would normally be a cached_property, but has a special case
+        # where the tuning system might change after module init
+        # so we keep track of what tuning system the consonance value was cached under:
+        self.cached_consonance = None
+        self.cached_consonance_intonation = None
+
 
     def _re_parse_args(self, value, degree):
         if isinstance(value, Interval):
@@ -117,26 +124,51 @@ class Interval:
             else: # non-perfect degree, major by default
                 self.quality = Quality.from_offset_wrt_major(offset)
 
-    @cached_property
-    def ratio(self):
-        if self.value in interval_ratios:
-            return interval_ratios[self.value]
+    def get_ratio(self, intonation=None):
+        """get the side ratio of this interval according to specified
+            tuning intonation system, which should be one of EQUAL, JUST or RATIONAL.
+        technically EQUAL tuning has no defined ratios, but we approximate them using
+            very large side lengths.
+        if intonation is None (as default), fall back on the tuning system specified
+            in _settings.TUNING_SYSTEM"""
+        ratios = tuning.get_ratios(intonation)
+        if self.value in ratios:
+            return ratios[self.value]
         else:
             # this is an extended interval that we don't have a just ratio for,
             # but we can say it's just the ratio of its mod, with the left side
             # raised by 2 to the power of the octave span
-            left, right = interval_ratios[self.mod]
+            left, right = ratios[self.mod]
             left *= (2**self.octave_span)
             # reduce to simple form:
             gcd = euclidean_gcd(left, right)
             return (left // gcd, right // gcd)
 
-    @cached_property
+    @property
+    def ratio(self):
+        return self.get_ratio()
+
+    @property
     def consonance(self):
-        """consonance of an interval, defined as
-        the base2 log of the least common multiple of
-        the sides of that interval's ratio"""
-        l, r = self.ratio
+        # cache implementation that 'empties' when the intonation system is changed:
+        current_intonation = tuning.get_intonation()
+        if self.cached_consonance_intonation == current_intonation:
+            log(f'Retrieving {self.short_name} consonance from cache (intonation={self.cached_consonance_intonation})', force=False)
+            return self.cached_consonance
+        else:
+            # calculate consonance, update cache and return:
+            consonance = self.get_consonance(intonation = current_intonation)
+            self.cached_consonance = consonance
+            self.cached_consonance_intonation = current_intonation
+            log(f'Updating {self.short_name} consonance cache for intonation: {current_intonation}', force=True)
+
+            return consonance
+
+    def get_consonance(self, intonation):
+        """consonance of an interval according to a specified intonation system,
+        defined as the base2 log of the least common multiple of the sides of
+        that interval's ratio"""
+        l, r = self.get_ratio(intonation=intonation)
         # calculate least common multiple of simple form:
         lcm = least_common_multiple(l,r)
         # log2 of that multiple:
