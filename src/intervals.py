@@ -31,12 +31,6 @@ class Interval:
         # determine this interval's quality:
         self._set_quality()
 
-        # consonance would normally be a cached_property, but has a special case
-        # where the tuning system might change after module init
-        # so we keep track of what tuning system the consonance value was cached under:
-        self.cached_consonance = None
-        self.cached_consonance_intonation = None
-
 
     def _re_parse_args(self, value, degree):
         if isinstance(value, Interval):
@@ -124,14 +118,14 @@ class Interval:
             else: # non-perfect degree, major by default
                 self.quality = Quality.from_offset_wrt_major(offset)
 
-    def get_ratio(self, intonation=None):
+    def get_ratio(self, temperament=None):
         """get the side ratio of this interval according to specified
-            tuning intonation system, which should be one of EQUAL, JUST or RATIONAL.
+            tuning temperament system, which should be one of EQUAL, JUST or RATIONAL.
         technically EQUAL tuning has no defined ratios, but we approximate them using
             very large side lengths.
-        if intonation is None (as default), fall back on the tuning system specified
+        if temperament is None (as default), fall back on the tuning system specified
             in _settings.TUNING_SYSTEM"""
-        ratios = tuning.get_ratios(intonation)
+        ratios = tuning.get_ratios(temperament, context='CONSONANCE')
         if self.value in ratios:
             return ratios[self.value]
         else:
@@ -148,36 +142,35 @@ class Interval:
     def ratio(self):
         return self.get_ratio()
 
-    @property
-    def consonance(self):
-        # cache implementation that 'empties' when the intonation system is changed:
-        current_intonation = tuning.get_intonation()
-        if self.cached_consonance_intonation == current_intonation:
-            return self.cached_consonance
-        else:
-            # calculate consonance, update cache and return:
-            consonance = self.get_consonance(intonation = current_intonation)
-            self.cached_consonance = consonance
-            self.cached_consonance_intonation = current_intonation
-            log(f'Updating {self.short_name} consonance cache for intonation: {current_intonation}')
 
-            return consonance
 
-    def get_consonance(self, intonation):
+    def get_consonance(self, temperament=None):
         """consonance of an interval according to a specified intonation system,
         defined as the base2 log of the least common multiple of the sides of
         that interval's ratio"""
-        l, r = self.get_ratio(intonation=intonation)
-        # calculate least common multiple of simple form:
-        lcm = least_common_multiple(l,r)
-        # log2 of that multiple:
-        dissonance = math.log(lcm, 2)
-        # this ends up as a number that ranges from 0 (for perfect unison)
-        # to just under 15, (for the 7-octave compound minor second, of width 85)
+        if temperament is None:
+            temperament = tuning.get_temperament('CONSONANCE')
+        else:
+            temperament = temperament.upper()
+        if (temperament, self.value) in cached_consonances:
+            return cached_consonances[(temperament, self.value)]
+        else:
+            l, r = self.get_ratio(temperament=temperament)
+            # calculate least common multiple of simple form:
+            lcm = least_common_multiple(l,r)
+            # log2 of that multiple:
+            dissonance = math.log(lcm, 2)
+            # this ends up as a number that ranges from 0 (for perfect unison)
+            # to just under 15, (for the 7-octave compound minor second, of width 85)
 
-        # so we invert it into a consonance between 0-1:
-        return (15 - dissonance) / 15
-
+            # so we invert it into a consonance between 0-1:
+            consonance = (15 - dissonance) / 15
+            if _settings.DYNAMIC_CACHING:
+                cached_consonances[(temperament, self.value)] = consonance
+            return consonance
+    @property
+    def consonance(self):
+        return self.get_consonance()
 
     @staticmethod
     def from_degree(degree, quality=None, offset=None, max_degree=7):
@@ -1101,6 +1094,8 @@ allowable_degree_intervals = ModDict({
                 7: [9,10,11],
                 }, index=1, raise_values=True, raise_by=12)
 
+cached_consonances = {}
+
 # interval aliases:
 Unison = PerfectFirst = Perfect1st = Perfect1 = Per1 = Per1st = P1 = Rt = Interval(0)
 
@@ -1166,6 +1161,9 @@ cached_intervals.update({(iv.value, None):iv for iv in common_intervals})
 # also cache interval init by degree, plus one of quality or offset
 cached_intervals_by_degree = {(iv.extended_degree, None, iv.offset_from_default):iv for iv in common_intervals}
 cached_intervals_by_degree.update({(iv.extended_degree, iv.quality, None):iv for iv in common_intervals})
+
+# consonances are cached by tuning system as well as interval width:
+# cached_consonances = {('JUST', iv.value): iv.get_consonance('JUST') for iv in common_intervals}
 
 # # interval whole-number ratios according to five-limit just-intonation:
 # interval_ratios = {0: (1,1),  1: (16,15),  2: (9,8),    3: (6,5),

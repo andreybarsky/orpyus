@@ -117,9 +117,14 @@ CHARACTERS = {   'true': '+',    # e.g. displayed in 'Tertian' column if a chord
 ### or the 'theoretically perfect' tuning where A4 is 432Hz
 A4_PITCH = 440.0
 
-### TUNING_SYSTEM controls which system of tuning is used to
-### calculate note/interval pitches. must be one of 'JUST' or 'EQUAL':
-TUNING_SYSTEM = 'RATIONAL'
+### TEMPERAMENT controls which system of tuning is used to
+### calculate note/interval pitches. must be one of 'JUST', 'EQUAL', or 'RATIONAL'
+# these are separated for PLAYBACK (i.e. audio production)
+# and for CONSONANCE (i.e. the calculation that decides how consonant intervals are)
+# since it seems to work out better to use just intonation to theoretically rank scales/chords
+# but to actually hear them under equal temperament
+PLAYBACK_TEMPERAMENT = 'EQUAL'
+CONSONANCE_TEMPERAMENT = 'JUST'
 
 # under JUST-intonation tuning, intervals are built from clean integer ratios.
 # (in this case, restricted to ratios allowed by 5-limit tuning, i.e. powers of 2*3*5 )

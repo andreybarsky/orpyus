@@ -1069,18 +1069,16 @@ class ScaleChordMotion:
                 interval_distance_matrix[r,c] = iv_distance.value
 
         import pandas as pd
-        self.degree_df = pd.DataFrame(degree_distance_matrix,
+        self.degree_df_ivs = pd.DataFrame(degree_distance_matrix,
                                       columns=[f'{iv.short_name}' for iv in end_chord_relative_intervals],
                                       index=[f'{iv.short_name:<2}  ' for iv in start_chord_relative_intervals])
-        self.interval_df = pd.DataFrame(interval_distance_matrix,
+        self.interval_df_ivs = pd.DataFrame(interval_distance_matrix,
                                         columns=[f'{iv.short_name}' for iv in end_chord_relative_intervals],
                                         index=[f'{iv.short_name:<2}  ' for iv in start_chord_relative_intervals])
 
 
     def __repr__(self):
-        return f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name} (in {self.scale.name})\nDegree distance:\n{self.degree_df}\nInterval distance:\n{self.interval_df}'
-
-
+        return f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name} (in {self.scale.name})\nDegree distance:\n{self.degree_df_ivs}\nInterval distance:\n{self.interval_df_ivs}'
 
     _arrow = _settings.MARKERS['right']
 
@@ -1115,37 +1113,39 @@ class KeyChordMotion(ScaleChordMotion):
         assert isinstance(ch1, KeyChord) and isinstance(ch2, KeyChord)
         assert ch1.key == ch2.key == key
         self.start_chord, self.end_chord = ch1, ch2
+        self.scale = self.key.scale
 
-        self._build_tables()
+        self.build_tables()
         # print(f'Degree distance:\n{self.degree_df}')
         # print(f'Degree distance:\n{self.interval_df}')
 
+        self.build_note_tables()
 
-    def _build_tables(self):
-        # experimental, WIP
-
-        ### TBI: adjust degree_df to work for scales/intervals instead of keys/notes
-        import numpy as np
-        degree_distance_matrix = np.zeros((len(self.start_chord), len(self.end_chord)), dtype=float)
-        interval_distance_matrix = np.zeros((len(self.start_chord), len(self.end_chord)), dtype=int)
-        for r, n1 in enumerate(self.start_chord.notes):
-            for c, n2 in enumerate(self.end_chord.notes):
-                deg1 = self.key._get_arbitrary_note_degree(n1) # note_degrees[n1] if n1 in self.key.note_degrees else key.fractional_note_degrees[n1]
-                deg2 = self.key._get_arbitrary_note_degree(n2) # note_degrees[n2] if n2 in self.key.note_degrees else key.fractional_note_degrees[n2]
-                motion = DegreeMotion(deg1, deg2, scale=self.key.scale)
-                degree_distance_matrix[r,c] = round(motion.distance,1)
-
-                iv_distance = (n2 - n1).signed_class # i.e. the interval or its inversion, whichever is narrower
-                interval_distance_matrix[r,c] = iv_distance.value
-
-        import pandas as pd
-        self.degree_df = pd.DataFrame(degree_distance_matrix,
-                                      columns=[f'{n.chroma}' for n in self.end_chord.notes],
-                                      index=[f'{n.chroma:<2}  ' for n in self.start_chord.notes])
-        self.interval_df = pd.DataFrame(interval_distance_matrix,
-                                        columns=[f'{n.chroma}' for n in self.end_chord.notes],
-                                        index=[f'{n.chroma:<2}  ' for n in self.start_chord.notes])
-
+    # def _build_tables(self):
+    #     # experimental, WIP
+    #
+    #     ### TBI: adjust degree_df to work for scales/intervals instead of keys/notes
+    #     import numpy as np
+    #     degree_distance_matrix = np.zeros((len(self.start_chord), len(self.end_chord)), dtype=float)
+    #     interval_distance_matrix = np.zeros((len(self.start_chord), len(self.end_chord)), dtype=int)
+    #     for r, n1 in enumerate(self.start_chord.notes):
+    #         for c, n2 in enumerate(self.end_chord.notes):
+    #             deg1 = self.key._get_arbitrary_note_degree(n1) # note_degrees[n1] if n1 in self.key.note_degrees else key.fractional_note_degrees[n1]
+    #             deg2 = self.key._get_arbitrary_note_degree(n2) # note_degrees[n2] if n2 in self.key.note_degrees else key.fractional_note_degrees[n2]
+    #             motion = DegreeMotion(deg1, deg2, scale=self.key.scale)
+    #             degree_distance_matrix[r,c] = round(motion.distance,1)
+    #
+    #             iv_distance = (n2 - n1).signed_class # i.e. the interval or its inversion, whichever is narrower
+    #             interval_distance_matrix[r,c] = iv_distance.value
+    #
+    #     import pandas as pd
+    #     self.degree_df = pd.DataFrame(degree_distance_matrix,
+    #                                   columns=[f'{n.chroma}' for n in self.end_chord.notes],
+    #                                   index=[f'{n.chroma:<2}  ' for n in self.start_chord.notes])
+    #     self.interval_df = pd.DataFrame(interval_distance_matrix,
+    #                                     columns=[f'{n.chroma}' for n in self.end_chord.notes],
+    #                                     index=[f'{n.chroma:<2}  ' for n in self.start_chord.notes])
+    #
 
 # generic constructor method for motion either between ScaleChords or KeyChords:
 def chord_motion(start_chord, end_chord, scale=None):

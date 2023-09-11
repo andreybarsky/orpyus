@@ -111,7 +111,7 @@ def name_to_pitch(name):
     return value_to_pitch(val)
 
 
-def get_pitch(value, tuning_system='just'):
+def get_pitch(value, temperament=None):
     """returns the pitch for an OctaveNote's value"""
     # first we take the pitch of the A below the note, which is easy.
     lower_A_octave = (value-1) // 12 # the octave of that A

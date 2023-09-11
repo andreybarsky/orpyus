@@ -1,4 +1,4 @@
-from ._settings import TUNING_SYSTEM, A4_PITCH, NOTE_RANGE
+from ._settings import A4_PITCH, NOTE_RANGE, PLAYBACK_TEMPERAMENT, CONSONANCE_TEMPERAMENT
 from .util import log, euclidean_gcd
 import math
 
@@ -35,12 +35,12 @@ def build_rational_harmonics(harmonic_range):
     rational_harmonics = sorted(list(rational_reals_to_rational_harmonics.values()))
     return rational_reals_to_rational_harmonics, rational_harmonics
 
-# 'rational' tuning uses side lengths up to a reasonable limit (in this case 50)
-rational_reals_to_harmonics, rational_harmonics = build_rational_harmonics(range(1,100))
+# 'rational' tuning uses side lengths up to a reasonable limit
+rational_reals_to_harmonics, rational_harmonics = build_rational_harmonics(range(1,30))
 # whereas 'equal' tuning does not necessarily guarantee rational numbers, but
 # under this simplifying assumption we choose rationals that are imperceptibly close,
-# by allowing side lengths up to 200:
-equal_reals_to_harmonics, equal_harmonics = build_rational_harmonics(range(1,1000))
+# by allowing very large side lengths
+equal_reals_to_harmonics, equal_harmonics = build_rational_harmonics(range(1,500))
 
 def obtain_tuning(harmonic_ratios):
     """given a set of allowable harmonic ratios, finds a series of ratios and steps
@@ -140,8 +140,8 @@ cache = {'JUST': (just_ratios, just_steps),
          'RATIONAL': (rational_ratios, rational_steps),
          'EQUAL': (equal_approximation_ratios, equal_steps)}
 
-INTONATION = TUNING_SYSTEM.upper()
-assert INTONATION in cache.keys(), f'{INTONATION} as defined in _settings is not a valid tuning; try JUST, EQUAL or RATIONAL'
+TEMPERAMENT = {'PLAYBACK': PLAYBACK_TEMPERAMENT.upper(),
+               'CONSONANCE': CONSONANCE_TEMPERAMENT.upper()}
 
 # define pitches for each note value:
 v_start, v_end = NOTE_RANGE
@@ -176,43 +176,53 @@ value_pitches = {'EQUAL': equal_value_pitches,
                  'JUST': just_value_pitches,
                  'RATIONAL': rational_value_pitches}
 
-def get_pitch(value, intonation=None):
+def get_pitch(value, temperament=None, context='PLAYBACK'):
     """get the pitch of a specified OctaveNote value according to a specified intonation system,
     which should be one of EQUAL, JUST, or RATIONAL. if unspecified, uses the default intonation
-    as specified in _settings.TUNING_SYSTEM"""
-    if intonation is None:
-        intonation = INTONATION # fall back on default
+    for the specified context (PLAYBACK or CONSONANCE) as specified in _settings.TUNING_SYSTEM"""
+    if temperament is None:
+        temperament = TEMPERAMENT[context] # fall back on default
     else:
-        intonation = intonation.upper()
-    return value_pitches[intonation][value]
+        temperament = temperament.upper()
+    return value_pitches[temperament][value]
 
-def get_ratios(intonation=None):
-    if intonation is None:
-        intonation = INTONATION # fall back on default
+def get_ratios(temperament=None, context='CONSONANCE'):
+    if temperament is None:
+        temperament = TEMPERAMENT[context] # fall back on default
     else:
-        intonation = intonation.upper()
-    return cache[intonation][0]
+        temperament = temperament.upper()
+    return cache[temperament][0]
 
-def get_steps(intonation=None):
-    if intonation is None:
-        intonation = INTONATION # fall back on default
+def get_steps(temperament=None, context='CONSONANCE'):
+    if temperament is None:
+        temperament = TEMPERAMENT[context] # fall back on default
     else:
-        intonation = intonation.upper()
-    return cache[intonation][1]
+        temperament = temperament.upper()
+    return cache[temperament][1]
 
-def set_intonation(intonation):
+def set_temperament(temperament, context):
     """set the global tuning intonation system to one of: JUST, RATIONAL, or EQUAL"""
-    global INTONATION
-    intonation = intonation.upper()
-    assert intonation in cache.keys(), f'{INTONATION} is not a valid tuning mode: try JUST, RATIONAL, or EQUAL'
-    INTONATION = intonation
+    temperament = temperament.upper()
+    context = context.upper()
+    assert temperament in cache.keys(), f'{temperament} is not a valid tuning mode: try JUST, RATIONAL, or EQUAL'
+    assert context in ['PLAYBACK', 'CONSONANCE', 'BOTH'], "Temperament context must specify PLAYBACK, CONSONANCE or BOTH"
 
-def get_intonation():
-    return INTONATION
+    global TEMPERAMENT
+    if context != 'BOTH':
+        TEMPERAMENT[context] = temperament
+    else:
+        TEMPERAMENT['PLAYBACK'] = temperament
+        TEMPERAMENT['CONSONANCE'] = temperament
 
-def __getattr__(name):
-    ratios, steps = cache[INTONATION]
-    if name == 'ratios':
-        return ratios
-    elif name == 'steps':
-        return steps
+def get_temperament(context):
+    if context == 'PLAYBACK':
+        return PLAYBACK_TEMPERAMENT
+    elif context == 'CONSONANCE':
+        return CONSONANCE_TEMPERAMENT
+
+# def __getattr__(name):
+#     ratios, steps = cache[INTONATION]
+#     if name == 'ratios':
+#         return ratios
+#     elif name == 'steps':
+#         return steps

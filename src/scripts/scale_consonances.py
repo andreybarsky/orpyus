@@ -1,4 +1,5 @@
-import scales
+from src import scales
+from src.display import DataFrame
 
 # display all scale consonances:
 all_consonances = {}
@@ -17,13 +18,11 @@ df_other = DataFrame(['Scale Name',
 for scale, cons in zip(sorted_scales, cons_values):
     if scale.is_pentatonic():
         df_pent.append([scale.name, round(cons,3)])
-    else:
+    elif scale.is_heptatonic():
         df_other.append([scale.name, round(cons,3)])
-print(f'\n=== Pentatonic scale consonances: ===')
-df_pent.show()
-
-print(f'\n=== Other scale consonances: ===')
-df_other.show()
+df_pent.show(title='Pentatonic scale consonances')
+print()
+df_other.show(title='Heptatonic scale consonances:')
 
 import numpy as np
 print(f'Highest consonance: {np.max(cons_values):.05f} ({cons_names[np.argmax(cons_values)]})')

@@ -211,16 +211,16 @@ class HarmonicModel:
 BasicMajorModel = HarmonicModel(  # basic tonic - subdominant - dominant model
                        scale = NaturalMajor,
             function_degrees = { 'T' : ['I', 'iii'],
-                                 'SD': ['IV', 'ii',  'vi'],
+                                 'PD': ['IV', 'ii',  'vi'],
                                  'D' : ['viio', 'V'],
                                },
                                   ordered_functions=False,
-        function_subsequents = { 'T' : ['T', 'SD', 'D'],
-                                 'SD': ['SD', 'D'],
+        function_subsequents = { 'T' : ['T', 'PD', 'D'],
+                                 'PD': ['PD', 'D'],
                                  'D' : ['T', 'D'],
                                },
 
-special_movements_functions =  { ('IV','I'): ('SD', 'T'), # plagal cadence
+special_movements_functions =  { ('IV','I'): ('PD', 'T'), # plagal cadence
                                  ('V','vi'): ('D' , 'T'), # deceptive cadence
                                },
                                )

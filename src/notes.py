@@ -304,10 +304,10 @@ class Note:
         return self[4]._wave(duration=duration, falloff=falloff, **kwargs)
 
 
-    def play(self, duration=3, octave=4, type='KS', falloff=True, intonation=None):
+    def play(self, duration=3, octave=4, type='KS', falloff=True, temperament=None):
         """plays this Note as audio in a desired octave, 4 by default"""
         return self.in_octave(octave).play(duration=duration, type=type,
-                                           falloff=falloff, intonation=intonation)
+                                           falloff=falloff, temperament=temperament)
 
     def __str__(self):
         # e.g. '♩C#'
@@ -343,18 +343,18 @@ class OctaveNote(Note):
         # compute octave, position, and name:
         self.octave, self.position = conv.oct_pos(self.value)
 
-        self.reference_pitch = self.get_pitch(intonation='EQUAL') # reference (12-TET) pitch calculated by formula
+        self.reference_pitch = self.get_pitch(temperament='EQUAL') # reference (12-TET) pitch calculated by formula
 
     @property
     def pitch(self):
         return self.get_pitch()
-    def get_pitch(self, intonation=None):
-        """gets the pitch of this OctaveNote according to the specified tuning intonation,
+    def get_pitch(self, temperament=None):
+        """gets the pitch of this OctaveNote according to the specified tuning temperament,
         which must be one of: EQUAL, JUST, or RATIONAL.
         by default, this uses the global tuning mode specified in _settings.TUNING_SYSTEM"""
-        if intonation is None:
-            intonation = tuning.INTONATION
-        return conv.value_to_pitch(self.value, intonation)
+        if temperament is None:
+            temperament = tuning.get_temperament('PLAYBACK')
+        return conv.value_to_pitch(self.value, temperament)
 
     #### main input/arg-parsing private method:
     @staticmethod
@@ -557,21 +557,21 @@ class OctaveNote(Note):
         # else:
         #     return high_cand
 
-    def _wave(self, duration, type='KS', falloff=False, intonation=None, cache=True):
+    def _wave(self, duration, type='KS', falloff=False, temperament=None, cache=True):
         """Outputs a sine wave corresponding to this note,
         by default with exponential volume increase and falloff"""
         from .audio import synth_wave
-        # get this note's pitch by desired intonation system: (default from settings)
-        tuned_pitch = self.get_pitch(intonation=intonation)
+        # get this note's pitch by desired temperament system: (default from settings)
+        tuned_pitch = self.get_pitch(temperament=temperament)
         # wave = sine_wave(freq=self.pitch, duration=duration)
         # use karplus-strong wave table synthesis for guitar-string timbre:
         wave = synth_wave(freq=tuned_pitch, duration=duration, type=type, falloff=falloff, cache=cache)
-        log(f'Adding note {self} with pitch {tuned_pitch} (intonation={intonation})', force=True, depth=6)
+        log(f'Adding note {self} with pitch {tuned_pitch} (temperament={temperament})', force=True, depth=6)
         return wave
 
-    def play(self, duration=2, type='KS', falloff=True, block=False, intonation=None):
+    def play(self, duration=2, type='KS', falloff=True, block=False, temperament=None):
         from .audio import play_wave
-        wave = self._wave(duration=duration, type=type, falloff=falloff, intonation=intonation)
+        wave = self._wave(duration=duration, type=type, falloff=falloff, temperament=temperament)
         play_wave(wave, block=block)
 
     @property
@@ -801,33 +801,33 @@ class NoteList(list):
         from src.keys import matching_keys
         return matching_keys(notes=self, *args, **kwargs)
 
-    def _waves(self, duration, octave, type, falloff=False, intonation=None):
+    def _waves(self, duration, octave, type, falloff=False, temperament=None):
         wave_notes = self.force_octave(start_octave=octave)
         print(f'  -synthesising notes: {wave_notes}')
-        waves = [n._wave(duration=duration, type=type, falloff=falloff, intonation=intonation) for n in wave_notes]
+        waves = [n._wave(duration=duration, type=type, falloff=falloff, temperament=temperament) for n in wave_notes]
         return waves
 
-    def _chord_wave(self, duration, octave, delay=None, type='KS', falloff=True, intonation=None):
+    def _chord_wave(self, duration, octave, delay=None, type='KS', falloff=True, temperament=None):
         from .audio import arrange_chord
         from .chords import most_likely_chord
         if delay is None:
             # print(f' synthesising chord: {(most_likely_chord(self)).name} in octave {octave}')
             log(f' synthesising chord: {(most_likely_chord(self)).name} in octave {octave}')
-            chord_wave = arrange_chord(self._waves(duration, octave, type, intonation=intonation), norm=False, falloff=falloff)
+            chord_wave = arrange_chord(self._waves(duration, octave, type, temperament=temperament), norm=False, falloff=falloff)
             return chord_wave
         else:
             # delay arg has been given so we stagger the chord, making it an arpeggio instead:
-            return self._melody_wave(duration=duration, octave=octave, delay=delay, type=type, falloff=falloff, intonation=intonation)
+            return self._melody_wave(duration=duration, octave=octave, delay=delay, type=type, falloff=falloff, temperament=temperament)
 
-    def _melody_wave(self, duration, octave, delay, type='KS', falloff=True, intonation=None):
+    def _melody_wave(self, duration, octave, delay, type='KS', falloff=True, temperament=None):
         from .audio import arrange_melody
         from .chords import most_likely_chord
         # log(f' synthesising arpeggio: {(most_likely_chord(self)).name} in octave:{octave if octave is not None else "Default"} (w/ delay={delay})')
         log(f' synthesising arpeggio from notes: {self} in octave:{octave if octave is not None else "Default"} (w/ delay={delay})')
-        melody_wave = arrange_melody(self._waves(duration, octave, type, intonation=intonation), delay=delay, norm=False, falloff=falloff)
+        melody_wave = arrange_melody(self._waves(duration, octave, type, temperament=temperament), delay=delay, norm=False, falloff=falloff)
         return melody_wave
 
-    def play(self, delay=0.2, duration=3, octave=None, falloff=True, block=False, intonation=None, type='KS', **kwargs):
+    def play(self, delay=0.2, duration=3, octave=None, falloff=True, block=False, temperament=None, type='KS', **kwargs):
         from .audio import play_wave
         if octave is None and isinstance(self[0], OctaveNote):
             # auto infer octave if this list starts with an octavenote:
@@ -836,11 +836,11 @@ class NoteList(list):
         if delay is not None:
             wave = self._melody_wave(duration=duration, octave=octave,
                                      delay=delay, type=type, falloff=falloff,
-                                    intonation=intonation, **kwargs)
+                                    temperament=temperament, **kwargs)
         else:
             wave = self._chord_wave(duration=duration, octave=octave,
                                     type=type, falloff=falloff,
-                                    intonation=intonation, **kwargs)
+                                    temperament=temperament, **kwargs)
         play_wave(wave, block=block)
 
     def join(self, s, markers=False):

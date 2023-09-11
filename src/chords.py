@@ -401,11 +401,11 @@ class AbstractChord:
     def pairwise_intervals(self):
         return self.get_pairwise_intervals(extra_tonic=False)
 
-    def get_pairwise_consonances(self, extra_tonic=False, intonation=None):
+    def get_pairwise_consonances(self, extra_tonic=False, temperament=None):
         pw_intervals = self.get_pairwise_intervals(extra_tonic=extra_tonic)
         pw_consonances = {}
         for pair, diff in pw_intervals.items():
-            pw_consonances[pair] = diff.get_consonance(intonation=intonation)
+            pw_consonances[pair] = diff.get_consonance(temperament=temperament)
         return pw_consonances
     @property
     def pairwise_consonances(self):
@@ -414,18 +414,18 @@ class AbstractChord:
     @property
     def consonance(self):
         return self.get_consonance()
-    def get_consonance(self, intonation=None, raw=False):
+    def get_consonance(self, temperament=None, raw=False):
         """the weighted mean of pairwise interval consonances"""
         # just retrieve cached consonance if it has already been computed:
-        if intonation is None:
-            intonation = tuning.get_intonation()
-        if self._is_registered() and (intonation, self.suffix) in cached_consonances_by_suffix:
-            return cached_consonances_by_suffix[(intonation, self.suffix)]
+        if temperament is None:
+            temperament = tuning.get_temperament('CONSONANCE')
+        if self._is_registered() and (temperament, self.suffix) in cached_consonances_by_suffix:
+            return cached_consonances_by_suffix[(temperament, self.suffix)]
         else:
             tonic_weight = 2
 
             cons_list = []
-            for pair, cons in self.get_pairwise_consonances(intonation=intonation).items():
+            for pair, cons in self.get_pairwise_consonances(temperament=temperament).items():
                 if (tonic_weight != 1) and (pair[0].value == 0): # intervals from root are counted double
                     cons_list.extend([cons]*tonic_weight)
                 else:
@@ -444,7 +444,7 @@ class AbstractChord:
             min_cons = 0.49
             rescaled_cons = (raw_cons - min_cons) / (max_cons - min_cons)
             if _settings.DYNAMIC_CACHING:
-                cached_consonances_by_suffix[(intonation,self.suffix)] = rescaled_cons
+                cached_consonances_by_suffix[(temperament,self.suffix)] = rescaled_cons
             if raw:
                 return round(raw_cons, 3)
             else:
