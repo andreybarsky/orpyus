@@ -566,7 +566,7 @@ class OctaveNote(Note):
         # wave = sine_wave(freq=self.pitch, duration=duration)
         # use karplus-strong wave table synthesis for guitar-string timbre:
         wave = synth_wave(freq=tuned_pitch, duration=duration, type=type, falloff=falloff, cache=cache)
-        log(f'Adding note {self} with pitch {tuned_pitch} (temperament={temperament})', force=True, depth=6)
+        # log(f'Adding note {self} with pitch {tuned_pitch} (temperament={temperament})', force=True, depth=6)
         return wave
 
     def play(self, duration=2, type='KS', falloff=True, block=False, temperament=None):

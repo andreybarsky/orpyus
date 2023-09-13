@@ -15,3 +15,4 @@ from src.guitar import *
 from src.progressions import *
 from src.harmony import *
 from src.audio import *
+from src.rhythm import *

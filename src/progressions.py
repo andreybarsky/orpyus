@@ -579,14 +579,14 @@ class ChordProgression(Progression): # , ChordList):
         lb, rb = self._brackets
         numerals = self.as_numerals(marks=marks, diacritics=diacritics, sep='@')
         split_numerals = numerals.split('@')
-        chordlist = [ch.name for ch in self.chords]
-        num_chords = zip(split_numerals, chordlist)
+        # chord_name_list = [ch.compact_name for ch in self.chords]
+        num_chords = zip(split_numerals, self.chords)
         if chords_only:
-            prog_str = ' '.join([f'{ch}' for num, ch in num_chords])
+            prog_str = ' '.join([f'{Chord.get_short_name(ch)}' for num, ch in num_chords])
         elif degrees_only:
             prog_str = ' '.join([f'{num}' for num, ch in num_chords])
         else: # i.e. both chords AND degrees
-            prog_str = ' - '.join([f'{ch} ({num})' for num, ch in num_chords])
+            prog_str = ' - '.join([f'{ch.compact_name}' for num, ch in num_chords])
         # return f'{self.chords}  (in {self.key.name})'
         return f'ChordProgression:  {lb}{prog_str}{rb}  (in {self.key.name})'
 
@@ -595,7 +595,7 @@ class ChordProgression(Progression): # , ChordList):
         with chords above and scale degrees below"""
         numerals = self.as_numerals(marks=marks, diacritics=diacritics, sep='@')
         split_numerals = numerals.split('@')
-        chord_names = [ch.name for ch in self.chords]
+        chord_names = [ch.compact_name for ch in self.chords]
         from src.display import DataFrame
         df = DataFrame(['' for c in range(len(self))])
         df.append(chord_names) # chord row
@@ -1048,7 +1048,20 @@ class ScaleChordMotion:
 
         self.start_chord, self.end_chord = ch1, ch2
 
-        self.build_tables()
+        self.start_chord_relative_intervals = (self.start_chord.intervals + self.start_chord.root_interval_from_tonic).flatten()
+        self.end_chord_relative_intervals = (self.end_chord.intervals + self.end_chord.root_interval_from_tonic).flatten()
+
+        self.degree_distance_values, self.interval_distance_values = self.build_tables()
+
+        import pandas as pd
+        self.degree_distances = pd.DataFrame(self.degree_distance_values,
+                                      columns=[f'{iv.short_name}' for iv in self.end_chord_relative_intervals],
+                                      index=[f'{iv.short_name:<2}  ' for iv in self.start_chord_relative_intervals])
+        self.interval_distances = pd.DataFrame(self.interval_distance_values,
+                                        columns=[f'{iv.short_name}' for iv in self.end_chord_relative_intervals],
+                                        index=[f'{iv.short_name:<2}  ' for iv in self.start_chord_relative_intervals])
+
+
 
     def build_tables(self):
         import numpy as np
@@ -1056,10 +1069,9 @@ class ScaleChordMotion:
         interval_distance_matrix = np.zeros((len(self.start_chord), len(self.end_chord)), dtype=int)
         rt1 = self.start_chord.root_interval_from_tonic
         rt2 = self.end_chord.root_interval_from_tonic
-        start_chord_relative_intervals = (self.start_chord.intervals + rt1).flatten()
-        for r, iv1 in enumerate(start_chord_relative_intervals):
-            end_chord_relative_intervals = (self.end_chord.intervals + rt2).flatten()
-            for c, iv2 in enumerate(end_chord_relative_intervals):
+
+        for r, iv1 in enumerate(self.start_chord_relative_intervals):
+            for c, iv2 in enumerate(self.end_chord_relative_intervals):
                 deg1 = self.scale._get_arbitrary_interval_degree(iv1) # note_degrees[n1] if n1 in self.key.note_degrees else key.fractional_note_degrees[n1]
                 deg2 = self.scale._get_arbitrary_interval_degree(iv2) # note_degrees[n2] if n2 in self.key.note_degrees else key.fractional_note_degrees[n2]
                 motion = DegreeMotion(deg1, deg2, scale=self.scale)
@@ -1067,18 +1079,43 @@ class ScaleChordMotion:
 
                 iv_distance = (iv2 - iv1).signed_class # i.e. the interval or its inversion, whichever is narrower
                 interval_distance_matrix[r,c] = iv_distance.value
+        return degree_distance_matrix, interval_distance_matrix
 
-        import pandas as pd
-        self.degree_df_ivs = pd.DataFrame(degree_distance_matrix,
-                                      columns=[f'{iv.short_name}' for iv in end_chord_relative_intervals],
-                                      index=[f'{iv.short_name:<2}  ' for iv in start_chord_relative_intervals])
-        self.interval_df_ivs = pd.DataFrame(interval_distance_matrix,
-                                        columns=[f'{iv.short_name}' for iv in end_chord_relative_intervals],
-                                        index=[f'{iv.short_name:<2}  ' for iv in start_chord_relative_intervals])
+
+
+
+    @property
+    def tension(self):
+        """how much tension between the two chords, measured by the number of
+        1s and 2s in their distances"""
+        tension_score = len(self.end_chord) # normalising factor; so that tonic chord itself has 0 tension
+        num_rows, num_cols = len(self.start_chord), len(self.end_chord)
+        distances = self.interval_df
+        for r in range(num_rows):
+            row = distances.iloc[r]
+            abs_semitones = [abs(v) for v in row]
+            min_abs = min(abs_semitones)
+            num_0s = len([v for v in abs_semitones if v==0])
+            num_1s = len([v for v in abs_semitones if v==1])
+            num_2s = len([v for v in abs_semitones if v==2])
+            tension_score += num_1s
+            tension_score += (num_2s /2)
+            tension_score -= num_0s # every 0 _decreases_ tension
+        return tension_score
+
+    def play(self, key='C', *args, **kwargs):
+        ch1, ch2 = self.start_chord.in_key(key), self.end_chord.in_key(key)
+        ChordList([ch1, ch2]).play(*args, **kwargs)
 
 
     def __repr__(self):
-        return f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name} (in {self.scale.name})\nDegree distance:\n{self.degree_df_ivs}\nInterval distance:\n{self.interval_df_ivs}'
+        lines = [f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name} (in {self.scale.name})',
+                '\nDegree distance:',
+                str(self.degree_distances),
+                '\nInterval distance:',
+                str(self.interval_distances)]
+        return '\n'.join(lines)
+        # return f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name} (in {self.scale.name})\nDegree distance:\n{self.degree_distances}\nInterval distance:\n{self.interval_distances}'
 
     _arrow = _settings.MARKERS['right']
 
@@ -1115,11 +1152,28 @@ class KeyChordMotion(ScaleChordMotion):
         self.start_chord, self.end_chord = ch1, ch2
         self.scale = self.key.scale
 
-        self.build_tables()
-        # print(f'Degree distance:\n{self.degree_df}')
-        # print(f'Degree distance:\n{self.interval_df}')
+        self.start_chord_relative_intervals = (self.start_chord.intervals + self.start_chord.root_interval_from_tonic).flatten()
+        self.end_chord_relative_intervals = (self.end_chord.intervals + self.end_chord.root_interval_from_tonic).flatten()
 
-        self.build_note_tables()
+        self.degree_distance_values, self.interval_distance_values = self.build_tables()
+
+        import pandas as pd
+        self.degree_distances = pd.DataFrame(self.degree_distance_values,
+                                      columns=[f'{nt.chroma}' for nt in self.end_chord.notes],
+                                      index=[f'{nt.chroma:<2}  ' for nt in self.start_chord.notes])
+        self.interval_distances = pd.DataFrame(self.interval_distance_values,
+                                        columns=[f'{nt.chroma}' for nt in self.end_chord.notes],
+                                        index=[f'{nt.chroma:<2}  ' for nt in self.start_chord.notes])
+
+
+    def __repr__(self):
+        lines = [f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name} (in {self.key.name})',
+                '\nDegree distance:',
+                str(self.degree_distances),
+                '\nInterval distance:',
+                str(self.interval_distances)]
+        return '\n'.join(lines)
+
 
     # def _build_tables(self):
     #     # experimental, WIP
@@ -1157,7 +1211,14 @@ def chord_motion(start_chord, end_chord, scale=None):
     else:
         raise TypeError(f'Cannot make a ChordMotion object from incompatible types: {type(start_chord)} and {type(end_chord)}')
 
-
+def tonic_tension(scale_chord, scale=None):
+    """the tonic tension of a ScaleChord is how strongly it wants to resolve back
+    the to tonic chord, measured by the number of steps back to a tonic chord within it"""
+    if not isinstance(scale_chord, ScaleChord):
+        scale_chord = ScaleChord(scale_chord, scale=scale)
+    tonic_chord = scale_chord.scale.chord(1)
+    motion = ScaleChordMotion(scale_chord, tonic_chord)
+    return motion.tension
 
 
 # TODO: key recognition routine that respects progression logic,
@@ -1256,5 +1317,5 @@ def guitar_progressions():
         if len(cprogs) == 0:
             cprogs = prog.simplify().transpose_for_guitar(return_all=True)
             desc += '(simplified)\n'
-        cprogs_str = desc + '\n'.join([str(p) for p in cprogs]) + '\n===='
-        print(f'{name}: {cprogs_str}')
+        cprogs_str = desc + '\n'.join([p.__str__(chords_only=True) for p in cprogs]) + '\n===='
+        print(f'{name} - {prog}: {cprogs_str}')

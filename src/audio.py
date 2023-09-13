@@ -6,11 +6,13 @@ from .util import log
 
 import threading
 
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import plot, show
 # from matplotlib import ticker as mticker
 from scipy.fft import fft, ifft
+from scipy.ndimage import gaussian_filter
 import sounddevice as sd
 
 # global sampling frequency:
@@ -37,7 +39,7 @@ class AmplitudeEnvelope:
             spec.append(end_profile)
 
         self.keypoints = [pair[0] for pair in spec]
-        self.amplitudes = [pair[1] for pair in spec]
+        self.amplitudes = [np.max([pair[1],0]) for pair in spec] # floor at 0
         assert self.keypoints == sorted(self.keypoints), "keypoints must be in increasing order"
 
     def __call__(self, wave):
@@ -51,6 +53,7 @@ class AmplitudeEnvelope:
             start_idx, end_idx = keypoint_idxs[s-1], keypoint_idxs[s]
             segment_size = end_idx - start_idx
             amp_start, amp_end = self.amplitudes[s-1], self.amplitudes[s]
+
             amp_values = np.linspace(amp_start, amp_end, segment_size)
 
             segment = wave[start_idx : end_idx]
@@ -60,10 +63,13 @@ class AmplitudeEnvelope:
 LinearEnv = AmplitudeEnvelope([])
 TriangleEnv = AmplitudeEnvelope([(0,0), (.5, 1), (1,0)])
 HexEnv = AmplitudeEnvelope([(0, 0), (0.21, 1), (0.78,1), (1,0)])
-# hex_side = 0.578 # 1 / sqrt(3)
-# hex_onset = (1-hex_side) / 2
+LogEnv = AmplitudeEnvelope([(i/20, -math.log(i/20,10)/2) for i in range(1,20)])
+ExpEnv = AmplitudeEnvelope([(i/20, -1.6*math.exp(((i/20)-1.1)*2)+1.18) for i in range(1,20)])
 
-LogEnv = AmplitudeEnvelope([(i/10, -math.log(i/10,10)/2) for i in range(1,10)])
+
+def smooth(wave, ratio=500):
+    sd = len(wave) / ratio
+    return gaussian_filter(wave, sd)
 
 ### pyaudio for mic input?
 

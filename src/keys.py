@@ -645,7 +645,8 @@ class KeyChord(Chord, ScaleChord):
 
     @property
     def name(self):
-        return self.short_name
+        mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
+        return f'{Chord.get_short_name(self)} ({mod_numeral} of {self.key._marker}{self.key.name})'
 
     @property
     def short_name(self):
@@ -654,14 +655,18 @@ class KeyChord(Chord, ScaleChord):
 
     @property
     def compact_name(self):
-        ### compact repr for ScaleChord class since it turns up in markov models etc. a lot:
-        mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
-        return f'{self._marker}{self.root.chroma} {mod_numeral}'
+        return self.short_name
+        # ### compact repr for KeyChord class
+        # mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
+        # return f'{self._marker}{self.short_name} ({mod_numeral})'
 
     def __repr__(self):
         # in_str = 'not ' if not self.in_scale else ''
         mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
-        return f'{self._marker}{self.name} {self.intervals} (in: {self.key._marker}{self.key.name})'
+        # dotted notes str as in Chord.__repr__:
+        lb, rb = NoteList._brackets
+        notes_str = self._dotted_notes(markers=True)
+        return f'{self._marker}{self.name} {lb}{notes_str}{rb}'
         # return f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
 
 
