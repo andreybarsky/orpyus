@@ -16,8 +16,56 @@ import sounddevice as sd
 # global sampling frequency:
 fs = 44100
 
-### pyaudio for mic input?
 
+class AmplitudeEnvelope:
+    """class that can be called on sound waves to apply attack/onset/decay parameters"""
+    def __init__(self, spec):
+        """accepts argument 'spec', a list of of (fraction, amp) pairs,
+        where 'fraction' is a float between 0 and 1, representing
+            fractions of the original signature as 'keypoints',
+        and 'amp' is a positive float (but usually between 0 and 1), representing
+            the desired amplitude at the corresponding keypoint, relative to
+            a reference value of 1 (the original signal)"""
+
+        # if amplitudes for onset and offset are not provided in spec,
+        # set them to 1 and 0 by default:
+        if (len(spec) == 0) or spec[0][0] != 0:
+            start_profile = (0,1) # start at reference volume
+            spec = [start_profile] + spec
+        if spec[-1][0] != 1:
+            end_profile = (1,0) # decay to 0 by end
+            spec.append(end_profile)
+
+        self.keypoints = [pair[0] for pair in spec]
+        self.amplitudes = [pair[1] for pair in spec]
+        assert self.keypoints == sorted(self.keypoints), "keypoints must be in increasing order"
+
+    def __call__(self, wave):
+        """applies this envelope to a desired 1d wave"""
+        size = len(wave)
+        keypoint_idxs = [int(size * frac) for frac in self.keypoints]
+        amp_profile = np.ones(size)
+        output_segments = []
+        # loop over segments of the envelope, i.e. the edges between keypoints:
+        for s in range(1, len(self.keypoints)):
+            start_idx, end_idx = keypoint_idxs[s-1], keypoint_idxs[s]
+            segment_size = end_idx - start_idx
+            amp_start, amp_end = self.amplitudes[s-1], self.amplitudes[s]
+            amp_values = np.linspace(amp_start, amp_end, segment_size)
+
+            segment = wave[start_idx : end_idx]
+            output_segments.append(segment * amp_values)
+        return np.concatenate(output_segments)
+
+LinearEnv = AmplitudeEnvelope([])
+TriangleEnv = AmplitudeEnvelope([(0,0), (.5, 1), (1,0)])
+HexEnv = AmplitudeEnvelope([(0, 0), (0.21, 1), (0.78,1), (1,0)])
+# hex_side = 0.578 # 1 / sqrt(3)
+# hex_onset = (1-hex_side) / 2
+
+LogEnv = AmplitudeEnvelope([(i/10, -math.log(i/10,10)/2) for i in range(1,10)])
+
+### pyaudio for mic input?
 
 def show(*arrs, fix_ylim=True, fix_xlim=True, overlay=False):
     if isinstance(arrs[0], tuple):
@@ -44,17 +92,23 @@ def show(*arrs, fix_ylim=True, fix_xlim=True, overlay=False):
             ax.legend(range(len(arrs)))
             plt.show()
 
-def show_fft(arr, xlim=(25,5000), note_names=True, which_notes=['C', 'E', 'G'], log_x=True, figsize=(14,8)):
+def show_fft(arr, xlim=(25,5000), note_names=True, which_notes=['C', 'E', 'G'], log_x=True, figsize=(14,8), type='pure', show=True):
+    if isinstance(arr, (int, float)):
+        # if input arg is a scalar, interpret a pure wave of that frequency instead
+        freq = arr
+        arr = synth_wave(freq, 1, type=type)
+
     N = len(arr)
     xf = np.linspace(0.0, 1.0/(2.0*(1/fs)), N//2)
     f = fft(arr)
     yf = 2./N * np.abs(f[:N//2])
 
     fig, ax = plt.subplots(figsize=figsize)
-    ax.plot(xf, yf)
+    xleft, xright = xlim
+    ax.plot(xf[xleft:xright], yf[xleft:xright])
 
     ax.set_ylabel('Amplitude')
-    ax.set_xlim(xlim) # default 25 -> 5000 covers the piano key range from C1-C8
+    # ax.set_xlim(xlim) # default 25 -> 5000 covers the piano key range from C1-C8
     # set log scale on x-axis:
     if log_x:
         ax.set_xscale('log')
@@ -84,10 +138,13 @@ def show_fft(arr, xlim=(25,5000), note_names=True, which_notes=['C', 'E', 'G'], 
     ax.set_xticks([OctaveNote(value=v).pitch for v in range(1,89)], minor=True)
     ax.set_xticklabels([], minor=True)
 
-    plt.show()
+    if show:
+        plt.show()
 
-def normalise(x):
-    return x / np.max(x)
+def normalise(x, ceil=None):
+    if ceil is None:
+        ceil = np.max(x)
+    return x / ceil
 
 ### create pure wave:
 def sine_wave(freq, duration, correct=True, amplitude=1):
@@ -97,6 +154,24 @@ def sine_wave(freq, duration, correct=True, amplitude=1):
     # pure tones at low freqs sound quieter, so we raise the amplitude to correct:
     if correct:
         wave = amp_correct(wave, freq)
+    return wave
+
+# def harmonic_wave(freq, duration, num_harmonics=8, norm_each=True, correct=False, amplitude=1):
+#     """create a pure sine wave with overtones according to harmonic series"""
+#     ratios = range(1, num_harmonics+1)
+#     overtone_freqs = [freq*r for r in ratios]
+#     waves = [sine_wave(freq, duration, amplitude=amplitude) for freq in overtone_freqs]
+#     if norm_each:
+#         waves = [w/r for w,r in zip(waves, ratios)]
+#     wave_sum = normalise(np.sum(waves, axis=0))
+#     if correct:
+#         # avg_freq = np.mean(overtone_freqs)
+#         wave_sum = amp_correct(wave_sum, freq)
+#     return wave_sum
+
+### create white noise:
+def white_noise(duration, amplitude=1):
+    wave = np.random.uniform(-amplitude, amplitude, int(fs*duration))
     return wave
 
 # pure exponential falloff function: (timbre over pure sine wave sounds harp-like, or like an electric piano)
@@ -386,3 +461,20 @@ def detect_freq(arr, note=False):
         return round(freq,2)
     else:
         return OctaveNote(pitch=freq).name
+
+# def rms(wave):
+#     """returns root mean squared deviation (i.e. std dev)
+#     of a sound wave or other 1d array"""
+#     dev = wave - np.mean(wave)
+#     sq_dev = dev ** 2
+#     mean_sq_dev = np.mean(sq_dev)
+#     rms = mean_sq_dev ** 0.5
+#     return rms
+#
+# def decibels(wave, ref_pressure=20):
+#     """loudness of a supplied sound wave, in decibels"""
+#     return 20 * np.log(rms(wave) / ref_pressure)
+#
+#
+# def equal_loudness_contour(freq):
+#     Lp = (10/af)* np.log(Af)
