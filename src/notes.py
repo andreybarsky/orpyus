@@ -735,6 +735,17 @@ class NoteList(list):
 
         return NoteList(rotate_list(self, num_places))
 
+    def relative_intervals(self, root=None):
+        """casts Notes into Intervals, strictly positive, relative to a 'root'
+        note. if None, this is the first note in the NoteList by default"""
+        if root is None:
+            root = self[0]
+        elif type(root) is not Note:
+            root = Note(root)
+
+        relative_intervals = (self - root).flatten()
+        return relative_intervals
+
     def ascending_intervals(self):
         """sorts notes into ascending order from first note (as root)"""
         # wrap around first octave and calculate intervals from root:

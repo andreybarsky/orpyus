@@ -787,14 +787,17 @@ class IntervalList(list):
         but IntervalList([2,7,12]).strict_pad(left=True) gives intervals [0,2,7]  """
         return self.strip().pad(left, right)
 
-    def flatten(self, octaves=1, duplicates=False, preserve_sign=False):
+    def flatten(self, octaves=1, duplicates=False, preserve_sign=False, sort=True):
         """flatten all intervals in this list and return them as a new (sorted) list.
         if duplicates=False, remove those that are non-unique. else, keep them.
-        if preserve_sign, flattens to the range (-12,12) instead of (0, 12)"""
+        if preserve_sign, flattens to the range (-12,12) instead of (0, 12).
+        if sort, sorts the returned list, otherwise preserves the original order (but flattened)"""
         new_intervals = [i.flatten(octaves=octaves, preserve_sign=preserve_sign) for i in self]
         if not duplicates:
             new_intervals = list(set(new_intervals))
-        return IntervalList(sorted(new_intervals))
+        if sort:
+            new_intervals = sorted(new_intervals)
+        return IntervalList(new_intervals)
 
     def rotate(self, num_places, unstack=False, preserve_degrees=False):
         """returns the rotated IntervalList that begins num_steps up

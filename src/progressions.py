@@ -1244,8 +1244,16 @@ common_progressions = {
     Progression('I ii iii IV V') : '12345',
 
     Progression('I  V    vi   IV' ) : 'axis',
-    Progression('I  V   ♭VII  IV' ) : 'axis (variant)',
-    Progression('vi IV   I    V'  ) : 'axis minor', # rotation of axis progression
+    # rotations of the axis progression:
+    Progression('vi IV   I    V'  ) : 'aeolian axis', #
+    Progression('IV I    V    vi' ): 'lydian axis', # umbrella, higher love, boulevard of broken dreams, alejandro
+                                                    # what's my age again, dragostea din tei, elastic heart, stacy's mom
+
+    Progression('I  V   ♭VII  IV' ) : 'deceptive axis',
+    Progression('I  IV   vi   V'): '1465', # more than a feeling, 1985, mr brightside,
+                                       # shut up and dance, what makes you beautiful
+
+
     Progression('I  vi   IV   V'  ) : '50s', # aka doo-wop
     Progression('I  vi   ii   V  ') : 'blue moon',
     Progression('vi V    IV   III') : 'andalusian',
@@ -1259,12 +1267,16 @@ common_progressions = {
     Progression('I⁷  IV⁷ ii⁷ V⁷') : 'montgomery-ward bridge',
     Progression('v⁷ I⁷ IV IV vi⁷ II⁷ ii⁷ V⁷'): 'full montgomery-ward bridge',
 
-    Progression('I⁷ IV⁷ I⁷  V⁷    ') : 'blues',
-    Progression('I⁷ IV⁷ I⁷  V⁷ IV⁷') : 'shuffle blues',
+    # Progression('I⁷ IV⁷ I⁷  V⁷    ') : 'blues',
+    Progression('I⁷ IV⁷ I⁷  V⁷ IV⁷') : '12-bar blues',
     Progression('i⁷ iv⁷ i⁷ ♭VI⁷ V⁷') : 'minor blues',
     Progression('III⁷ VI⁷ II⁷ V⁷ I') : 'ragtime',
 
-    Progression('I ♭VII IV I' ) : 'mixolydian vamp',
+    Progression('I ♭VII IV I   ') : 'mixolydian vamp',
+    Progression('i III VII IV'): 'plagal cascade',
+    Progression('i bVII v bVI  ') : "can't stop", # & zephyr song, hello, someone new
+    Progression('I V ii IV'): 'closing time', # all star, closing time, hot n cold, just like heaven, I'm like a bird
+
     Progression('vi ii  V I'  ) : 'circle',
     Progression('VI ii° V i'  ) : 'circle minor',
     Progression('I IV vii° iii vi ii V'     ): 'full circle',

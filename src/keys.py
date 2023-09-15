@@ -430,8 +430,27 @@ class Key(Scale):
         else:
             raise Exception(f'Parallel major/minor not defined for {self.name}')
 
+    def get_closely_related_keys(self, modes=False):
+        """a natural key's closely related keys are those directly adjacent on the
+        circle of fifths, as well as its relative (and the relatives of its adjacents)"""
+        if self.is_diatonic() and self.has_parallel():
+            relative = [self.relative]
+            adjacent_keys = [self.clockwise(), self.counterclockwise()]
+            adjacent_relatives = [k.relative for k in adjacent_keys]
+
+            return relative + adjacent_keys + adjacent_relatives
+        elif self.has_parallel():
+            return [self.relative]
+    @property
+    def closely_related_keys(self):
+        return self.get_closely_related_keys()
+
     def __invert__(self):
-        """~ operator returns the parallel major/minor of a key"""
+        """ ~ operator returns the relative major/minor of a key"""
+        return self.relative
+
+    def __neg__(self):
+        """ - operator returns the parallel major/minor of a key"""
         return self.parallel
 
     def _get_arbitrary_degree_note(self, deg):

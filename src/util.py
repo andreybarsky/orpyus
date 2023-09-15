@@ -116,6 +116,11 @@ def precision_recall(target, candidate, weights=None, return_unweighted_scores=F
         scores = {'precision': raw_precision, 'recall': raw_recall}
     return scores
 
+def precision_recall_scores(retrieved, relevant, total_retrieved, total_relevant):
+    prec = retrieved / total_retrieved
+    rec = relevant / total_relevant
+    return prec, rec
+
 def reverse_dict(dct):
     """accepts a dict whose values and keys are both unique,
     and returns the reversed dict where keys are values and vice versa"""
