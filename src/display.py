@@ -338,9 +338,9 @@ class DataFrame:
         # make rows:
         for row in self.row_data[:max_rows]:
             combi_chars_per_cell = [sum([char in self._combi_chars for char in cell]) if type(cell)==str else 0  for cell in row]
-            if align in ['l', 'left']:
+            if align in ['r', 'right']:
                 this_row = [f'{str(row[i]):>{widths[i] + combi_chars_per_cell[i]}}' for i in range(self.num_columns)]
-            elif align in ['r', 'right']:
+            elif align in ['l', 'left']:
                 this_row = [f'{str(row[i]):<{widths[i] + combi_chars_per_cell[i]}}' for i in range(self.num_columns)]
             else: # assume centre:
                 this_row = [f'{str(row[i]):^{widths[i] + combi_chars_per_cell[i]}}' for i in range(self.num_columns)]
