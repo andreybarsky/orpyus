@@ -58,6 +58,7 @@ BRACKETS = { 'Interval': ['‹', '›'],
               'Quality': ['~', '~'],
        'ChordModifier' : ['≈', '≈'],
          'ChordFactors': ['¦ ', ' ¦'],
+         'ScaleFactors': ['¦ ', ' ¦'],
             'ChordList': ['𝄃 ', ' 𝄂'],
           'Progression': ['𝄆 ', ' 𝄇'],    #['𝄃 ', ' 𝄂'],
      'ChordProgression': ['𝄆 ', ' 𝄇'],    # ['╟', '╢'],
@@ -68,13 +69,16 @@ BRACKETS = { 'Interval': ['‹', '›'],
 
 ### DIACRITICS are used to mark certain chord and note names like brackets, but more compactly
 DIACRITICS = { 'ScaleDegree': '\u0311', # caret above integer (a common convention)
+
                ### displayed in the notelists of chords:
                'octave_above': '\u0307', # dot above
                'octave_below': '\u0323', # dot below
                '2_octaves_above': '\u0308', # 2 dots above (diaresis)
                '2_octaves_below': '\u0324', # 2 dots below
+
                ### displayed in matching_keys and similar functions:
                'note_not_in_input': '\u0332', # underline
+               'interval_not_in_input': '\u0332',  # underline
                'chord_in_related_scale': '\u0323', # dot below
                'chord_not_in_scale': '\u0332', # underline
                }
