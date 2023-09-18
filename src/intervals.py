@@ -792,12 +792,19 @@ class IntervalList(list):
         if duplicates=False, remove those that are non-unique. else, keep them.
         if preserve_sign, flattens to the range (-12,12) instead of (0, 12).
         if sort, sorts the returned list, otherwise preserves the original order (but flattened)"""
-        new_intervals = [i.flatten(octaves=octaves, preserve_sign=preserve_sign) for i in self]
+
+        flat_intervals = [i.flatten(octaves=octaves, preserve_sign=preserve_sign) for i in self]
         if not duplicates:
-            new_intervals = list(set(new_intervals))
+            new_intervals = []
+            intervals_used = set()
+            for iv in flat_intervals:
+                if iv not in intervals_used:
+                    new_intervals.append(iv)
+                    intervals_used.add(iv)
+            flat_intervals = new_intervals
         if sort:
-            new_intervals = sorted(new_intervals)
-        return IntervalList(new_intervals)
+            flat_intervals = sorted(flat_intervals)
+        return IntervalList(flat_intervals)
 
     def rotate(self, num_places, unstack=False, preserve_degrees=False):
         """returns the rotated IntervalList that begins num_steps up
