@@ -961,7 +961,7 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_
         nlb, nrb = _settings.BRACKETS['NoteList']
 
         # show degrees as columns
-        longest_scale_len = max([len(s) for s in sorted_scores])
+        longest_scale_len = max([len(s) for s in sorted_scores]) if len(sorted_scores) > 0 else 7
         scale_degrees = [ScaleDegree(n) for n in range(1, longest_scale_len+1)]
         degs_str = '  '.join([f'{str(d)}' for d in scale_degrees])
 

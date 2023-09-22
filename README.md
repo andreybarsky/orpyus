@@ -1,6 +1,8 @@
 # orpyus
 A python library for handling music theory concepts and assisting music analysis.
 
+Currently in alpha, under active development.
+
 Full documentation is forthcoming - for now, try some of the examples below.
 
 ## Dependencies

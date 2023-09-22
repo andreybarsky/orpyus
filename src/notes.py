@@ -5,7 +5,7 @@
 
 from .intervals import Interval, IntervalList
 from .parsing import fl, sh, nat, dfl, dsh
-from .util import log, rotate_list
+from .util import log, rotate_list, check_all
 from . import parsing, tuning, _settings
 from . import conversion as conv
 

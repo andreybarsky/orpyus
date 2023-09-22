@@ -606,8 +606,8 @@ class ChordProgression(Progression): # , ChordList):
     def chord_motions(self):
         for i in range(1, len(self)):
             ch1, ch2 = self.chords[i-1], self.chords[i]
-            motion = ChordMotion(ch1, ch2, key=self.key)
-            print(motion.interval_df, '\n')
+            motion = KeyChordMotion(ch1, ch2, key=self.key)
+            print(motion.interval_distances, '\n')
 
     def voice_table(self):
         ### experimental: needs a better name (and Progression main class implementation)
