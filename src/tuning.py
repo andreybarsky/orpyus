@@ -36,7 +36,7 @@ def build_rational_harmonics(harmonic_range):
     return rational_reals_to_rational_harmonics, rational_harmonics
 
 # 'rational' tuning uses side lengths up to a reasonable limit
-rational_reals_to_harmonics, rational_harmonics = build_rational_harmonics(range(1,30))
+rational_reals_to_harmonics, rational_harmonics = build_rational_harmonics(range(1,50))
 # whereas 'equal' tuning does not necessarily guarantee rational numbers, but
 # under this simplifying assumption we choose rationals that are imperceptibly close,
 # by allowing very large side lengths

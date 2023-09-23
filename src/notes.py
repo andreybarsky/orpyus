@@ -745,6 +745,7 @@ class NoteList(list):
 
         relative_intervals = (self - root).flatten()
         return relative_intervals
+    intervals_from_root = relative_intervals # convenience alias
 
     def ascending_intervals(self):
         """sorts notes into ascending order from first note (as root)"""

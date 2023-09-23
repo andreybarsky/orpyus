@@ -389,23 +389,35 @@ class AbstractChord:
         matches an existing chord, and returns that chord's inversion as a new object"""
         return self.inversions_from_intervals(self.intervals)
 
-    def get_pairwise_intervals(self, extra_tonic=False):
+    def get_pairwise_intervals(self):
         pairwise = {}
         for i in range(len(self.intervals)):
             for j in range(i+1, len(self.intervals)):
                 pairwise[(self.intervals[i], self.intervals[j])] = self.intervals[j] - self.intervals[i]
-                if extra_tonic:
-                    raise Exception('not implemented')
         return pairwise
     @property
     def pairwise_intervals(self):
-        return self.get_pairwise_intervals(extra_tonic=False)
+        return self.get_pairwise_intervals()
 
-    def get_pairwise_consonances(self, extra_tonic=False, temperament=None):
-        pw_intervals = self.get_pairwise_intervals(extra_tonic=extra_tonic)
+    def get_pairwise_consonances(self, extra_factors=None, temperament=None):
+        """returns a dict that keys (interval, interval) pairs to the consonances of the
+            relative intervals between those two.
+        optionally, extra_factors can be a list of integers, indicating the chord factors
+            to upweight, by making them appear again in the output dict."""
+        pw_intervals = self.get_pairwise_intervals()
         pw_consonances = {}
+        if extra_factors is not None:
+            extra_intervals = [self.factor_intervals[f]  for f in extra_factors  if f in self.factors]
         for pair, diff in pw_intervals.items():
-            pw_consonances[pair] = diff.get_consonance(temperament=temperament)
+            left, right = pair
+            this_consonance = round(diff.get_consonance(temperament=temperament),4)
+            pw_consonances[(left, right, 0)] = this_consonance
+            # if extra factors are required: add them here:
+            if extra_factors is not None:
+                for j, iv in enumerate(extra_intervals):
+                    if left == iv or right == iv:
+                        # double this one and add another version of it to the consonances dict
+                        pw_consonances[(left, right, j+1)] = this_consonance
         return pw_consonances
     @property
     def pairwise_consonances(self):
@@ -414,41 +426,45 @@ class AbstractChord:
     @property
     def consonance(self):
         return self.get_consonance()
-    def get_consonance(self, temperament=None, raw=False):
+    def get_consonance(self, temperament=None, raw=False,
+                       extra_factors=[1,1,1,3,4,5,5]): # emphasise tonic, fourth and fifth (as stable degrees)
+                                                       # as well as the third (to cover the tonic triad)
         """the weighted mean of pairwise interval consonances"""
         # just retrieve cached consonance if it has already been computed:
         if temperament is None:
             temperament = tuning.get_temperament('CONSONANCE')
+
         if self._is_registered() and (temperament, self.suffix) in cached_consonances_by_suffix:
-            return cached_consonances_by_suffix[(temperament, self.suffix)]
+            raw_cons = cached_consonances_by_suffix[(temperament, self.suffix)]
         else:
-            tonic_weight = 2
-
-            cons_list = []
-            for pair, cons in self.get_pairwise_consonances(temperament=temperament).items():
-                if (tonic_weight != 1) and (pair[0].value == 0): # intervals from root are counted double
-                    cons_list.extend([cons]*tonic_weight)
-                else:
-                    cons_list.append(cons)
+            pairwise_cons = self.get_pairwise_consonances(extra_factors=extra_factors, temperament=temperament)
+            cons_list = list(pairwise_cons.values())
+            # cons_list = []
+            # for pair, cons in self.get_pairwise_consonances(extra_factors=extra_factors, temperament=temperament).items():
+            #     if (tonic_weight != 1) and (pair[0].value == 0): # intervals from root are counted double
+            #         cons_list.extend([cons]*tonic_weight)
+            #     else:
+            #         cons_list.append(cons)
+            # simple average of consonance list: (weighting incorporated by the extra_factors mechanic)
             raw_cons = sum(cons_list) / len(cons_list)
+            if _settings.DYNAMIC_CACHING:
+                cached_consonances_by_suffix[(temperament,self.suffix)] = raw_cons
 
+        if raw:
+            return round(raw_cons, 3)
+        else:
             # the raw consonance comes out as maximum=0.933 (i.e. 14/15) for the most consonant chord (the octave)
             # by definition because of the constant 15 in the interval dissonance calculation, where
             # perfect consonance (unison) has dissonance 0 and the octave has dissonance 1.
 
             # chords cannot be on unison, so we'll set the ceiling to 1 instead of 0.9333.
 
-            # and the empirically observed minimum is just above 0.49 for the awful tritone plus minor ninth
+            # and the empirically observed minimum is 0.459 for the dimsus4
             # so we set that to be just around 0, and rescale the entire raw consonance range within those bounds:
             max_cons = 14/15
-            min_cons = 0.49
+            min_cons = 0.45
             rescaled_cons = (raw_cons - min_cons) / (max_cons - min_cons)
-            if _settings.DYNAMIC_CACHING:
-                cached_consonances_by_suffix[(temperament,self.suffix)] = rescaled_cons
-            if raw:
-                return round(raw_cons, 3)
-            else:
-                return round(rescaled_cons, 3)
+            return round(rescaled_cons, 3)
 
     @staticmethod
     def inversions_from_intervals(intervals):

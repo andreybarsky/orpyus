@@ -55,6 +55,7 @@ class Key(Scale):
         # initialise everything else as Scale class does:
         super().__init__(scale_name, intervals, factors, alterations, chromatic_intervals, mode)
         # (this sets self.factors, self.degrees, self.intervals, self.chromatic_intervals, and their mappings
+        del self.scale # this is the only part of scale init we don't need; gets overwritten by the Key.scale property-method
 
         # set Key-specific attributes: notes, degree_notes, etc.
 
@@ -710,14 +711,15 @@ relative_co5_distances = IntervalList([0, 5, 2, 3, 4, 1, 6, 1, 4, 3, 2, 5])
 # which is why it's hardcoded instead of being computed at init
 
 def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_tonic=False,
-                  exact=False, exhaustive=None, modes=False, scale_lengths=[7],
+                  exact=False, exhaustive=None, modes=False, scale_lengths=None,
                   min_precision=0, min_recall=0.9,
                   min_likelihood=0.7, max_likelihood=1.0, max_rarity=None, min_rarity=None,
                   min_consonance=0, max_consonance=1.0,
                   chord_factor_weights = {1: 1.1}, weight_counts=False,
-                  scale_factor_weights = {1: 2, 4: 1.5, 5: 1.5},
+                  scale_factor_weights = {1: 2, 3: 1.5, 5: 1.5},
                   # (by default, upweight roots and thirds, downweight fifths)
-                  sort_order=['length', 'recall', 'likelihood', 'consonance', 'precision'],
+                  sort_order=['recall', 'likelihood', 'consonance', 'precision', 'length'],
+                  candidate_scales=scales.extended_searchable_heptatonics,
                   display=True, max_results=None, verbose=log.verbose, **kwargs):
     """Accepts either a list of chords or a list of notes.
     exact: if True, only returns matches with perfect precision.
@@ -792,12 +794,13 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_
     #### LIST OF SCALES TO SEARCH
     # loop over all common base scales (and, by extension, their modes if desired)
     # provided they exceed minimum scale scores:
-    scales_to_search = [s for s in scales.common_base_scales if (max_likelihood >= s.likelihood >= min_likelihood) and (max_consonance >= s.consonance >= min_consonance)]
-    if not modes:
-        # only include modes if they are common:
-        scales_to_search.extend([m for m in scales.common_modes  if (max_likelihood >= m.likelihood >= min_likelihood) and (max_consonance >= m.consonance >= min_consonance)])
+    if candidate_scales is None:
+        candidate_scales = [s for s in scales.common_base_scales if (max_likelihood >= s.likelihood >= min_likelihood) and (max_consonance >= s.consonance >= min_consonance)]
+        if not modes:
+            # only include modes if they are common:
+            candidate_scales.extend([m for m in scales.common_modes  if (max_likelihood >= m.likelihood >= min_likelihood) and (max_consonance >= m.consonance >= min_consonance)])
 
-    log(f'Searching {len(scales_to_search)} possible scales: {", ".join([s.name for s in scales_to_search])}')
+    log(f'Searching {len(candidate_scales)} possible scales: {", ".join([s.name for s in candidate_scales])}')
 
     #### SCALE LENGTH RESTRICTION
     # restrict search to scales only of certain lengths
@@ -859,7 +862,7 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_
     ###############################
     ###### main search loop: ######
     shortlist_scores = {}
-    for scale in scales_to_search:
+    for scale in candidate_scales:
         scale_name = scale.name
         scale_intervals, chrom_intervals = scales.canonical_scale_name_intervals[scale_name]
         for key_tonic in possible_tonics:

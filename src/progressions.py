@@ -359,7 +359,7 @@ class Progression:
 
     _brackets = _settings.BRACKETS['Progression']
 
-def most_grammatical_progression(progressions, add_resolution=True, verbose=False):
+def most_grammatical_progression(progressions, add_resolution=True, return_scores=True, verbose=False):
     """given an iterable of Progression objects, compare their cadences and return the one that seems most likely/grammatical"""
     p1_len = len(progressions[0])
     # sanity check that all progressions are the same length:
@@ -379,24 +379,36 @@ def most_grammatical_progression(progressions, add_resolution=True, verbose=Fals
                 cadence_counts[i] += 1
                 cadence_scores[i] += movement.cadence_score
         # normalise by progression length: (to compensate for added implied resolutions)
-        cadence_scores[i] = cadence_scores[i] / len(p)
+        cadence_scores[i] = round( cadence_scores[i] / len(p),  3)
     # take argmax of cadence count/score:
-    max_cadences = max(cadence_scores)
-    top_matches = []
-    for i,c in enumerate(cadence_scores):
-        if c == max_cadences:
-            top_matches.append(i)
+
 
 
     for p,c in zip(progressions, cadence_scores):
         log(f'\nTesting key: {p.key}')
         if verbose:
-            p.pad_with_tonic().analysis
+            if add_resolution:
+                p.pad_with_tonic().analysis
+            else:
+                p.analysis
         log(f'cadence score:{c})\n')
 
-    matching_progressions = [progressions[i] for i in top_matches]
 
-    return matching_progressions
+
+    if return_scores:
+        score_dct = {progressions[i].key: cadence_scores[i] for i in range(len(progressions))}
+        ranked_keys = sorted([p.key for p in progressions], key=lambda k: -score_dct[k])
+        ranked_dct = {k: score_dct[k] for k in ranked_keys}
+        return ranked_dct
+    else:
+        # just return a list of those with the best cadence scores
+        max_cadences = max(cadence_scores)
+        top_matches = []
+        for i,c in enumerate(cadence_scores):
+            if c == max_cadences:
+                top_matches.append(i)
+        matching_progressions = [progressions[i] for i in top_matches]
+        return matching_progressions
 
 
 class ChordProgression(Progression): # , ChordList):
@@ -588,7 +600,7 @@ class ChordProgression(Progression): # , ChordList):
         else: # i.e. both chords AND degrees
             prog_str = ' - '.join([f'{ch.compact_name}' for num, ch in num_chords])
         # return f'{self.chords}  (in {self.key.name})'
-        return f'ChordProgression:  {lb}{prog_str}{rb}  (in {self.key.name})'
+        return f'ChordProgression (in {self.key.name}):  {lb}{prog_str}{rb}'
 
     def __repr__(self, marks=default_marks, diacritics=default_diacs):
         """ChordProgression repr comes out as a table
@@ -691,7 +703,7 @@ class ChordProgression(Progression): # , ChordList):
         else:
             return None
 
-    def find_key(self, chords, natural_only=True, verbose=False):
+    def find_key(self, chords, natural_only=True, pad_with_tonic=False, verbose=False):
         """wraps around matching_keys but additionally uses cadence information to distinguish between competing candidates"""
 
         prev_verbosity = log.verbose
@@ -706,33 +718,47 @@ class ChordProgression(Progression): # , ChordList):
 
         log(f'Searching for keys of {chords} with default parameters')
         matches = matching_keys(chords=chords, min_likelihood=min_lik, min_recall=0.8, modes=modes,
-                                chord_factor_weights = {}, key_factor_weights = {}, # kludge for now until we fix these
+                                chord_factor_weights = {1: 2, 3: 1.5, 5: 1.2}, scale_factor_weights = {1: 2},
                                 max_results=12, display=False)
+        if verbose:
+            # display the table
+            matching_keys(chords=chords, min_likelihood=min_lik, min_recall=0.8, modes=modes,
+                          chord_factor_weights = {1: 2, 3: 1.5, 5: 1.2}, scale_factor_weights = {1: 2},
+                          max_results=12, display=True)
 
         if len(matches) == 0:
             # if no matches at all first, open up the min recall property:
             log(f'No key found matching notes using default parameters, widening search')
             matches = matching_keys(chords=chords, max_likelihood=min_lik-0.01, min_likelihood=0, min_recall=0.8, modes=modes,
+                                    chord_factor_weights = {1: 2, 3: 1.5, 5: 1.2}, scale_factor_weights = {1: 2},
                                     max_results=12, display=False)
+            if verbose:
+                # display the table again:
+                matching_keys(chords=chords, max_likelihood=min_lik-0.01, min_likelihood=0, min_recall=0.8, modes=modes,
+                              chord_factor_weights = {1: 2, 3: 1.5, 5: 1.2}, scale_factor_weights = {1: 2},
+                              max_results=12, display=True)
             if len(matches) == 0:
                 raise Exception(f'No key matches at all found for chords: {self} \n(this should never happen!)')
         # try ideal matches (with perfect recall) first:
-        log(f'Matches: {matches}')
+        log(f'Matches: {[k.name for k in matches]}')
 
         ideal_matches = [(k,scores) for k,scores in matches.items() if scores['recall'] == 1.0]
         log(f'{len(matches)} possible key matches found')
 
-        if len(ideal_matches) == 0:
-            # no good matches, so open up to all matches that share the max recall:
-            max_rec = max([scores['recall'] for k,scores in matches.items()])
-            max_rec_matches = [(k,scores) for k,scores in matches.items() if scores['recall'] == max_rec]
-            match_tuples = max_rec_matches
-            log('No ideal matches with perfect recall')
-            log(f'So opened up to all {len(match_tuples)} matches tied for the highest recall')
-        else:
-            log(f'Found {len(ideal_matches)} candidate/s with perfect recall')
-            # at least one ideal match, so we'll focus on those
-            match_tuples = ideal_matches
+        match_tuples = [(k, scores) for k,scores in matches.items()]
+
+        # if len(ideal_matches) == 0:
+        #     # no good matches, so open up to all matches that share the max recall:
+        #     # max_rec = max([scores['recall'] for k,scores in matches.items()])
+        #     # max_rec_matches = [(k,scores) for k,scores in matches.items() if scores['recall'] == max_rec]
+        #     match_tuples = max_rec_matches
+        #     log('No ideal matches with perfect recall')
+        #     # log(f'So opened up to all {len(match_tuples)} matches tied for the highest recall')
+        #     log(f'So opened up to all matches above recall threshold')
+        # else:
+        #     log(f'Found {len(ideal_matches)} candidate/s with perfect recall')
+        #     # at least one ideal match, so we'll focus on those
+        #     match_tuples = ideal_matches
 
         if len(match_tuples) == 1:
             log(f'Only one candidate for key: {match_tuples}')
@@ -741,49 +767,60 @@ class ChordProgression(Progression): # , ChordList):
             print(f'Found key: {key}')
 
         elif len(match_tuples) >= 2:
-            # multiple good matches, see if one has better precision than the other
-            max_prec = max([scores['precision'] for k,scores in match_tuples])
-            precise_matches = [(k,scores) for k,scores in match_tuples if scores['precision'] == max_prec]
+            # # multiple good matches, see if one has better precision than the other
+            # max_prec = max([scores['precision'] for k,scores in match_tuples])
+
+            # precise_matches = [(k,scores) for k,scores in match_tuples if scores['precision'] == max_prec]
             log(f'Multiple candidates for key: {[m[0].name for m in match_tuples]}')
-            log(f' So focusing on the {len(precise_matches)} tied for highest precision')
-            if len(precise_matches) == 1:
-                # one of the perfect-recall matches is better than all the others, so use it (probably?)
-                key = precise_matches[0][0]
-                print(f'Found key: {key}')
+            log(f' So testing them for cadence-based grammaticity')
+            # if len(precise_matches) == 1:
+            #     # one of the perfect-recall matches is better than all the others, so use it (probably?)
+            #     key = precise_matches[0][0]
+            #     print(f'Found key: {key}')
 
-            else:
-                # multiple matches that are equally as good,
-                # so look for a cadence-based match around V-I resolutions or something
+            # else:
 
-                candidate_keys = [k for k, scores in precise_matches]
+            candidate_keys = [k for k, scores in match_tuples]
 
-                log(f'Testing {len(candidate_keys)} candidate keys for grammaticity of this progression in those keys')
-                candidate_progressions = [Progression(chords.as_numerals_in(k), scale=k.scale).in_key(k) for k in candidate_keys]
-                log(f'Candidate keys: {", ".join([str(p.key) for p in candidate_progressions])}')
-                grammatical_progressions = most_grammatical_progression(candidate_progressions, verbose=log.verbose)
-                grammatical_keys = [p.key for p in grammatical_progressions]
-                if len(grammatical_keys) == 1:
-                    key = grammatical_keys[0]
-                    log(f'Found one key more grammatical than the others: {str(key)}')
-                else:
-                    # multiple keys equally tied for how grammatical they are
-                    # so tiebreak by likelihood:
-                    log(f'Found multiple equally grammatical keys: {[str(k) for k in grammatical_keys]}')
-                    log('So tie-breaking by key likelihood')
-                    max_likely = max([k.likelihood for k in grammatical_keys])
-                    likely_keys = [k for k in grammatical_keys if k.likelihood == max_likely]
+            log(f'Testing {len(candidate_keys)} candidate keys for grammaticity of this progression in those keys')
+            candidate_progressions = [Progression(chords.as_numerals_in(k), scale=k.scale).in_key(k) for k in candidate_keys]
+            log(f'Candidate keys: {", ".join([str(p.key) for p in candidate_progressions])}')
+            # get a dict of key: cadence_score pairs for key candidates
+            key_cadence_scores = most_grammatical_progression(candidate_progressions, add_resolution=pad_with_tonic, return_scores=True, verbose=log.verbose)
+            # augment match tuples with cadence scores:
+            new_scores = {}
+            for key, score in match_tuples:
+                new_score = {k:v for k,v in score.items()}
+                new_score['cadence'] = key_cadence_scores[key]
+                joint_cadence_recall = (new_score['cadence'] + new_score['recall']) / 2
+                new_score['joint_cadence_recall'] = round(joint_cadence_recall, 3)
+                new_scores[key] = new_score
 
-                    if len(likely_keys) == 1:
-                        key = likely_keys[0]
-                        log(f'One key is more likely than the others: {key}')
-                    else:
-                        # nothing else left, just tie-break by key consonance
-                        keys_by_consonance = sorted(likely_keys, key=lambda x: x.consonance, reverse=True)
-                        log(f'Found multiple equally likely keys: {[str(k) for k in keys_by_consonance]}')
-                        log(f'So doing a final tie-break by consonance')
-                        key = keys_by_consonance[0]
+            re_ranked_keys = sorted(candidate_keys, key=lambda k: (-new_scores[k]['joint_cadence_recall']
+                                                               -new_scores[k]['cadence'],
+                                                               -new_scores[k]['recall'],
+                                                               -k.likelihood,
+                                                               -new_scores[k]['precision'],
+                                                               -k.consonance))
 
-                print(f'Found key: {key}')
+            # grammatical_progressions = most_grammatical_progression(candidate_progressions, add_resolution=pad_with_tonic, verbose=log.verbose)
+            # grammatical_keys = [p.key for p in grammatical_progressions]
+
+            ranked_keys, ranked_scores = re_ranked_keys, [new_scores[k] for k in re_ranked_keys]
+            key = ranked_keys[0]
+
+            if verbose:
+                from src.display import DataFrame
+                df = DataFrame(['Key', 'C-R score', 'Cad.',
+                                'Rec.', 'Prec.',
+                                'Likl.', 'Cons.'])
+                for k,s in zip(ranked_keys, ranked_scores):
+                    df.append([str(k), s['joint_cadence_recall'], s['cadence'],
+                              round(s['recall'],2), round(s['precision'],2),
+                              round(k.likelihood,2), round(k.consonance, 3)])
+                df.show()
+
+            print(f'Best guess at key: {key}')
 
         log.verbose = prev_verbosity
 
@@ -963,11 +1000,11 @@ class RootMotion(DegreeMotion):
         if self.authentic_cadence:
             return 1
         elif self.authentic_half_cadence:
-            return 0.5
+            return 0.25
         elif self.plagal_cadence:
             return 0.75
         elif self.plagal_half_cadence:
-            return 0.25
+            return 0.2
         elif self.deceptive_cadence:
             return 0.1
         else:
