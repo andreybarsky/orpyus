@@ -538,7 +538,7 @@ class Grid:
         if self.col_labels is None:
             col_labels = ['' for _ in range(num_output_cols)]
         else:
-            col_labels = self.col_labels
+            col_labels = [str(label) for label in self.col_labels]
 
         if self.row_labels is not None:
             # add an extra column to contain row labels:

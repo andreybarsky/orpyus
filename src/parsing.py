@@ -56,7 +56,7 @@ def is_sharp_ish(char):
     return (accidental_value(char) >= 1)
 def is_flat_ish(char):
     """returns True for flats and double flats"""
-    return (accidental_value(char) >= 1)
+    return (accidental_value(char) <= -1)
 def is_accidental(char):
     if len(char) == 0:
         raise ValueError("'' is technically not an accidental but this is an edge case")

@@ -93,9 +93,6 @@ class Note:
 
             # name is definitely a string now
 
-            if name == 'Gb':
-                import ipdb; ipdb.set_trace()
-
             # detect if sharp or flat:
             if prefer_sharps is None:
                 # if no preference is set then we infer from the name argument supplied
@@ -896,22 +893,25 @@ Notes = NoteList
 
 # predefined Note objects:
 A = Note('A')
-Bb = Note('Bb')
+Ash, Bb = Note('A#'), Note('Bb')
 B = Note('B')
 C = Note('C')
-Db = Note('Db')
+Csh, Db = Note('C#'), Note('Db')
 D = Note('D')
-Eb = Note('Eb')
+Dsh, Eb = Note('D#'), Note('Eb')
 E = Note('E')
 F = Note('F')
-Gb = Note('Gb')
+Fsh, Gb = Note('F#'), Note('Gb')
 G = Note('G')
-Ab = Note('Ab')
+Gsh, Ab = Note('G#'), Note('Ab')
 
 MiddleC = OctaveNote('C4')
 
 # all chromatic pitch classes:
-chromatic_notes = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
+chromatic_flat_notes = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
+chromatic_sharp_notes = [C, Csh, D, Dsh, E, F, Fsh, G, Gsh, A, Ash, B]
+# whichever is the default is determined by _settings default sharp preference:
+chromatic_notes = chromatic_sharp_notes if _settings.DEFAULT_SHARPS else chromatic_flat_notes
 
 # note cache by name for efficient init:
 cached_notes = {(n,s): Note(n, prefer_sharps=s) for n in parsing.common_note_names for s in [None, False, True]}

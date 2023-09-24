@@ -1,14 +1,14 @@
 ### this progressions module is incomplete, very WIP at the moment
 
 from .intervals import Interval
-from .notes import Note, NoteList, chromatic_notes
+from .notes import Note, NoteList
 from .chords import Chord, AbstractChord, ChordList
 from .qualities import Major, Minor, Perfect, Diminished, parse_chord_modifiers, ChordModifier, modifier_aliases, minor_mod, dim_mod
 from .scales import infer_chord_scale, infer_scale, parse_roman_numeral, Scale, ScaleChord, NaturalMajor, NaturalMinor
 from .keys import Key, KeyChord, matching_keys# , most_likely_key
 from .util import reduce_aliases, rotate_list, check_all, reverse_dict, log
 from .parsing import roman_numerals, numerals_roman, modifier_marks, auto_split, superscript, fl, sh, nat
-from . import parsing, _settings, scales
+from . import parsing, _settings, notes, scales
 
 from collections import Counter
 
@@ -414,7 +414,7 @@ def most_grammatical_progression(progressions, add_resolution=True, return_score
 
 class ChordProgression(Progression): # , ChordList):
     """ChordList subclass defined additionally over a specific key"""
-    def __init__(self, *chords, key=None, search_natural_keys_only=True):
+    def __init__(self, *chords, key=None, search_natural_keys_only=True, verbose=False):
         """Initialised by a list or series of Chord objects, or strings that cast to Chord objects,
         or by a list of integers combined with the (otherwise-optional) key argument.
 
@@ -466,7 +466,7 @@ class ChordProgression(Progression): # , ChordList):
                 assert check_all(keychord_keys, 'eq', keychord_keys[0]), f"Non-matching key attributes in KeyChord list given to ChordProgression: {keychord_keys}"
                 self.key = keychord_keys[0]
             else:
-                self.key = self.find_key(chords=base_chords, verbose=True)
+                self.key = self.find_key(chords=base_chords, verbose=verbose)
         else:
             self.key = key if isinstance(key, Key) else Key(key)
 
@@ -481,7 +481,10 @@ class ChordProgression(Progression): # , ChordList):
             log(f'Not recasting ChordProgression input chords to KeyChords, as they are already KeyChords: {base_chords}')
             self.chords = base_chords
         else:
-            self.chords = ChordList([KeyChord(factors=ch.factors, inversion=ch.inversion, root=ch.root, key=self.key, degree=d, assigned_name=ch.assigned_name) for ch,d in zip(base_chords, self.root_degrees)])
+            self.chords = ChordList([KeyChord(factors=ch.factors, inversion=ch.inversion, root=ch.root,
+                                        key=self.key, degree=d,
+                                        assigned_name=ch.assigned_name, prefer_sharps=self.key.prefer_sharps)
+                                     for ch,d in zip(base_chords, self.root_degrees)])
 
         # note movements between each chord root:
         self.chord_root_intervals_from_tonic = [self.key.degree_intervals[d]  if d in self.key.degree_intervals  else self.key.fractional_degree_intervals[d]  for d in self.root_degrees]
@@ -528,6 +531,7 @@ class ChordProgression(Progression): # , ChordList):
         #### transposition
         if isinstance(other, (int, Interval)):
             new_key = self.key + other
+            print(f'- Transposed to {new_key}')
             return self.in_key(new_key)
         elif isinstance(other, str):
             # check if a roman numeral:
@@ -563,7 +567,8 @@ class ChordProgression(Progression): # , ChordList):
     def __sub__(self, other):
         """subtraction with Interval"""
         if isinstance(other, (int, Interval)):
-            return self + (-other)
+            new_prog = (self + -other)
+            return new_prog
         else:
             raise TypeError(f'ChordProgression.__sub__ not implemented for type: {type(other)}')
 
@@ -608,7 +613,7 @@ class ChordProgression(Progression): # , ChordList):
         with chords above and scale degrees below"""
         numerals = self.as_numerals(marks=marks, diacritics=diacritics, sep='@')
         split_numerals = numerals.split('@')
-        chord_names = [ch.compact_name for ch in self.chords]
+        chord_names = [ch.chord_name for ch in self.chords]
         from src.display import DataFrame
         df = DataFrame(['' for c in range(len(self))])
         df.append(chord_names) # chord row
@@ -636,11 +641,14 @@ class ChordProgression(Progression): # , ChordList):
             else:
                 pos_char = 1
                 neg_char = 0
-            note_array = [pos_char  if n in ch.notes else neg_char for n in chromatic_notes]
+            note_array = [pos_char  if n in ch.notes else neg_char for n in notes.chromatic_notes]
             arr[i] = note_array
 
         arr.row_labels = [ch.chord_name for ch in self.chords]
-        arr.col_labels = [n.chroma for n in chromatic_notes]
+
+        # note labels depend on the sharp preference of this progression's key:
+        note_list = notes.chromatic_sharp_notes if self.key.prefer_sharps else notes.chromatic_flat_notes
+        arr.col_labels = note_list
 
         if disp:
             print(arr)
@@ -655,6 +663,9 @@ class ChordProgression(Progression): # , ChordList):
         if max_length is None:
             max_length = len(self)+1
         voice_table = self.voice_table(disp=False)
+        # if disp:
+        #     print(str(voice_table).replace('1', '+').replace('0', ' '))
+        chromatic_notes = voice_table.col_labels
         lines = {}
         # try starting on each row, provided there's enough space to find a min-length line:
 
@@ -688,7 +699,7 @@ class ChordProgression(Progression): # , ChordList):
                             line = NoteList(line)
                             idx = start_row+1
                             suf = parsing.num_suffixes[idx]
-                            print(f'Found a {dir_name} chromatic line starting on {idx}{suf} chord: {self.chords[idx-1].chord_name}: {line}')
+                            print(f'Found a {dir_name} chromatic line starting on {idx}{suf} chord ({self.chords[idx-1].chord_name}) : {line}')
                             lines[(start_row, start_loc, dir)] = line
                     else:
                         log(f'Existing line already begins at {(start_row-1, start_loc)}')
@@ -701,7 +712,7 @@ class ChordProgression(Progression): # , ChordList):
             for r in range(voice_table.num_rows):
                 for c in range(voice_table.num_cols):
                     cur_val = voice_table[(r,c)]
-                    rep_val = '+' if cur_val == 1 else ' '
+                    rep_val = '+' if cur_val == 1 else ' ' # '·'
                     voice_table[(r,c)] = rep_val
 
             # display lines as voice table, by changing voice table values
@@ -709,9 +720,9 @@ class ChordProgression(Progression): # , ChordList):
             for line_key, line in lines.items():
                 start_row, start_loc, dir = line_key
                 if dir == -1:
-                    dir_char = '/' # descending
+                    dir_char = '╱' # descending
                 else:
-                    dir_char = '\\' # ascending
+                    dir_char = '╲' # ascending (note: not a backslash, different unicode char)
                 cur_row = start_row
                 cur_col = start_loc
                 for note in line:
@@ -864,10 +875,12 @@ class ChordProgression(Progression): # , ChordList):
                               round(k.likelihood,2), round(k.consonance, 3)])
                 df.show()
 
-            print(f'Best guess at key: {key}')
+            # short_chord_names = ' - '.join([ch.name for ch in chords])
+            print(f'Determining key for ChordProgression: {chords}')
+            print(f'    Best guess: {key}')
 
             if key.is_extended():
-                print(f' (contracted to {key.contraction})')
+                print(f'     (contracted to {key.contraction})')
                 key = key.contraction
 
         log.verbose = prev_verbosity

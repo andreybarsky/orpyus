@@ -640,6 +640,14 @@ class KeyChord(Chord, ScaleChord):
     """As ScaleChord, but lives in a Key instead of a Scale,
     and therefore inherits from Chord instead of AbstractChord"""
     def __init__(self, *args, key, degree=None, factor=None, degree_on_bass=True, **kwargs):
+
+        if not isinstance(key, Key):
+            key = Key(key)
+        self.key = key
+        # KeyChord inherits its key's sharp preference unless explicitly overwritten:
+        if 'prefer_sharps' not in kwargs:
+            kwargs['prefer_sharps'] = self.key.prefer_sharps        # and then as ScaleChord: (without the associated abs_chord init)
+
         # initialise as Chord:
         Chord.__init__(self, *args, **kwargs)
 
@@ -648,8 +656,7 @@ class KeyChord(Chord, ScaleChord):
         # their 'proper' root note:
         self.degree_on_bass = degree_on_bass
 
-        if not isinstance(key, Key):
-            key = Key(key)
+
 
         if degree is None and factor is None:
             # auto-infer degree from this chord's root (or bass)
@@ -660,17 +667,14 @@ class KeyChord(Chord, ScaleChord):
                 degree = key.fractional_note_degrees[deg_note]
 
 
-        self.key = key
-        # and then as ScaleChord: (without the associated abs_chord init)
         ScaleChord.__init__(self, scale=self.key.scale,
-                            degree=degree, factor=factor, _init_abs=False)
+                            degree=degree, factor=factor, prefer_sharps=self.prefer_sharps,
+                            _init_abs=False)
 
         # flag whether this chord belongs in the key/scale specified:
         self.in_key = self in self.key
 
-        # KeyChord inherits its key's sharp preference unless explicitly overwritten:
-        if 'prefer_sharps' not in kwargs:
-            self.prefer_sharps = self.key.prefer_sharps
+
 
     def to_key(self, key):
         """transposes this KeyChord to another with a different root,

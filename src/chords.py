@@ -507,10 +507,11 @@ class AbstractChord:
                 inversions.append(self.invert(i))
         return inversions
 
-    def on_root(self, root_note):
+    def on_root(self, root_note, prefer_sharps=None):
         """constructs a Chord object from this AbstractChord with respect to a
             desired root"""
-        return Chord.from_cache(root=root_note, factors=self.factors, inversion=self.inversion, assigned_name=self.assigned_name)
+        return Chord.from_cache(root=root_note, factors=self.factors, inversion=self.inversion,
+                                assigned_name=self.assigned_name)
 
     def in_scale(self, scale, degree=None, factor=None):
         """constructs a ScaleChord from this AbstractChord on a desired degree or
