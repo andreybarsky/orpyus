@@ -8,7 +8,7 @@ from .scales import infer_chord_scale, infer_scale, parse_roman_numeral, Scale, 
 from .keys import Key, KeyChord, matching_keys# , most_likely_key
 from .util import reduce_aliases, rotate_list, check_all, reverse_dict, log
 from .parsing import roman_numerals, numerals_roman, modifier_marks, auto_split, superscript, fl, sh, nat
-from . import parsing, _settings
+from . import parsing, _settings, scales
 
 from collections import Counter
 
@@ -374,10 +374,11 @@ def most_grammatical_progression(progressions, add_resolution=True, return_score
         if add_resolution:
             # add a tonic on the end to see how it resolves
             p = p.pad_with_tonic()
-        for movement in p.root_movements:
+        for j, movement in enumerate(p.root_movements):
+            development = (j / len(p.root_movements))**1.5 # upweight cadences toward the end
             if movement.cadence:
                 cadence_counts[i] += 1
-                cadence_scores[i] += movement.cadence_score
+                cadence_scores[i] += movement.cadence_score * development
         # normalise by progression length: (to compensate for added implied resolutions)
         cadence_scores[i] = round( cadence_scores[i] / len(p),  3)
     # take argmax of cadence count/score:
@@ -465,7 +466,7 @@ class ChordProgression(Progression): # , ChordList):
                 assert check_all(keychord_keys, 'eq', keychord_keys[0]), f"Non-matching key attributes in KeyChord list given to ChordProgression: {keychord_keys}"
                 self.key = keychord_keys[0]
             else:
-                self.key = self.find_key(chords=base_chords, natural_only = search_natural_keys_only)
+                self.key = self.find_key(chords=base_chords, verbose=True)
         else:
             self.key = key if isinstance(key, Key) else Key(key)
 
@@ -621,29 +622,45 @@ class ChordProgression(Progression): # , ChordList):
             motion = KeyChordMotion(ch1, ch2, key=self.key)
             print(motion.interval_distances, '\n')
 
-    def voice_table(self):
+    def voice_table(self, disp=True, as_pretty_df=True):
         ### experimental: needs a better name (and Progression main class implementation)
-        import numpy as np
-        import pandas as pd
-        arr = np.zeros((len(self.chords), 12), dtype=int)
-        for i, ch in enumerate(self.chords):
-            note_array = [1  if n in ch.notes else 0 for n in chromatic_notes]
-            arr[i] = note_array
-        df = pd.DataFrame(arr, index=[ch.name for ch in self.chords], columns=[f'{n.chroma:<2}' for n in chromatic_notes])
-        return df
+        from src.display import Grid
+        # import pandas as pd
 
-    def find_chromatic_lines(self, min_length=3, max_length=None):
-        print(f'Searching for chromatic lines in {self.__str__(chords_only=True)} ....')
+        arr = Grid((len(self.chords), 12))
+        # arr = np.zeros((len(self.chords), 12), dtype=int)
+        for i, ch in enumerate(self.chords):
+            if disp:
+                pos_char = '+'
+                neg_char = ' '
+            else:
+                pos_char = 1
+                neg_char = 0
+            note_array = [pos_char  if n in ch.notes else neg_char for n in chromatic_notes]
+            arr[i] = note_array
+
+        arr.row_labels = [ch.chord_name for ch in self.chords]
+        arr.col_labels = [n.chroma for n in chromatic_notes]
+
+        if disp:
+            print(arr)
+        else:
+            return arr
+
+        # df = pd.DataFrame(arr, index=[str(ch.unkey()) for ch in self.chords], columns=[f'{n.chroma:<2}' for n in chromatic_notes])
+        # return df
+
+    def find_chromatic_lines(self, min_length=3, max_length=None, disp=True):
+        print(f'Searching for chromatic lines in\n  {self.__str__(chords_only=True)} ...\n')
         if max_length is None:
             max_length = len(self)+1
-        voice_table = self.voice_table()
+        voice_table = self.voice_table(disp=False)
         lines = {}
         # try starting on each row, provided there's enough space to find a min-length line:
 
-        print('\n', voice_table)
         for start_row in range(len(self)-(min_length-1)):
             # start locs are the places in this row where each note occurs:
-            line_start_locs = [i for i,val in enumerate(voice_table.iloc[start_row]) if val]
+            line_start_locs = [i for i,val in enumerate(voice_table[start_row]) if val]
             left_dir, right_dir = (-1, +1)
             left_name, right_name = 'falling', 'rising'
 
@@ -657,7 +674,7 @@ class ChordProgression(Progression): # , ChordList):
                         next_row = start_row + 1
                         next_loc = (start_loc + dir) % 12 # mod so as to wrap arond from C to B
                         while (not line_broken) and not (next_row >= len(self)):
-                            if voice_table.iloc[next_row, next_loc]:
+                            if voice_table[next_row, next_loc]:
                                 # if a note exists on that diagonal:
                                 this_note = chromatic_notes[next_loc]
                                 log(f'Line continues on chord: {self.chords[next_row].name} with: {this_note}')
@@ -671,10 +688,46 @@ class ChordProgression(Progression): # , ChordList):
                             line = NoteList(line)
                             idx = start_row+1
                             suf = parsing.num_suffixes[idx]
-                            print(f'Found a {dir_name} chromatic line starting on {idx}{suf} chord ({self.chords[idx-1]}): {line}')
+                            print(f'Found a {dir_name} chromatic line starting on {idx}{suf} chord: {self.chords[idx-1].chord_name}: {line}')
                             lines[(start_row, start_loc, dir)] = line
                     else:
                         log(f'Existing line already begins at {(start_row-1, start_loc)}')
+
+        if not disp:
+            return lines
+        else:
+            # output a nice table
+            # first, replace 1s and 0s in voice table with prettier characters:
+            for r in range(voice_table.num_rows):
+                for c in range(voice_table.num_cols):
+                    cur_val = voice_table[(r,c)]
+                    rep_val = '+' if cur_val == 1 else ' '
+                    voice_table[(r,c)] = rep_val
+
+            # display lines as voice table, by changing voice table values
+            # to directional slahses:
+            for line_key, line in lines.items():
+                start_row, start_loc, dir = line_key
+                if dir == -1:
+                    dir_char = '/' # descending
+                else:
+                    dir_char = '\\' # ascending
+                cur_row = start_row
+                cur_col = start_loc
+                for note in line:
+                    voice_table[(cur_row, cur_col)] = dir_char
+                    cur_col = (cur_col + dir) % 12
+                    cur_row += 1
+
+            # prettify voice table for output:
+            from src.display import DataFrame
+            disp_df = DataFrame(['Chord', '', ''] + [f'{n.chroma:<2}' for n in chromatic_notes])
+            for r in range(voice_table.num_rows):
+                margin = [self.chords[r].chord_name, self.chords[r].mod_numeral, ' | ']
+                # pretty_row = ['+' if cell==1 else ' ' for cell in voice_table.rows[r]]
+                df_row = margin + voice_table.rows[r]
+                disp_df.append(df_row)
+            disp_df.show()
 
 
     def transpose_for_guitar(self, return_all=False):
@@ -703,39 +756,30 @@ class ChordProgression(Progression): # , ChordList):
         else:
             return None
 
-    def find_key(self, chords, natural_only=True, pad_with_tonic=False, verbose=False):
+    def find_key(self, chords, candidate_scales = scales.natural_scales + scales.extended_scales,
+                pad_with_tonic=False, verbose=False):
         """wraps around matching_keys but additionally uses cadence information to distinguish between competing candidates"""
 
         prev_verbosity = log.verbose
-        log.verbose=verbose
+        # log.verbose=verbose
 
-        if natural_only:
-            min_lik = 0.9
-            modes = False
-        else: # currently not very good (fix cadential detection)
-            min_lik = 0.8
-            modes = True
 
         log(f'Searching for keys of {chords} with default parameters')
-        matches = matching_keys(chords=chords, min_likelihood=min_lik, min_recall=0.8, modes=modes,
-                                chord_factor_weights = {1: 2, 3: 1.5, 5: 1.2}, scale_factor_weights = {1: 2},
+        matches = matching_keys(chords=chords, min_likelihood=0.7, min_recall=0.95, candidate_scales=candidate_scales,
                                 max_results=12, display=False)
         if verbose:
             # display the table
-            matching_keys(chords=chords, min_likelihood=min_lik, min_recall=0.8, modes=modes,
-                          chord_factor_weights = {1: 2, 3: 1.5, 5: 1.2}, scale_factor_weights = {1: 2},
+            matching_keys(chords=chords, min_likelihood=0.7, min_recall=0.95, candidate_scales=candidate_scales,
                           max_results=12, display=True)
 
         if len(matches) == 0:
             # if no matches at all first, open up the min recall property:
             log(f'No key found matching notes using default parameters, widening search')
-            matches = matching_keys(chords=chords, max_likelihood=min_lik-0.01, min_likelihood=0, min_recall=0.8, modes=modes,
-                                    chord_factor_weights = {1: 2, 3: 1.5, 5: 1.2}, scale_factor_weights = {1: 2},
+            matches = matching_keys(chords=chords, max_likelihood=0.6, min_likelihood=0.5, min_recall=0.8, candidate_scales=candidate_scales,
                                     max_results=12, display=False)
             if verbose:
                 # display the table again:
-                matching_keys(chords=chords, max_likelihood=min_lik-0.01, min_likelihood=0, min_recall=0.8, modes=modes,
-                              chord_factor_weights = {1: 2, 3: 1.5, 5: 1.2}, scale_factor_weights = {1: 2},
+                matching_keys(chords=chords, max_likelihood=0.6, min_likelihood=0.5, min_recall=0.8, candidate_scales=candidate_scales,
                               max_results=12, display=True)
             if len(matches) == 0:
                 raise Exception(f'No key matches at all found for chords: {self} \n(this should never happen!)')
@@ -786,17 +830,17 @@ class ChordProgression(Progression): # , ChordList):
             candidate_progressions = [Progression(chords.as_numerals_in(k), scale=k.scale).in_key(k) for k in candidate_keys]
             log(f'Candidate keys: {", ".join([str(p.key) for p in candidate_progressions])}')
             # get a dict of key: cadence_score pairs for key candidates
-            key_cadence_scores = most_grammatical_progression(candidate_progressions, add_resolution=pad_with_tonic, return_scores=True, verbose=log.verbose)
+            key_cadence_scores = most_grammatical_progression(candidate_progressions, add_resolution=pad_with_tonic, return_scores=True, verbose=verbose)
             # augment match tuples with cadence scores:
             new_scores = {}
             for key, score in match_tuples:
                 new_score = {k:v for k,v in score.items()}
                 new_score['cadence'] = key_cadence_scores[key]
-                joint_cadence_recall = (new_score['cadence'] + new_score['recall']) / 2
+                joint_cadence_recall = (new_score['cadence'] + new_score['recall']**2 + new_score['precision']/2) / 2.5
                 new_score['joint_cadence_recall'] = round(joint_cadence_recall, 3)
                 new_scores[key] = new_score
 
-            re_ranked_keys = sorted(candidate_keys, key=lambda k: (-new_scores[k]['joint_cadence_recall']
+            re_ranked_keys = sorted(candidate_keys, key=lambda k: (-new_scores[k]['joint_cadence_recall'],
                                                                -new_scores[k]['cadence'],
                                                                -new_scores[k]['recall'],
                                                                -k.likelihood,
@@ -821,6 +865,10 @@ class ChordProgression(Progression): # , ChordList):
                 df.show()
 
             print(f'Best guess at key: {key}')
+
+            if key.is_extended():
+                print(f' (contracted to {key.contraction})')
+                key = key.contraction
 
         log.verbose = prev_verbosity
 
@@ -973,7 +1021,8 @@ class RootMotion(DegreeMotion):
         self.resolved = (self.end == 1) and (self.start != 1) # maybe?
         self.hanging = self.end_function in {"D", "L"}
 
-        self.authentic_cadence = (self.start in {5,7} and self.end == 1)
+        self.authentic_cadence = (self.start == 5 and self.end == 1)
+        self.leading_tone_cadence = (self.start == 7 and self.end == 1)
         self.authentic_half_cadence = (self.start in {1, 2, 4, 6}) and (self.end == 5)
         self.plagal_cadence = (self.start == 4 and self.end == 1)
         self.plagal_half_cadence = (self.start in {1, 2, 5, 6}) and (self.end == 4) # does this follow the same rules as authentic half cadences?
@@ -999,14 +1048,16 @@ class RootMotion(DegreeMotion):
         # extremely fuzzy score used for checking the grammaticity of progressions
         if self.authentic_cadence:
             return 1
+        elif self.leading_tone_cadence:
+            return 0.5
         elif self.authentic_half_cadence:
-            return 0.25
-        elif self.plagal_cadence:
-            return 0.75
-        elif self.plagal_half_cadence:
-            return 0.2
-        elif self.deceptive_cadence:
             return 0.1
+        elif self.plagal_cadence:
+            return 0.8
+        elif self.plagal_half_cadence:
+            return 0.1
+        elif self.deceptive_cadence:
+            return 0.05
         else:
             return 0
 
@@ -1352,11 +1403,16 @@ for prog_dict, rot_dict in zip([common_progressions, simple_progressions], [rota
 common_progressions_by_name = reverse_dict(common_progressions)
 
 # just some songs I'm practicing:
-house_of_the_rising_sun = ChordProgression('Am C D F Am E Am E', key='Am') # animals
-cant_find_my_way_home = ChordProgression('G, D/F#, Dm/F, A, C, D, A', key='A') # clapton
-hollow = ChordProgression('A6 - Cmaj7#11 - Emadd9', key='Em') # yosh
-would_you_go_with_me = ChordProgression('E C#m B E B A', key='E') # josh turner
-your_man = ChordProgression('C G D G', key='G') - 1 # josh turner again
+house_of_the_rising_sun = ChordProgression('Am C D F Am E Am E')
+assert house_of_the_rising_sun.key == Key('Am')
+cant_find_my_way_home = ChordProgression('G, D/F#, Dm/F, A, C, D, A')
+assert cant_find_my_way_home.key == Key('A')
+hollow = ChordProgression('A6 - Cmaj7#11 - Emadd9')
+assert hollow.key == Key('Em')
+would_you_go_with_me = ChordProgression('E C#m B E B A')
+assert would_you_go_with_me.key == Key('E')
+your_man = ChordProgression('C G D G') - 1 # josh turner again
+assert your_man.key == Key('Gb')
 
 # guitar-playable variants of the common progressions:
 def guitar_progressions():

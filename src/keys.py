@@ -2,7 +2,7 @@ from . import notes, scales, parsing, _settings
 from .parsing import fl, sh, nat, dfl, dsh
 from .intervals import Interval, IntervalList
 from .notes import Note, NoteList, chromatic_notes
-from .scales import Scale, ScaleFactors, ScaleDegree, ScaleChord, common_scales
+from .scales import Scale, ScaleFactors, ScaleDegree, ScaleChord, common_scales, scale_extensions, scale_contractions
 from .chords import Chord, AbstractChord, ChordList
 from .util import ModDict, check_all, precision_recall, reverse_dict, unpack_and_reverse_dict, log
 
@@ -431,6 +431,32 @@ class Key(Scale):
         else:
             raise Exception(f'Parallel major/minor not defined for {self.name}')
 
+    @property
+    def extension(self):
+        """natural scales have extensions into harmonic/melodic chromatic notes,
+        this property fetches the extended scale if it exists"""
+        if self.scale in scale_extensions:
+            return scale_extensions[self.scale].on_tonic(self.tonic)
+        else:
+            raise Exception(f'No scale extension defined for: {self.scale.name}')
+
+    @property
+    def extensions(self):
+        """return one or both extensions of this scale"""
+        if self.scale.extension in scale_extensions:
+            return [self.extension, self.extension.extension]
+        elif self.scale in scale_extensions:
+            return [self.extension]
+        else:
+            return []
+
+    @property
+    def contraction(self):
+        if self.scale in scale_contractions:
+            return scale_contractions[self.scale].on_tonic(self.tonic)
+        else:
+            raise Exception(f'No scale extension defined for: {self.scale.name}')
+
     def get_closely_related_keys(self, modes=False):
         """a natural key's closely related keys are those directly adjacent on the
         circle of fifths, as well as its relative (and the relatives of its adjacents)"""
@@ -659,19 +685,32 @@ class KeyChord(Chord, ScaleChord):
         """return the ScaleChord that this KeyChord is associated with"""
         return ScaleChord(factors=self.factors, inversion=self.inversion, scale=self.key.scale, degree=self.scale_degree)
 
+    def unkey(self):
+        """returns the Chord that this KeyChord is associated with"""
+        return Chord(factors=self.factors, inversion=self.inversion, root=self.root)
 
     def __str__(self):
         return self.name
 
+
+    @property
+    def mod_numeral(self):
+        return self.get_numeral(modifiers=True, marks=False, diacritics=False)
+
     @property
     def name(self):
-        mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
-        return f'{Chord.get_short_name(self)} ({mod_numeral} of {self.key._marker}{self.key.name})'
+        # mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
+        return f'{Chord.get_short_name(self)} ({self.mod_numeral} of {self.key._marker}{self.key.name})'
 
     @property
     def short_name(self):
-        mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
-        return f'{Chord.get_short_name(self)} ({mod_numeral})'
+        # mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
+        return f'{Chord.get_short_name(self)} ({self.mod_numeral})'
+
+    @property
+    def chord_name(self):
+        "the name of the chord itself, without the numeral"
+        return f'{Chord.get_short_name(self)}'
 
     @property
     def compact_name(self):
@@ -682,7 +721,7 @@ class KeyChord(Chord, ScaleChord):
 
     def __repr__(self):
         # in_str = 'not ' if not self.in_scale else ''
-        mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
+        # mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
         # dotted notes str as in Chord.__repr__:
         lb, rb = NoteList._brackets
         notes_str = self._dotted_notes(markers=True)
@@ -715,8 +754,9 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_
                   min_precision=0, min_recall=0.9,
                   min_likelihood=0.7, max_likelihood=1.0, max_rarity=None, min_rarity=None,
                   min_consonance=0, max_consonance=1.0,
-                  chord_factor_weights = {1: 1.1}, weight_counts=False,
+                  chord_factor_weights = {1: 1.1}, weight_counts=True,
                   scale_factor_weights = {1: 2, 3: 1.5, 5: 1.5},
+                  scale_chord_weights = {1: 3, 4: 2, 5: 2},
                   # (by default, upweight roots and thirds, downweight fifths)
                   sort_order=['recall', 'likelihood', 'consonance', 'precision', 'length'],
                   candidate_scales=scales.extended_searchable_heptatonics,
@@ -874,7 +914,15 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_
             # scale_degree_weights = [scale.degree_factors[d+1] for d,n in enumerate(candidate_key_notes)
             factors = [scale.degree_factors[d+1] for d in range(len(candidate_key_notes))]
 
+            # update note weightings by scale factors:
             scale_note_weights = {n:scale_factor_weights[factors[i]] if factors[i] in scale_factor_weights  else 1  for i,n in enumerate(candidate_key_notes)}
+            # and by scale chord notes:
+            for root_degree, degree_weight in scale_chord_weights.items():
+                root_chord = scale.chord(root_degree, order=3)
+                chord_notes = [key_tonic + iv for iv in root_chord.intervals]
+                chord_note_weights = {n: degree_weight for n in chord_notes}
+                scale_note_weights.update(chord_note_weights)
+
             for n,w in scale_note_weights.items():
                 key_weights[n] = round(key_weights[n] * w, 2)
             # now add input weights on top:

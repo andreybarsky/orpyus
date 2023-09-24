@@ -296,6 +296,17 @@ class Scale:
         else:
             return []
 
+    def is_extended(self):
+        """True for extended/full major or minor scales, False otherwise"""
+        return (self.scale in scale_contractions)
+
+    @property
+    def contraction(self):
+        if self in scale_contractions:
+            return scale_contractions[self]
+        else:
+            raise Exception(f'No scale extension defined for: {self.name}')
+
     def subscale(self, keep=None, omit=None):
         """Return a subscale derived from this scale's factors,
         specified as either a list of factors to keep or to discard"""
@@ -2563,12 +2574,12 @@ pentatonic_base_scale_names = [n for n in base_scale_mode_names if len(all_scale
 # define rarities for heptatonic scales:
 heptatonic_scale_names_by_rarity = {
     1: {'natural major', 'natural minor'}, #, },
-    2: {'harmonic major', 'harmonic minor',
-        'melodic minor', 'extended major',
-        'extended minor', 'full minor'}, # , 'minor blues', 'major blues'},
-    3: {'melodic major', 'full major', # melodic major is far less common than harmonic major or melodic minor
+    2: {'harmonic major', 'harmonic minor', 'melodic minor',
+        'extended major', 'extended minor'}, # , 'minor blues', 'major blues'},
+    3: {'melodic major',
         'phrygian', 'dorian',
-        'lydian', 'mixolydian', },
+        'lydian', 'mixolydian',
+        'full major', 'full minor',},
     4: {'neapolitan major', 'neapolitan minor',
         'double harmonic', 'miyako-bushi', 'locrian'}}
 
@@ -2630,6 +2641,10 @@ scale_extensions = {  MinorScale: ExtendedMinor,
                         ExtendedMajor: FullMajor,
                         MelodicMajor: FullMajor
                    }
+scale_contractions = {ExtendedMinor: NaturalMinor,
+                      FullMinor: NaturalMinor,
+                      ExtendedMajor: NaturalMajor,
+                      FullMajor: NaturalMajor}
 
 searchable_heptatonics = diatonic_scales + harmonic_scales + melodic_scales
 extended_searchable_heptatonics = searchable_heptatonics + extended_scales

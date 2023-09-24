@@ -93,6 +93,9 @@ class Note:
 
             # name is definitely a string now
 
+            if name == 'Gb':
+                import ipdb; ipdb.set_trace()
+
             # detect if sharp or flat:
             if prefer_sharps is None:
                 # if no preference is set then we infer from the name argument supplied
@@ -122,6 +125,11 @@ class Note:
     @staticmethod
     def from_cache(name=None, position=None, prefer_sharps=None):
         # efficient note init by cache of names to note objects
+
+        if type(name) is int:
+            # quietly re-parse args:
+            position = name
+            name = None
 
         # get sharp preference from note name if available:
         if (prefer_sharps is None) and isinstance(name, str):

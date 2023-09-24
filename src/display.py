@@ -308,9 +308,11 @@ class DataFrame:
         widths = self.column_widths(up_to_row=up_to_row, header=header)
         return sum(widths) + (self.num_columns-1)*margin_size # - sum(combi_chars_per_header)
 
-    def show(self, header=True, header_border=True, align='left',
-             max_rows=None, return_string=False, title=None, fix_widths=False,
-             margin=' ', header_char='=', title_pad_char='-',
+    def show(self, title=None, title_pad_char='-', header=True, header_border=True,
+             header_char='=', header_border_starts_at=None, header_start_char=None,
+             align='left', margin=' ', fix_widths=False,
+             max_rows=None, return_string=False,
+
              **kwargs):
         margin_size = len(margin)
         printed_rows = []
@@ -332,7 +334,22 @@ class DataFrame:
         if header_border:
             # total_width = self.total_width(up_to_row=max_rows, header=header, margin_size=margin_size)
             # total_width = sum(widths) + (self.num_columns-1)*margin_size # - sum(combi_chars_per_header)
-            printed_rows.append(header_char*total_width)
+
+            # allow for partial header, which stops being blank after a certain idx:
+            if header_border_starts_at is None:
+                header_border_starts_at = 0
+
+            header_str = ' '*header_border_starts_at  +  header_char*(total_width - header_border_starts_at)
+            # header_str = header_char*total_width
+
+            if header_start_char is not None:
+                # replace character in header string with desired starter char:
+                # (this requires casting string to list and back again)
+                header_lst = list(header_str)
+                header_lst[header_border_starts_at] = header_start_char
+                header_str = ''.join(header_lst)
+
+            printed_rows.append(header_str)
         # else:
         #     total_width = self.total_width(up_to_row=max_rows, header=header, margin_size=margin_size)
         # make rows:
@@ -368,6 +385,228 @@ class DataFrame:
 
 
     _combi_chars = set(_settings.DIACRITICS.values())
+
+
+class Grid:
+    """pure python implementation of a numpy-style 2darray (slow, but dependency-light)"""
+    def __init__(self, shape: tuple[int,int], row_labels=None, col_labels=None):
+
+        # check input:
+        if type(shape) is int: # interpret single int shape "X" as square (X,X)
+            shape = (shape, shape)
+        elif len(shape) == 1: # same but unpack tuple/list
+            assert type(shape[0]) is int
+            shape = (shape[0], shape[0])
+        else:
+            assert type(shape[0]) is int and type(shape[1] is int)
+
+        self.shape = shape
+        self.num_rows, self.num_cols = shape
+
+
+        self.row_labels = row_labels
+        self.col_labels = col_labels
+
+        # main attribute that contains the data indexed by row/col keys:
+        self.data = {(r,c): None for r in range(self.num_rows) for c in range(self.num_cols)}
+        self._update_arrays()
+
+    def _update_arrays(self):
+        """updates internal rows and cols attributes to synchronise with main self.data attr"""
+        self.rows = [[self.data[(r,c)] for c in range(self.num_cols)] for r in range(self.num_rows)]
+        self.cols = [[self.data[(r,c)] for r in range(self.num_rows)] for c in range(self.num_cols)]
+
+    def __setitem__(self, key, values):
+        """sets an item in this grid to any value.
+            key must be a tuple of either ints or slices."""
+
+        if type(key) is int:
+            # only a single index: means entire row
+            r = key
+            c = slice(None, None, None)
+        elif len(key) == 2:
+            r,c = key
+        else:
+            raise KeyError(f'Did not understand key to __setitem__: {key}')
+
+        if type(r) is int and type(c) is int:
+            assert not isinstance(values, (tuple, list)) # must be single element
+            value = values
+            # simple setting of one element
+            self.data[(r,c)] = value
+            # cheap array update without needing to recompute everything:
+            self.rows[r][c] = value
+            self.cols[c][r] = value
+
+        else:
+            if type(r) is slice:
+                row_idxs = range(self.num_rows)[r]
+            elif r is None:
+                row_idxs = range(self.num_rows)
+            else:
+                if r >= 0:
+                    row_idxs = [r] # only a single row
+                elif r < 0:
+                    # negative indexing from end:
+                    row_idxs = [self.num_rows + r]
+                else:
+                    raise Exception(f'did not understand row index: {r}')
+
+            if type(c) is slice:
+                col_idxs = range(self.num_cols)[c]
+            elif r is None:
+                col_idxs = range(self.num_cols)
+            else:
+                if c >= 0:
+                    col_idxs = [c] # only a single column
+                elif c < 0:
+                    col_idxs = [self.num_cols + c]
+                else:
+                    raise Exception(f'did not understand col index: {c}')
+
+            key_list = [(r,c) for r in row_idxs for c in col_idxs]
+
+            if len(key_list) != 1 and isinstance(values, (list, tuple, range)):
+                assert len(key_list) == len(values), f"{len(values)} values provided to set {len(key_list)} elements, must be the same"
+                values = list(values)
+            elif isinstance(values, (list, tuple, range)):
+                # one key, but iterable of values
+                assert len(values) == 1, f"only one item to set, but got {len(values)} values"
+                values = values[0]
+            else:
+                # multiple keys, but one value
+                # so broadcast it across as needed:
+                values = [values]*len(key_list)
+
+            for (r,c), val in zip(key_list, values):
+                if (r,c) not in self.data.keys():
+                    raise KeyError(f"Grid reference: {r,c}")
+                self.data[(r, c)] = val
+            # update arrays after setting:
+            self._update_arrays()
+
+    def __getitem__(self, *args):
+        # unpack arguments if needed:
+        if len(args) == 1:
+            # row and column as a tuple
+            key = args[0]
+            if type(key) is int:
+                # row only; assume all columns
+                r = key
+                c = slice(None)
+
+            elif len(key) == 2:
+                r, c = args[0]
+            else:
+                raise Exception(f'Did not understand key to __getitem__: {key}')
+
+        elif len(args) == 2:
+            # row and column as separate values:
+            r, c = args
+
+        if type(r) is int and type(c) is int:
+            # simple indexing of one element: return bare value
+            return self.data[(r,c)]
+
+        if type(r) is slice:
+            row_idxs = range(self.num_rows)[r]
+        elif r is None:
+            row_idxs = range(self.num_rows)
+        else:
+            row_idxs = [r] # only a single row
+
+        if type(c) is slice:
+            col_idxs = range(self.num_cols)[c]
+        elif r is None:
+            col_idxs = range(self.num_cols)
+        else:
+            col_idxs = [c] # only a single column
+
+        # return values row by row, column by column:
+        values = []
+        for r_idx in row_idxs:
+            row_data = self.rows[r_idx]
+            for c_idx in col_idxs:
+                cell_data = row_data[c_idx]
+                values.append(cell_data)
+                # values.append(self.data[r_idx, c_idx])
+        return values
+
+    def show(self, row_border=True, header_border=None, disp=True, margin=' ', **kwargs):
+        # display as DataFrame
+        num_output_cols = self.num_cols
+        if self.col_labels is None:
+            col_labels = ['' for _ in range(num_output_cols)]
+        else:
+            col_labels = self.col_labels
+
+        if self.row_labels is not None:
+            # add an extra column to contain row labels:
+            num_output_cols += 1
+            col_labels = [''] + col_labels
+            if row_border:
+                # and another column for the margin
+                num_output_cols += 1
+                col_labels = [''] + col_labels
+
+        disp_df = DataFrame(col_labels)
+        for r, row in enumerate(self.rows):
+            if self.row_labels is not None:
+                if row_border:
+                    # decide the row border character and insert it
+                    # between labels and data:
+                    if row_border is True:
+                        row_border_char = '│'
+                    else:
+                        row_border_char = row_border
+                    row_data = [self.row_labels[r], row_border_char] + row
+                else:
+                    # row labels but no border
+                    row_data = [self.row_labels[r]] + row
+                    row_border_char = None
+            else:
+                row_data = row
+                row_border_char = None
+            disp_df.append(row_data)
+
+        has_header = (self.col_labels is not None)
+        if header_border is None:
+            header_border = has_header
+        if header_border is True:
+            # decide the header char, defaulting to ─
+            header_char = '─'
+        else:
+            header_char = header_border
+        if has_header:
+            # header border starts at whatever the row label column's width is
+            if self.row_labels is not None:
+                widths = disp_df.column_widths()
+                header_border_start = widths[0] + len(margin)
+            else:
+                header_border_start = 0
+        else:
+            header_border_start = None
+
+        if header_char == '─' and row_border_char == '│' and header_border_start > 0:
+            header_start_char = '┌' # corner char (unicode box drawing)
+
+        else:
+            header_start_char = None
+
+        output_str = disp_df.show(return_string=True, header=has_header, header_char=header_char, header_border=header_border,
+                                  header_start_char=header_start_char, header_border_starts_at=header_border_start,
+                                  margin=margin,
+                                  **kwargs)
+        if disp:
+            print(output_str)
+        else:
+            return output_str
+
+    def __str__(self):
+        return self.show(disp=False)
+
+    def __repr__(self):
+        return str(self)
 
 def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
                 parent_scale=None, parent_degree=None, # can parent_degree be 'idx'?
