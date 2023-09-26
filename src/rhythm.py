@@ -3,6 +3,8 @@
 ### but will eventually handle melodies, time signatures, swing ratios and so on
 
 from .audio import LogEnv, white_noise, smooth, fs, play_wave
+from . import conversion as conv
+from . import notes
 import numpy as np
 
 # audio samples for major and minor drumbeats:
@@ -23,10 +25,10 @@ class TimeSignature:
         self.bar_length_in_beats = self.beats_per_bar / self.beat_value
         self.quarter_notes_per_beat = 4 / self.beat_value
 
-        self.beats_per_minute = self.tempo = tempo
-        self.bars_per_minute = self.tempo / self.beats_per_bar # (correct)
-        self.bar_duration = 60. / self.bars_per_minute # in seconds (correct)
-        self.beat_duration = self.bar_duration / self.beats_per_bar # in seconds (correct)
+        self.beats_per_minute = self.tempo = self.bpm = tempo
+        self.bars_per_minute = self.tempo / self.beats_per_bar
+        self.bar_duration = 60. / self.bars_per_minute # in seconds
+        self.beat_duration = self.bar_duration / self.beats_per_bar # in seconds
 
         self.quarter_note_duration = self.beat_duration / self.quarter_notes_per_beat
 
@@ -86,6 +88,25 @@ class TimeSignature:
         metronome_waves = [wave]*bars
         return np.concatenate(metronome_waves)
 
+
+
+    def get_pitches(self):
+        """finds the pitches associated with this time signature's tempo,
+        within the range of the 88-note piano keyboard"""
+        return bpm_to_pitches(self.beats_per_minute)
+    @property
+    def pitches(self):
+        return self.get_pitches()
+
+    def get_note(self, return_cents=False, temperament=None):
+        """finds the note chroma associated with this time signature's tempo,
+        when upscaled to a pitch large enough to correspond to a note"""
+        return bpm_to_note(self.beats_per_minute, return_cents=return_cents, temperament=temperament)
+    @property
+    def note(self):
+        return self.get_note()
+
+
     def play(self, bars=2):
         """plays a metronome at this time signature for the specified number of bars"""
         if bars not in (0, None):
@@ -96,6 +117,38 @@ class TimeSignature:
             wave = self.metronome(bars=100)  # synthesise 100 bars of metronome audio
             while True: # repeat them until keyboard interrupt
                 play_wave(wave, block=True)
+
+
+def bpm_to_pitches(bpm):
+    """finds the pitches associated with this tempo within the range of the
+    piano keyboard"""
+    lowest_piano_pitch = notes.OctaveNote(1).pitch
+    highest_piano_pitch = notes.OctaveNote(88).pitch
+    tempo_hz = bpm / 60.
+    tempo_pitches = []
+    while tempo_hz < highest_piano_pitch:
+        if tempo_hz > lowest_piano_pitch:
+            tempo_pitches.append(tempo_hz)
+        tempo_hz *= 2 # double the frequency until it's in the range we want
+    return tempo_pitches
+
+def bpm_to_note(bpm, return_cents=False, temperament=None):
+    """finds the note chroma associated with this tempo when upscaled to a pitch"""
+    tempo_pitches = bpm_to_pitches(bpm)
+    nearest_notes = []
+    offsets = []
+    # compare to the first pitch; we'd get the same answer no matter which we compared to
+    pitch = tempo_pitches[0]
+    nearest_note_exact_value = conv.pitch_to_value(pitch, nearest=False, temperament=temperament)
+    nearest_note_value = int(round(nearest_note_exact_value))
+    nearest_octavenote = notes.OctaveNote(nearest_note_value)
+    cents_offset = conv.cents(nearest_octavenote.pitch, pitch)
+    nearest_note = nearest_octavenote.note # strip the octave as it's arbitrary
+    if not return_cents:
+        return nearest_note
+    else:
+        return nearest_note, round(cents_offset, 1)
+
 
 CommonTime = FourFour   = TimeSignature(4,4)
 FastTime =   EightEight = TimeSignature(8,8)

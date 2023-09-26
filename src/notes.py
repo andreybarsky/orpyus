@@ -302,6 +302,20 @@ class Note:
             elif isinstance(modifier, ChordModifier):
                 return Chord(self.chroma, modifiers=modifier)
 
+    ## deep music theory: the 'tempo' of a note:
+    def get_tempo(self, max_tempo=120, temperament=None):
+        """gets the tempo associated with this note's pitch, below a given
+        maximum bpm"""
+        first_octavenote = self[1]
+        note_pitch_hz = first_octavenote.get_pitch(temperament=temperament)
+        note_pitch_bpm = note_pitch_hz * 60
+        while note_pitch_bpm > max_tempo:
+            note_pitch_bpm /= 2
+        return round(note_pitch_bpm,1)
+    @property
+    def tempo(self):
+        return self.get_tempo()
+
     def _wave(self, duration, falloff=True, **kwargs):
         """Outputs a sine wave corresponding to this note,
         by default with exponential volume increase and falloff"""

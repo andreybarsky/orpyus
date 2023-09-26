@@ -35,7 +35,7 @@ def name_to_value(name):
     # return value
 
 ### pitch-value conversion
-def pitch_to_value(pitch, nearest=True, intonation=None):
+def pitch_to_value(pitch, nearest=True, temperament=None):
     """Given a pitch in Hz, returns the value of the corresponding piano key.
     If the pitch is not exact, will return the value of the *nearest* piano key
     instead, unless round is False, in which case will return a float of the hypothetical
@@ -43,16 +43,16 @@ def pitch_to_value(pitch, nearest=True, intonation=None):
     # since pitches are floats and non-exact,
     # we take a float approximation of the 'value' corresponding to that exact pitch
     # and round to nearest whole note value (if asked)
-    if intonation is None:
-        intonation = tuning.get_intonation()
+    if temperament is None:
+        temperament = tuning.get_temperament(context='PLAYBACK')
     else:
-        intonation = intonation.upper()
-    if intonation == 'EQUAL': # easily calculable by formula
+        temperament = temperament.upper()
+    if temperament == 'EQUAL': # easily calculable by formula
         exact_value = 12 * math.log(pitch/A4_PITCH, 2) + 49
         if nearest:
             return round(exact_value)
         else:
-            return exact_value
+            return round(exact_value,2) # rounded only to cents
     else:
         # loop through all pitches inside this octave (from the lower A, since
         # A is defined with a reference pitch), and find the nearest match
@@ -60,7 +60,7 @@ def pitch_to_value(pitch, nearest=True, intonation=None):
         A_value = A_octave*12 + 1
         start_val, end_val = A_value, A_value+12
 
-        tuned_value_pitches = tuning.value_pitches[intonation]
+        tuned_value_pitches = tuning.value_pitches[temperament]
         pitch_offsets, abs_pitch_offsets = [], []
         for v in range(start_val, end_val):
             exact_pitch = tuned_value_pitches[v]
@@ -75,28 +75,16 @@ def pitch_to_value(pitch, nearest=True, intonation=None):
             # this is already 'rounded' to the nearest full note, so return that:
             return closest_value
         else:
-            # we'll need to interpolate logarithmically between closest notes
-            # first: did we round up or down?
-            remainder = pitch_offsets[argmin]
-            if remainder > 0: # remainder is positive, i.e. rounded down
-                next_closest_value = closest_value + 1
-                lower_value, higher_value = closest_value, next_closest_value
-            else: # remainder is negative, i.e. rounded up
-                next_closest_value = closest_value - 1
-                lower_value, higher_value = next_closest_value, closest_value
-            # interpolate:
-            lower_pitch, higher_pitch = tuned_value_pitches[lower_value], tuned_value_pitches[higher_value]
-            lower_log, higher_log, pitch_log = [math.log(p) for p in [lower_pitch, higher_pitch, pitch]]
-            # distance between the two closest notes in log scale:
-            log_fraction = (pitch_log - lower_log) / (higher_log - lower_log)
-            # added on top of lower note:
-            exact_value = round(lower_value + log_fraction,2)
-            return exact_value
+            # give a 'fractional' note position, in cents:
+            closest_value_pitch = value_to_pitch(closest_value, temperament=temperament)
+            fraction_part = cents(closest_value_pitch, pitch) / 100
+            fractional_value = closest_value + fraction_part
+            return round(fractional_value, 2)
 
-def value_to_pitch(value, intonation=None):
+def value_to_pitch(value, temperament=None):
     """Given a piano key value (for an 88-note piano), return the corresponding
     pitch in Hz as a float."""
-    return tuning.get_pitch(value, intonation)
+    return tuning.get_pitch(value, temperament)
     # value = int(value)
     # pitch = 2 ** ((value-49)/12) * A4_PITCH
     # return round(pitch, 2)
@@ -109,6 +97,10 @@ def pitch_to_name(pitch, round=True, prefer_sharps=False):
 def name_to_pitch(name):
     val = name_to_value(name)
     return value_to_pitch(val)
+
+def cents(pitch_a, pitch_b):
+    """get the interval in cents between two pitches"""
+    return 1200. * math.log(pitch_b / pitch_a, 2)
 
 
 def get_pitch(value, temperament=None):
