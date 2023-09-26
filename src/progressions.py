@@ -658,7 +658,7 @@ class ChordProgression(Progression): # , ChordList):
         # df = pd.DataFrame(arr, index=[str(ch.unkey()) for ch in self.chords], columns=[f'{n.chroma:<2}' for n in chromatic_notes])
         # return df
 
-    def find_chromatic_lines(self, min_length=3, max_length=None, disp=True):
+    def find_chromatic_lines(self, min_length=3, max_length=None, allowed_breaks=0, disp=True, _return_table=False):
         print(f'Searching for chromatic lines in\n  {self.__str__(chords_only=True)} ...\n')
         if max_length is None:
             max_length = len(self)+1
@@ -667,8 +667,10 @@ class ChordProgression(Progression): # , ChordList):
         #     print(str(voice_table).replace('1', '+').replace('0', ' '))
         chromatic_notes = voice_table.col_labels
         lines = {}
-        # try starting on each row, provided there's enough space to find a min-length line:
+        proposed_lines = {}
 
+        ruled_out = set()
+        # try starting on each row, provided there's enough space to find a min-length line:
         for start_row in range(len(self)-(min_length-1)):
             # start locs are the places in this row where each note occurs:
             line_start_locs = [i for i,val in enumerate(voice_table[start_row]) if val]
@@ -679,67 +681,167 @@ class ChordProgression(Progression): # , ChordList):
                 for dir, dir_name in zip([left_dir, right_dir], [left_name, right_name]):
                     # don't search if this would overlap with an existing line in the same direction:
                     if (start_row-1, start_loc - dir, dir) not in lines:
-                        line = [chromatic_notes[start_loc]] # list of notes that form this line
+                        # the list 'line' is a list of (row, col, note) tuples, which we start here:
+                        start_note = chromatic_notes[start_loc]
+                        line = [(start_row, start_loc, start_note)]
+                        proposed_line = [(start_row, start_loc, start_note, True)] # same but for theoretical lines that might exist
                         log(f'Starting a {dir_name} line at: {start_row, start_loc}, on chord: {self.chords[start_row].name} beginning: {line[0]}')
-                        line_broken = False
+                        true_line_broken, line_broken = False, False
+                        line_breaks = 0
                         next_row = start_row + 1
                         next_loc = (start_loc + dir) % 12 # mod so as to wrap arond from C to B
                         while (not line_broken) and not (next_row >= len(self)):
+                            this_note = chromatic_notes[next_loc]
                             if voice_table[next_row, next_loc]:
                                 # if a note exists on that diagonal:
-                                this_note = chromatic_notes[next_loc]
-                                log(f'Line continues on chord: {self.chords[next_row].name} with: {this_note}')
-                                line.append(this_note)
+                                log(f' Line continues on chord: {self.chords[next_row].name} with: {this_note}')
+                                if not true_line_broken:
+                                    line.append((next_row, next_loc, this_note))
+                                proposed_line.append((next_row, next_loc, this_note, True))
                                 next_row = next_row + 1
                                 next_loc = (next_loc + dir) % 12
                             else:
-                                line_broken = True
+                                true_line_broken = True # the 'true line' is no longer valid,
+                                                        # but a proposed line may still exist
+                                line_breaks += 1
+                                if line_breaks > allowed_breaks: # keep track of hypothetical lines
+                                    log(f'   But does not continue, this breaks the line')
+                                    line_broken = True
+                                else:
+                                    log(f'  Line does not continues on chord: {self.chords[next_row].name}... but it might, with: {this_note}')
+                                    proposed_line.append((next_row, next_loc, this_note, False))
+                                    next_row = next_row + 1
+                                    next_loc = (next_loc + dir) % 12
 
+                        idx = start_row+1
+                        suf = parsing.num_suffixes[idx]
                         if (len(line) >= min_length) and (len(line) <= max_length):
-                            line = NoteList(line)
-                            idx = start_row+1
-                            suf = parsing.num_suffixes[idx]
-                            print(f'Found a {dir_name} chromatic line starting on {idx}{suf} chord ({self.chords[idx-1].chord_name}) : {line}')
+                            line_coords = [(r,c) for r,c,n in line]
+                            line_notes = NoteList([n for r,c,n in line])
+
+                            if disp:
+                                print(f'Found a {dir_name} chromatic line (size {len(line)}) starting on {idx}{suf} chord ({self.chords[idx-1].chord_name}) : {line_notes}')
                             lines[(start_row, start_loc, dir)] = line
+                        if (len(proposed_line) >= min_length) and (len(proposed_line) <= max_length):
+                            if (start_row-1, start_loc - dir, dir) not in proposed_lines:
+                                proposed_line_coords = [(r,c) for r,c,n,b in proposed_line]
+                                proposed_line_notes = NoteList([n for r,c,n,b in proposed_line])
+                                if (start_row, start_loc, dir) in lines: # if this proposed line shares a start with a real line
+                                    associated_true_line = lines[(start_row, start_loc, dir)]
+                                    if len(proposed_line) - len(associated_true_line) >= (1+allowed_breaks): # only for non-trivial extensions
+                                        extension_notes = proposed_line_notes[len(associated_true_line):]
+                                        if disp:
+                                            print(f'  Which could be extended as: {extension_notes}')
+                                else:
+                                    if disp:
+                                        print(f'Found a POTENTIAL {dir_name} chromatic line (size {len(proposed_line)}) starting on {idx}{suf} chord ({self.chords[idx-1].chord_name}) : {proposed_line_notes}')
+                                    proposed_lines[(start_row, start_loc, dir)] = proposed_line
                     else:
-                        log(f'Existing line already begins at {(start_row-1, start_loc)}')
+                        log(f'Existing line already begins at {(start_row-1, start_loc)}, in dir: {dir}')
 
         if not disp:
-            return lines
+            if allowed_breaks == 0:
+                return lines # true lines only
+            else:
+                if _return_table:
+                    return lines, proposed_lines, voice_table
+                else:
+                    return lines, proposed_lines
         else:
             # output a nice table
-            # first, replace 1s and 0s in voice table with prettier characters:
-            for r in range(voice_table.num_rows):
-                for c in range(voice_table.num_cols):
-                    cur_val = voice_table[(r,c)]
-                    rep_val = '+' if cur_val == 1 else ' ' # '·'
-                    voice_table[(r,c)] = rep_val
+            self.disp_voice_table(voice_table, lines)
 
-            # display lines as voice table, by changing voice table values
-            # to directional slahses:
-            for line_key, line in lines.items():
+
+
+    def disp_voice_table(self, voice_table, lines=None, proposed_lines=None):
+        # first, replace 1s and 0s in voice table with prettier characters:
+        for r in range(voice_table.num_rows):
+            for c in range(voice_table.num_cols):
+                cur_val = voice_table[(r,c)]
+                rep_val = '+' if cur_val == 1 else ' ' # '·'
+                voice_table[(r,c)] = rep_val
+
+        # display lines as voice table, by changing voice table values
+        # to directional slashes:
+        if lines is not None:
+            for line_key, line_contents in lines.items():
                 start_row, start_loc, dir = line_key
                 if dir == -1:
                     dir_char = '╱' # descending
                 else:
                     dir_char = '╲' # ascending (note: not a backslash, different unicode char)
-                cur_row = start_row
-                cur_col = start_loc
-                for note in line:
-                    voice_table[(cur_row, cur_col)] = dir_char
-                    cur_col = (cur_col + dir) % 12
-                    cur_row += 1
+                # cur_row = start_row
+                # cur_col = start_loc
+                for row, col, note in line_contents:
+                    voice_table[(row, col)] = dir_char
+                    # voice_table[(cur_row, cur_col)] = dir_char
+                    # cur_col = (cur_col + dir) % 12
+                    # cur_row += 1
+        if proposed_lines is not None:
+            for line_key, line_contents in proposed_lines.items():
+                start_row, start_col, dir = line_key
+                # start_chord = self.chords[start_row]
+                # dir_name = 'falling' if dir == -1 else 'rising'
+                # line_coords = [(r,c) for r,c,n,b in line_contents]
+                # line_notes = NoteList([n for r,c,n,b in line_contents])
+                if dir == -1:
+                    dir_char = '/' # descending
+                    prop_char = '╳'
+                else:
+                    dir_char = '\\' # ascending
+                    prop_char = '╳'
+                for row, col, note, present in line_contents:
+                    if present:
+                        voice_table[(row, col)] = dir_char
+                    else:
+                        voice_table[(row, col)] = prop_char
 
-            # prettify voice table for output:
-            from src.display import DataFrame
-            disp_df = DataFrame(['Chord', '', ''] + [f'{n.chroma:<2}' for n in chromatic_notes])
-            for r in range(voice_table.num_rows):
-                margin = [self.chords[r].chord_name, self.chords[r].mod_numeral, ' | ']
-                # pretty_row = ['+' if cell==1 else ' ' for cell in voice_table.rows[r]]
-                df_row = margin + voice_table.rows[r]
-                disp_df.append(df_row)
-            disp_df.show()
+        # prettify voice table for output:
+        from src.display import DataFrame
+        chromatic_notes = notes.chromatic_sharp_notes if self.key.prefer_sharps else notes.chromatic_flat_notes
+        disp_df = DataFrame(['Chord', '', ''] + [f'{n.chroma:<2}' for n in chromatic_notes])
+        for r in range(voice_table.num_rows):
+            margin = [self.chords[r].chord_name, self.chords[r].mod_numeral, ' | ']
+            # pretty_row = ['+' if cell==1 else ' ' for cell in voice_table.rows[r]]
+            df_row = margin + voice_table.rows[r]
+            disp_df.append(df_row)
+        disp_df.show()
 
+    def suggest_chromatic_lines(self, allowed_breaks=1, min_length=4, min_likelihood=0.35, min_consonance=0.3):
+        lines, proposed_lines, voice_table = self.find_chromatic_lines(allowed_breaks=allowed_breaks, min_length=3, _return_table=True, disp=False)
+        finalised_proposed_lines = {}
+        chromatic_notes = notes.chromatic_sharp_notes if self.key.prefer_sharps else notes.chromatic_flat_notes
+        for line_start, line_contents in proposed_lines.items():
+            if len(line_contents) >= min_length:
+                start_row, start_col, dir = line_start
+                start_chord = self.chords[start_row]
+                dir_name = 'falling' if dir == -1 else 'rising'
+                line_coords = [(r,c) for r,c,n,b in line_contents]
+                line_notes = NoteList([n for r,c,n,b in line_contents])
+                which_present = [b for r,c,n,b in line_contents]
+                # figure out the note and chord that needs to be added:
+                if allowed_breaks == 1:
+                    absent_idx = [i for i,b in enumerate(which_present) if b is False][0]
+                    absent_coord = line_coords[absent_idx]
+                    absent_row, absent_col = absent_coord
+                    absent_note = chromatic_notes[absent_col]
+                    chord_to_modify = self.chords[absent_row]
+                    new_chord = chord_to_modify + absent_note
+
+                    # little string parsing details:
+                    modified_chord_num = str(absent_row+1) + parsing.num_suffixes[absent_row+1]
+                    start_chord_num = str(start_row+1) + parsing.num_suffixes[start_row+1]
+                    a_an = 'an' if absent_note.chroma[0] in 'AEF' else 'a' # english grammar rules
+                    if new_chord.likelihood >= min_likelihood and new_chord.consonance >= min_consonance:
+                        print(f'Try changing {modified_chord_num} chord ({Chord._marker}{chord_to_modify.chord_name}) by adding {a_an} {absent_note} to make it: {Chord._marker}{new_chord.chord_name}')
+                        print(f'    which would add a {dir_name} chromatic line (of size {len(line_contents)}) starting on {start_chord_num} chord ({Chord._marker}{start_chord.chord_name})')
+                        print(f'        that goes: {line_notes}')
+                        finalised_proposed_lines[line_start] = line_contents
+                    else:
+                        log(f'Chord change to {new_chord} discarded as it is too obscure: likelihood {new_chord.likelihood}, consonance {new_chord.consonance}')
+                else:
+                    raise Exception('suggest_chromatic_lines not yet implemented for allowed_breaks > 1')
+        self.disp_voice_table(voice_table, lines, finalised_proposed_lines)
 
     def transpose_for_guitar(self, return_all=False):
         """tries to transpose this ChordProgression into a form where its chords

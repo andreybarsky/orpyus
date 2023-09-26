@@ -228,6 +228,8 @@ class Note:
             return self.position == other.position
         # elif isinstance(other, OctaveNote):
         #     return self == other.note
+        elif other is None:
+            return False
         else:
             raise TypeError(f'Notes can only be compared to other Notes, but got: {type(other)}')
 

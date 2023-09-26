@@ -60,7 +60,7 @@ class Key(Scale):
         # set Key-specific attributes: notes, degree_notes, etc.
 
         self.notes = NoteList([self.tonic + i for i in self.intervals])
-        self.chromatic_notes = [self.tonic + iv for iv in self.chromatic_intervals]
+        self.chromatic_notes = NoteList([self.tonic + iv for iv in self.chromatic_intervals])
 
         self._set_sharp_preference() # sets tonic and notes attrs to have appropriate spelling
         self._set_note_mappings() # sets degree_notes, factor_notes, etc. and their inverses
