@@ -29,7 +29,8 @@ class Fretboard:
                  3   4   5
     """
 
-    def __init__(self, cells, index='EADGBE', highlight=None, mute=None, open=None, title=None, num_strings=6):
+    def __init__(self, cells, index='EADGBE', highlight=None, mute=None, open=None, title=None, num_strings=6,
+                 min_fret=None, max_fret=None):
         """args:
         cells: a dict that keys (string,fret) tuples to the contents of what should be displayed in that fret.
             note that strings are indexed from 1, as in guitar terminology: low E is "first string".
@@ -73,7 +74,7 @@ class Fretboard:
             self.open = open
 
 
-    def disp(self, start_fret=None, end_fret=None, fret_size=None, continue_strings=False, fret_labels=True, index_width=None, align='cleft', fret_sep_char='¦', title=True):
+    def disp(self, start_fret=None, end_fret=None, fret_size=None, continue_strings=False, fret_labels=True, index_width=None, align='cleft', fret_sep_char='¦', title=True, **kwargs):
         """displays data between min_fret and max_fret (detects from data respectively if either are None),
         and leaves fret_size between each vertical fret bar (defaults to max([3,max(len(data))]) if None)
 
@@ -94,6 +95,8 @@ class Fretboard:
             else:
                 # go from 1 to the very end
                 start_fret = 1
+        else:
+            start_fret = start_fret if start_fret > 0 else 1
 
         if end_fret is None:
             end_fret = max([self.max_fret+1, 3]) # at least 3, otherwise 1 more than max fret
@@ -114,8 +117,7 @@ class Fretboard:
 
         # fret_sep_char = '|'
         assert len(fret_sep_char) == 1
-        highlight_chars = '⟦⟧'
-        # highlight_chars = '‖‖'
+        highlight_chars = _settings.BRACKETS['fret_highlight']
         hl_left, hl_right = highlight_chars
 
         if start_fret == 1:
@@ -202,7 +204,7 @@ class Fretboard:
                     log(f'highlighting {cell_key}')
                     sep_char = hl_right
                 # if the NEXT cell is highlighted, must be a left highlight:
-                elif (s, fret_num+1) in self.highlight:
+                elif (s, fret_num+1) in self.highlight and end_fret > fret_num:
                     log(f'pre-highlighting {(s, fret_num+1)} from {cell_key}')
                     sep_char = hl_left
                 else:

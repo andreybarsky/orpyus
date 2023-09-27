@@ -279,7 +279,7 @@ class Guitar:
             note = OctaveNote(note, prefer_sharps=('#' in note) if preserve_accidental else None)
         note_locs = self.locate_note(note, match_octave=True, max_fret=max_fret, min_fret=min_fret)
         cells = {loc: note.name for loc in note_locs}
-        Fretboard(cells, title=f'Note: {note.chroma} (octave {note.octave}) on tuning:{self.name}').disp(**kwargs)
+        Fretboard(cells, title=f'Note: {note.chroma} (octave {note.octave}) on tuning:{self.name}').disp(start_fret=min_fret, end_fret=max_fret, **kwargs)
 
     def show_note(self, note, show_octave=True, max_fret=15, min_fret=0, preserve_accidental=True, **kwargs):
         if isinstance(note, (str, OctaveNote)):
@@ -299,7 +299,7 @@ class Guitar:
             cells = {loc: oct.name for loc, oct in zip(note_locs, octavenotes)}
         else:
             cells = {loc: note.chroma for loc in note_locs}
-        Fretboard(cells, title=f'Note: {note.name} on tuning:{self.name}').disp(**kwargs)
+        Fretboard(cells, title=f'Note: {note.name} on tuning:{self.name}').disp(start_fret=min_fret, end_fret=max_fret, **kwargs)
 
     def show_notes(self, notes, show_octave=True, max_fret=15, min_fret=0, title=None, **kwargs):
         if not isinstance(notes, NoteList):
@@ -319,7 +319,7 @@ class Guitar:
         #### finalise:
         if title is None:
             title=f'Notes: {notes} on tuning:{self.name}'
-        Fretboard(cells, title=title).disp(**kwargs)
+        Fretboard(cells, title=title).disp(start_fret=min_fret, end_fret=max_fret, **kwargs)
 
 
     def show_chord(self, chord, intervals_only=False, notes_only=False, max_fret=13, min_fret=0, preserve_accidental=True, title=None, show_index=True, **kwargs): # preserve accidentals?
@@ -372,7 +372,7 @@ class Guitar:
         #### finalise:
         if title is None:
             title=f'Chord: {chord} on tuning:{self.name}'
-        Fretboard(cells, index=index, highlight=root_locs, title=title).disp(**kwargs)
+        fretb = Fretboard(cells, index=index, highlight=root_locs, title=title).disp(start_fret=min_fret, end_fret=max_fret, **kwargs)
 
     def show_abstract_chord(self, chord, **kwargs):
         """for a given AbstractChord object (or name that casts to AbstractChord),
@@ -431,7 +431,7 @@ class Guitar:
         #### finalise:
         if title is None:
             title = f'{key} on tuning:{self.name}'
-        Fretboard(cells, index=index, highlight=highlights, title=title).disp(fret_size=7, **kwargs)
+        Fretboard(cells, index=index, highlight=highlights, title=title).disp(fret_size=7, start_fret=min_fret, end_fret=max_fret, **kwargs)
 
     def show_scale(self, scale, **kwargs):
         """for a given abstract Scale object (or name that casts to Scale),
@@ -508,13 +508,13 @@ class Guitar:
                 for rep in ['chord', 'Chord', 'of']:
                     obj = obj.replace(rep, '')
                 obj = obj.strip()
-                self.show_chord(obj)
+                self.show_chord(obj, *args, **kwargs)
             elif 'key' in obj.lower():
                 # similar, we account for 'Key of Em', or ''
                 for rep in ['key', 'Key', 'of']:
                     obj = obj.replace(rep, '')
                 obj = obj.strip()
-                self.show_key(obj)
+                self.show_key(obj, *args, **kwargs)
             else:
                 # otherwise, we brute force it by Try block:
                 succeeded = False
