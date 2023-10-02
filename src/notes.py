@@ -308,10 +308,9 @@ class Note:
         maximum bpm"""
         first_octavenote = self[1]
         note_pitch_hz = first_octavenote.get_pitch(temperament=temperament)
-        note_pitch_bpm = note_pitch_hz * 60
-        while note_pitch_bpm > max_tempo:
-            note_pitch_bpm /= 2
-        return round(note_pitch_bpm,1)
+        bpm = conv.pitch_to_bpm(note_pitch_hz, max_tempo)
+        return round(bpm, 1)
+
     @property
     def tempo(self):
         return self.get_tempo()

@@ -932,6 +932,9 @@ class Scale:
     def dominant_triad(self):
         return self.get_dominant(order=3)
 
+
+
+
     def get_secondary_dominant(self, of=5, order=3, linked=True):
         "return the ScaleChord built on the fifth's fifth (or other non-tonic degree)"
         # note that a scale's major/minor quality does not influence the secondary dominant
@@ -953,6 +956,8 @@ class Scale:
     @property
     def secondary_dominant_triad(self):
         return self.get_secondary_dominant(order=3)
+
+
 
 
     def progression(self, *degrees, order=3):
@@ -2062,7 +2067,23 @@ class ScaleChord(AbstractChord):
         else:
             return self.scale.fractional_degree_intervals[self.scale_degree]
 
-    def in_key(self, tonic):
+    def in_key(self, key, verify_scale=False):
+        """constructs a KeyChord object from this ScaleChord with respect to a
+        desired Key (keeping the same scale degree) - this may change the scale if it exists"""
+        from .keys import Key, KeyChord
+        if not isinstance(key, Key):
+            key = Key(key)
+        key_tonic = key.tonic
+        if verify_scale:
+            # throw an error if the key's scale is not the same as this scalechord's scale
+            scale_key = self.scale.on_tonic(key_tonic)
+            if scale_key != key:
+                raise Exception(f'Scale verification failed: ScaleChord {self} is in scale {self.scale}, which differs from desired key {key}')
+        root_note = key.degree_notes[self.scale_degree]
+        return KeyChord(root=root_note, factors=self.factors, inversion=self.inversion,
+                        key=key, degree=self.scale_degree, assigned_name=self.assigned_name)
+
+    def on_tonic(self, tonic):
         """constructs a KeyChord object from this ScaleChord with respect to a
         desired Key tonic (keeping the same scale degree)"""
         if not isinstance(tonic, notes.Note):
@@ -2139,6 +2160,8 @@ def parse_roman_numeral(numeral, ignore_alteration=False, return_params=False):
     with a potential chord modifier at the end,
     parse into a (degree, AbstractChord) tuple, where degree is an int between 1-7.
 
+    also understands slashes as either inversions or secondary chords or both.
+
     if return_params is False, returns the AbstractChord object itself.
         if True, returns the modifiers/inversion parameters used to initialise it.
         (in case we want to avoid double-initialising downstream)"""
@@ -2146,6 +2169,34 @@ def parse_roman_numeral(numeral, ignore_alteration=False, return_params=False):
     if ignore_alteration and parsing.is_accidental(numeral[0]):
         # if required, disregard accidentals in the start of this degree, like bIII -> III
         numeral = numeral[1:]
+
+    slashed_parts = '/'.split(numeral)
+    if len(slashed_parts) == 1: # simple numeral, no inversion or secondary tonicisation
+        inversion = 0
+        secondary_numeral = None
+    elif len(slashed_parts) == 2: # either an inversion or a secondary chord
+        left, right = slashed_parts
+        if right.isnumeric():
+            # seems to be an inversion
+            numeral, inversion = left, right
+            secondary_numeral = None
+        else:
+            # seems to be a secondary chord
+            inversion = 0
+            numeral, secondary_numeral = left, right
+    elif len(slashed_parts) == 3: # assume both!
+        left, mid, right = slashed_parts
+        assert mid.isnumeric(), f"Received multiple slashes in ScaleChord init and expected the middle part to be an inversion, but was: {mid}"
+        numeral, inversion, secondary_numeral = left, mid, right
+    else:
+        raise Exception(f'Too many slashes ({len(slashed_parts)-1}) in ScaleChord name: {numeral}')
+
+        # recursive function call to understand the tonicised chord:
+        secondary_degree, secondary_quality_str = reduce_aliases(numeral, parsing.progression_aliases)[0]
+        secondary_quality = Quality.from_cache(name=secondary_quality_str)
+        secondary_scale = MajorScale if secondary_quality.major else MinorScale
+
+
 
     out = reduce_aliases(numeral, parsing.progression_aliases)
     assert isinstance(out[0], tuple) # an integer, quality tuple
@@ -2702,6 +2753,8 @@ parallel_scales = {Scale(p1): Scale(p2) for p1, p2 in parallel_scale_names.items
 # parallel scales are symmetric, so include the reverse mappings as well:
 parallel_scale_names.update(reverse_dict(parallel_scale_names))
 parallel_scales.update(reverse_dict(parallel_scales))
+
+
 
 
 def matching_scales(chords=None, intervals=None, major_roots=None, min_recall=0.85, min_precision=0.0,

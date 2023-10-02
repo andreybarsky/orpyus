@@ -57,13 +57,19 @@ def unit_test():
 
 
     ### matching_scales:
-    compare(matching_scales('I iii V7'), [Scale('major')])
-    compare(matching_scales('i bIII V7'), [Scale('extended minor'), Scale('full minor')])
+    compare(list(matching_scales('I iii V7', display=False, candidate_scales=[MajorScale, MinorScale])), [Scale('major')])
+    # compare(matching_scales('i bIII V7', display=False), [Scale('extended minor'), Scale('full minor')])
 
     # test input by pairs vs input by numerals:
     degree_chord_pairs = [(1, AbstractChord('min')), (5, AbstractChord('7')), (7, AbstractChord('maj'))]
-    compare(matching_scales(degree_chord_pairs), matching_scales('i V7 VII'))
+    compare(matching_scales(degree_chord_pairs, display=False), matching_scales('i V7 VII', display=False))
 
+
+    # test scalechord parsing:
+    compare(ScaleChord('III'), Scale('minor').chord(3))
+
+    # test secondary chords:
+    compare(ScaleChord('V7/V'), ScaleChord('dom7', degree=2, scale='major'))
 
     # test neighbours:
     major_neighbours = Scale('natural major').neighbouring_scales

@@ -375,14 +375,16 @@ class AbstractChord:
                     return rarity_with_5 + 1
             return max_rarity
 
-    @property
-    def likelihood(self):
+    def get_likelihood(self):
         """converse of rarity, likelihood score as a float between 0-1"""
         l_score = (10-self.rarity)/10
         # with a penalty for inversions:
         if self.inversion != 0:
             l_score -= 0.05
         return l_score
+    @property
+    def likelihood(self):
+        return self.get_likelihood()
 
     def identify_inversion(self):
         """searches all of this chord's possible inversions to see if one of them
@@ -496,6 +498,66 @@ class AbstractChord:
         new_factors = ChordFactors({f:v for f,v in self.factors.items() if f in [1,3,5]})
         return self._reinit(factors=new_factors, inversion=0)
 
+    def get_variants(self, min_likelihood=0.5, min_consonance=0.35, num_changes=1,
+                 additive=True, subtractive=True, mutative=True):
+        """retrieves variations of this chord by adding, subtracting and/or altering single factors"""
+        variant_chords = set() # set of all unfiltered variant chords to be filtered later
+        # additive modifier variants:
+        if additive:
+            unused_factors = [f for f in range(1,14) if f not in self.factors]
+            for f in unused_factors:
+                new_factors = dict(self.factors)
+                for acc in (-1, 0, 1):
+                    new_factors[f] = acc
+                    new_factors = ChordFactors(new_factors)
+                    # allow these factors if they are registered:
+                    if new_factors in factors_to_chord_names:
+                        new_chord = self._reinit(factors=new_factors, inversion=0)
+                        variant_chords.add(new_chord)
+        if subtractive:
+            droppable_factors = [f for f in self.factors if f not in (1,5)]
+            for f in droppable_factors:
+                new_factors = dict(self.factors)
+                del new_factors[f]
+                new_factors = ChordFactors(new_factors)
+                if new_factors in factors_to_chord_names:
+                    new_chord = self._reinit(factors=new_factors, inversion=0)
+                    variant_chords.add(new_chord)
+        if mutative:
+            # try moving factors up or down:
+            mutable_factors = [f for f in self.factors if f != 1]
+            for f in mutable_factors:
+                current_value = self.factors[f]
+                # try the other values for this factor:
+                possible_values = [v for v in (-1, 0, 1) if v != current_value]
+                for v in possible_values:
+                    new_factors = dict(self.factors)
+                    new_factors[f] = v
+                    new_factors = ChordFactors(new_factors)
+                    if new_factors in factors_to_chord_names:
+                        new_chord = self._reinit(factors=new_factors, inversion=0)
+                        variant_chords.add(new_chord)
+            # special case: try suspensions as well, since they are 'mutations'
+            # of the third but considered a separate degree
+            if 3 in self.factors and 2 not in self.factors:
+                new_factors = self.factors + ChordModifier('sus2')
+                if new_factors in factors_to_chord_names:
+                    new_chord = self._reinit(factors=new_factors, inversion=0)
+                    variant_chords.add(new_chord)
+            if 3 in self.factors and 4 not in self.factors:
+                new_factors = self.factors + ChordModifier('sus4')
+                if new_factors in factors_to_chord_names:
+                    new_chord = self._reinit(factors=new_factors, inversion=0)
+                    variant_chords.add(new_chord)
+        # finally: filtering step by likelihood and consonance:
+        filtered_variants = [ch for ch in variant_chords if ch.likelihood >= min_likelihood and ch.consonance >= min_consonance]
+        # sort by likelihood, then variance:
+        sorted_variants = sorted(filtered_variants, key=lambda ch: (-ch.likelihood, -ch.consonance))
+        return sorted_variants
+    @property
+    def variants(self):
+        return self.get_variants()
+
     @property
     def inversions(self):
         return self.get_inversions()
@@ -530,13 +592,13 @@ class AbstractChord:
             root_note = Note.from_cache(bass_note) - root_to_bass_interval
             return Chord.from_cache(root=root_note, factors=self.factors, inversion=self.inversion)
 
-    @property
-    def triad(self):
-        """returns the first three notes of this chord"""
-        return AbstractChord(intervals=self.intervals[:3])
+    # @property
+    # def triad(self):
+    #     """returns the first three notes of this chord"""
+    #     return AbstractChord(intervals=self.intervals[:3])
 
     @property
-    def simple_triad(self):
+    def triad(self):
         """returns the simple major or minor triad associated with this AbstractChord"""
         if self.quality.major_ish:
             return AbstractChord.from_cache('')
@@ -743,11 +805,11 @@ class AbstractChord:
 
     ### display methods:
 
-    def show(self, tuning='EADGBE'):
+    def show(self, tuning='EADGBE', **kwargs):
         """just a wrapper around the Guitar.show method, which is generic to most musical classes,
         so this method is also inherited by all Scale subclasses"""
         from .guitar import Guitar
-        Guitar(tuning).show(self)
+        Guitar(tuning).show(self, **kwargs)
     on_guitar = show # convenience alias
 
     @property
@@ -832,10 +894,7 @@ class Chord(AbstractChord):
                     (same as common musical term: "Cm, 2nd inversion" is Cm/G)
 
                 b) 'inversion_degree', the degree of the bass note.
-
-        we also accept the optional 'in_key' argument (TBI), instead of AbstractChord's 'in_scale',
-        which specifies that this Chord is to be regarded as in a specific Key,
-        affecting its sharp preference and arithmetic behaviours."""
+        """
 
         # if prefer_sharps is not given, we parse the name to see if we've been asked for it:
         if prefer_sharps is None and isinstance(name, str):
@@ -1184,11 +1243,90 @@ class Chord(AbstractChord):
     def triad(self):
         """returns the simple major or minor triad with the same root and quality as this chord"""
         if self.quality.major_ish:
-            return major_triads[self.tonic]
+            return major_triads[self.root]
         elif self.quality.minor_ish:
-            return minor_triads[self.tonic]
+            return minor_triads[self.root]
         else:
             raise Exception(f'{self} has indeterminate quality and therefore has no associated triad')
+
+    def get_adjacent_triads(self, min_likelihood=1.):
+        """find the chords that differ from this (basic triad) chord by moving one
+        of its notes up or down by a step (or a half step).
+        only searches for basic major or minor triads."""
+
+        # major_triad_notes = Chord('C').notes
+        # minor_triad_notes = Chord('Cm').notes
+        #
+        # iv_permutations = set()
+        # for triad_notes in major_triad_notes, minor_triad_notes:
+        #     for i in range(3):
+        #         for j in [x for x in range(3) if x != i]:
+        #             for k in [y for y in range(3) if y not in (i,j)]:
+        #                 print(i,j,k)
+        #                 perm = [triad_notes[h] for h in [i,j,k]]
+        #                 perm_iv = NoteList(perm).ascending_intervals()
+        #                 iv_permutations.add(perm_iv)
+
+        valid_iv_permutations = [[0,3,7],
+                                 [0,3,8],
+                                 [0,4,7],
+                                 [0,4,9],
+                                 [0,5,8],
+                                 [0,5,9],
+                                 [0,7,15],
+                                 [0,7,16],
+                                 [0,8,15],
+                                 [0,8,17],
+                                 [0,9,16],
+                                 [0,9,17]]
+        valid_iv_permutations = set([IntervalList(ivs) for ivs in valid_iv_permutations])
+
+
+        # we don't need to search notes using matching_chords or anything,
+        #  we can just enumerate the possible inversions of the major and minor triads:
+        # major_inversion_intervals = [MajorChord.intervals] + [ch.intervals for ch in MajorChord.inversions]
+        # intervals_map = {ivs:(MajorChord,i) for i,ivs in enumerate(major_inversion_intervals)}
+        # minor_inversion_intervals = [MinorChord.intervals] + [ch.intervals for ch in MinorChord.inversions]
+        # intervals_map.update({ivs:(MinorChord,i) for i,ivs in enumerate(minor_inversion_intervals)})
+
+
+        # explored_note_sets = set()
+        output_chords = []
+        triad_notes = self.triad.notes
+        for n in triad_notes:
+            # the notes that are kept steady:
+            stable_notes = [sn for sn in triad_notes if sn != n]
+            distances = [2, 1, -1, -2] # up or down by whole or half step
+            for d in distances:
+                new_note = n + d
+                if new_note not in triad_notes:
+                    new_chord_notes = NoteList(stable_notes + [new_note])
+                    # new_chord_notes_set = set(new_chord_notes)
+                    # if new_chord_notes_set not in explored_note_sets:
+                    #     explored_note_sets.add(new_chord_notes_set)
+                    # new_chord_intervals = new_chord_notes.ascending_intervals()
+                    # if new_chord_intervals in valid_iv_permutations:
+                        # print(f'This is a chord: {new_chord_intervals}')
+                    chord_matches = matching_chords(new_chord_notes, exact=True, min_likelihood=0.8, display=False)
+                    if len(chord_matches) > 1:
+                        # print(f'Multiple possible chord matches for notes {new_chord_notes}: {[ch.name for ch in chord_matches]}')
+                        valid_matches = [ch for ch in chord_matches if ch.likelihood >= min_likelihood]
+                        output_chords.extend(valid_matches)
+                    elif len(chord_matches) == 0:
+                        pass # no matches
+                        # print(f'No matches for: {new_chord_notes}')
+                    else:
+                        # print(f'    Valid chord:  {new_chord_notes}: {chord_matches[0].name}')
+                        match = chord_matches[0]
+                        if match.likelihood >= min_likelihood:
+                            output_chords.append(match)
+        return output_chords
+
+    def get_semiadjacent_triads(self):
+        """find the chords that differ from this (basic triad) chord by moving TWO
+        of its notes up or down by a step (or a half step).
+        only searches for basic major or minor triads."""
+        ... # TBI
 
     def __neg__(self):
         """returns the parallel major or minor (using negation operator '-')"""
@@ -1209,7 +1347,6 @@ class Chord(AbstractChord):
             return self.invert(0)
         else:
             return self
-
     def abstract(self):
         """return the AbstractChord that this Chord is associated with"""
         return AbstractChord.from_cache(factors=self.factors, inversion=self.inversion, assigned_name=self.assigned_name)
@@ -1654,7 +1791,10 @@ chord_name_rarities = unpack_and_reverse_dict(chord_names_by_rarity)
 chord_names_to_factors = reverse_dict(factors_to_chord_names)
 chord_names_to_intervals = reverse_dict(intervals_to_chord_names)
 
-### pre-initialised major and minor chords on each tonic:
+### pre-initialised major and minor AbstractChords:
+MajorTriad = MajorChord = AbstractChord('maj')
+MinorTriad = MinorChord = AbstractChord('min')
+### and rooted Chords on each tonic:
 major_triads = {n: Chord(n.chroma) for n in notes.major_tonics}
 minor_triads = {n: Chord(n.chroma + 'm') for n in notes.minor_tonics}
 
@@ -1730,6 +1870,9 @@ class ChordList(list):
 
     def __str__(self, brackets=True):
         # return f'𝄃{super().__repr__()}𝄂'
+        chord_names = [ch.name if ch.__class__.__name__ not in ('ScaleChord', 'KeyChord')
+                       else ch.compact_name
+                       for ch in self ]
         if brackets:
             lb, rb = self._brackets
         else:
@@ -1741,7 +1884,7 @@ class ChordList(list):
             if type(c) == AbstractChord:
                 sep_char = ' - '
                 break
-        return f'{lb}{sep_char.join([n.name for n in self])}{rb}'
+        return f'{lb}{sep_char.join(chord_names)}{rb}'
 
     def __repr__(self):
         return str(self)
@@ -1928,7 +2071,7 @@ class ChordList(list):
             guitar.standard.show_chord(ch)
     diagram = fretboard # convenience alias
 
-    def show(self, tuning='EADGBE'):
+    def show(self, tuning='EADGBE', **kwargs):
         """displays these chords on a guitar in specified tuning"""
         from . import guitar
         if tuning == 'EADGBE':
@@ -1936,7 +2079,7 @@ class ChordList(list):
         else:
             g = guitar.Guitar(tuning=tuning)
         for ch in self:
-            g.show_chord(ch)
+            g.show_chord(ch, **kwargs)
     on_guitar = show
 
 # convenience alias:
@@ -1948,10 +2091,11 @@ Chords = ChordList
 # their relative intervals are much less informative ,so we really must initialise every imaginable chord
 
 def matching_chords(notes, display=True, return_scores=False,
-                    invert=False,
+                    invert=False, exact=False,
                     search_no5s=True,
-                    # min_recall=0.9, min_precision=0.85,
-                    min_likelihood=0.5, size_cutoff=5,
+                    min_recall=0.9, min_precision=0.85,
+                    min_likelihood=0.5, min_consonance=0.35,
+                    size_cutoff=5,
                     max_results=10, **kwargs):
     # re-cast input:
     if not isinstance(notes, NoteList):
@@ -1993,12 +2137,14 @@ def matching_chords(notes, display=True, return_scores=False,
     else:
         candidate_chords = [Chord.from_cache(cn) for cn in candidate_names]
 
-    sorted_cands = sorted(candidate_chords,
+    filtered_chords = [ch for ch in candidate_chords if ch.likelihood >= min_likelihood and ch.consonance >= min_consonance]
+
+    sorted_cands = sorted(filtered_chords,
                           key=lambda c: (c.likelihood,
                                          c.consonance),
                           reverse=True)[:max_results]
 
-    if len(sorted_cands) == 0:
+    if len(sorted_cands) == 0 and not exact:
         log(f'No exact chord matches found for notes: {notes}')
         log(f'So falling back on fuzzy matching')
         return fuzzy_matching_chords(notes, display=display, invert=invert, assume_root=invert, require_root=invert,
@@ -2023,9 +2169,13 @@ def matching_chords(notes, display=True, return_scores=False,
             df.append([f'{cand._marker} {cand.name}', lb, notes_str, rb, 1.0, 1.0, f'{lik:.2f}', f'{cons:.3f}'])
         df.show(max_rows=max_results, margin=' ', **kwargs)
 
-    if return_scores:
+    elif return_scores:
         scored_cands = {c: (c.likelihood, c.consonance) for c in sorted_cands}
         return scored_cands
+
+    else:
+        # neither scores or display, just return bare list
+        return sorted_cands
 
 # old/deprecated function, but still useful if no exact matches for chords are found:
 def fuzzy_matching_chords(note_list, display=True,

@@ -472,6 +472,17 @@ class Key(Scale):
     def closely_related_keys(self):
         return self.get_closely_related_keys()
 
+    def common_notes(self, other_key):
+        if not isinstance(other_key, Key):
+            other_key = Key(other_key)
+        return NoteList([n for n in self.notes if n in self and n in other_key])
+
+    def common_chords(self, other_key):
+        if not isinstance(other_key, Key):
+            other_key = Key(other_key)
+        unkeyed_chords = [ch.unkey() for ch in self.chords()]
+        return ChordList([ch for ch in unkeyed_chords if ch in self and ch in other_key])
+
     def __invert__(self):
         """ ~ operator returns the relative major/minor of a key"""
         return self.relative
@@ -544,12 +555,36 @@ class Key(Scale):
 
     def __sub__(self, other):
         """Subtraction over Keys:
-        1. Subtraction with interval (or int) transposes onto a new tonic."""
+        1. Subtraction with interval (or int) transposes onto a new tonic.
+        2. Subtraction with Key returns the circle-of-fifths distance
+            to the other key. major-minor swap counts as 0.5. Only for natural keys."""
         if isinstance(other, (Interval, int)):
             new_tonic = self.tonic - other
             return Key(tonic=new_tonic, factors=self.factors)
+        elif isinstance(other, Key):
+            if self.is_natural() and other.is_natural():
+                if other.quality != self.quality:
+                    # switch to relative major/minor and add a half-step
+                    other = other.relative
+                    parallel_adjustment = 0.5
+                else:
+                    parallel_adjustment = 0
+
+                # distance along circle of fifths
+                key_distance = 0.
+                tonic_distance = self.tonic - other.tonic
+                while tonic_distance != 0:
+                    tonic_distance = (tonic_distance - 7) % 12
+                    key_distance += 1.
+                if key_distance > 6:
+                    key_distance = -12 + key_distance # counterclockwise distance is negative
+                    parallel_adjustment *= -1
+                return key_distance + parallel_adjustment
+            else:
+                raise Exception(f'Subtraction between Keys is only defined for natural keys')
         else:
             raise TypeError(f'Cannot subtract Key with {type(other)}')
+
 
     def __eq__(self, other):
         if isinstance(other, Key):

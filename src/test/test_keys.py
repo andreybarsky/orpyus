@@ -46,6 +46,11 @@ def unit_test():
     compare(Key('Am blues').relative, Key('C major blues'))
     compare(Key('C major blues').relative, Key('Am blues'))
 
+    # key co5 distance:
+    # commutativity:
+    compare(Key('G') - Key('C'), -(Key('C') - Key('G')))
+    # half steps:
+    compare(Key('Am') - Key('D'), 2.5)
 
     ### KeyChords:
 

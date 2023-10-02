@@ -122,7 +122,11 @@ def get_pitch(value, temperament=None):
     pitch = lower_A_pitch * step_from_A # multiply by tuning step to get desired pitch
     return pitch
 
-
+def pitch_to_bpm(hz, max_bpm=120):
+    bpm = hz * 60
+    while bpm > max_bpm:
+        bpm /= 2
+    return bpm
 
 # aliases for name-value-pitch conversion:
 v2n = value_to_name

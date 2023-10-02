@@ -633,6 +633,11 @@ def parse_chord_modifiers(mod_str, aliases=modifier_aliases, verbose=False, allo
     e.g. 7sus4add11♯5,
     recursively parse them into a list of ChordModifier objects"""
 
+    # if isinstance(mod_str, (list, tuple)) and type(mod_str[0]) is ChordModifier:
+    #     # we've been given a list of chordmodifiers instead of a string;
+    #     # we can parse it anyway by casting them to strings:
+    #     mod_str = ''.join([m.name for m in mod_str])
+
     reduced_mods = reduce_aliases(mod_str, aliases, reverse=True, include_keys=True)
     if not allow_note_names:
         if is_valid_note_name(reduced_mods[0], case_sensitive=True):

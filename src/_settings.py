@@ -52,7 +52,8 @@ MARKERS = { # class markers used to identify musical object types:
 
 
 ### BRACKETS are used similarly to markers, but placed around the objects they contain:
-BRACKETS = { 'Interval': ['‹', '›'],
+BRACKETS = {  # class-identifying brackets used for different music objects:
+             'Interval': ['‹', '›'],
          'IntervalList': ['𝄁', ' 𝄁'],
              'NoteList': ['𝄃', ' 𝄂'],
               'Quality': ['~', '~'],
@@ -63,8 +64,13 @@ BRACKETS = { 'Interval': ['‹', '›'],
           'Progression': ['𝄆 ', ' 𝄇'],    #['𝄃 ', ' 𝄂'],
      'ChordProgression': ['𝄆 ', ' 𝄇'],    # ['╟', '╢'],
                'Guitar': ['〚', ' 〛'],
+
+             # brackets used in chord, key display methods:
   'chromatic_intervals': ['[', ']'],  # displayed around chromatic intervals / scale factors
    'non_key_chord_root': ['<', '>'],  # displayed around KeyChords whose root is not in the key
+
+             # brackets used on instrument displays, e.g. guitar fretboards:
+       'fret_highlight': ['⟦', '⟧'], # used to highlight chord roots etc. on guitar fretboard
             }
 
 ### DIACRITICS are used to mark certain chord and note names like brackets, but more compactly
