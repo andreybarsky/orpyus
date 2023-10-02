@@ -1254,41 +1254,6 @@ class Chord(AbstractChord):
         of its notes up or down by a step (or a half step).
         only searches for basic major or minor triads."""
 
-        # major_triad_notes = Chord('C').notes
-        # minor_triad_notes = Chord('Cm').notes
-        #
-        # iv_permutations = set()
-        # for triad_notes in major_triad_notes, minor_triad_notes:
-        #     for i in range(3):
-        #         for j in [x for x in range(3) if x != i]:
-        #             for k in [y for y in range(3) if y not in (i,j)]:
-        #                 print(i,j,k)
-        #                 perm = [triad_notes[h] for h in [i,j,k]]
-        #                 perm_iv = NoteList(perm).ascending_intervals()
-        #                 iv_permutations.add(perm_iv)
-
-        valid_iv_permutations = [[0,3,7],
-                                 [0,3,8],
-                                 [0,4,7],
-                                 [0,4,9],
-                                 [0,5,8],
-                                 [0,5,9],
-                                 [0,7,15],
-                                 [0,7,16],
-                                 [0,8,15],
-                                 [0,8,17],
-                                 [0,9,16],
-                                 [0,9,17]]
-        valid_iv_permutations = set([IntervalList(ivs) for ivs in valid_iv_permutations])
-
-
-        # we don't need to search notes using matching_chords or anything,
-        #  we can just enumerate the possible inversions of the major and minor triads:
-        # major_inversion_intervals = [MajorChord.intervals] + [ch.intervals for ch in MajorChord.inversions]
-        # intervals_map = {ivs:(MajorChord,i) for i,ivs in enumerate(major_inversion_intervals)}
-        # minor_inversion_intervals = [MinorChord.intervals] + [ch.intervals for ch in MinorChord.inversions]
-        # intervals_map.update({ivs:(MinorChord,i) for i,ivs in enumerate(minor_inversion_intervals)})
-
 
         # explored_note_sets = set()
         output_chords = []
@@ -1301,12 +1266,6 @@ class Chord(AbstractChord):
                 new_note = n + d
                 if new_note not in triad_notes:
                     new_chord_notes = NoteList(stable_notes + [new_note])
-                    # new_chord_notes_set = set(new_chord_notes)
-                    # if new_chord_notes_set not in explored_note_sets:
-                    #     explored_note_sets.add(new_chord_notes_set)
-                    # new_chord_intervals = new_chord_notes.ascending_intervals()
-                    # if new_chord_intervals in valid_iv_permutations:
-                        # print(f'This is a chord: {new_chord_intervals}')
                     chord_matches = matching_chords(new_chord_notes, exact=True, min_likelihood=0.8, display=False)
                     if len(chord_matches) > 1:
                         # print(f'Multiple possible chord matches for notes {new_chord_notes}: {[ch.name for ch in chord_matches]}')
