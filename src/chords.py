@@ -1,12 +1,12 @@
 from .notes import Note, NoteList
 from .intervals import Interval, IntervalList, P5, default_degree_intervals
-from .util import log, precision_recall, rotate_list, check_all, reverse_dict, unpack_and_reverse_dict, reduce_aliases
+from .util import log, precision_recall, rotate_list, check_all, all_equal, sign, reverse_dict, unpack_and_reverse_dict, reduce_aliases
 from .qualities import Quality, ChordModifier, parse_chord_modifiers
 from .parsing import sh, fl, nat
 from . import notes, parsing, qualities, tuning, _settings
 
 from collections import defaultdict, UserDict, Counter
-from itertools import permutations
+import itertools
 
 ################################################################################
 
@@ -967,7 +967,7 @@ class Chord(AbstractChord):
         if not self._is_registered() and self.assigned_name is not None:
             log(f'Registering chord with factors {self.factors} as assigned name: {self.assigned_name}')
             self._register()
-            log(f'Confirmed registration: {self._is_registered()} (as: {self.name})')
+            # log(f'Confirmed registration: {self._is_registered()} (as: {self.name})')
 
 
     @staticmethod
@@ -1249,37 +1249,123 @@ class Chord(AbstractChord):
         else:
             raise Exception(f'{self} has indeterminate quality and therefore has no associated triad')
 
-    def get_adjacent_triads(self, min_likelihood=1.):
-        """find the chords that differ from this (basic triad) chord by moving one
+    def get_adjacent_chords(self, num_notes=1, distances=[2,1,0,-1,-2], # i.e. up or down by whole or half step
+                            # filters for types of motion: (relevant for num_notes > 1)
+                            parallel=True, similar=True, contrary=True, oblique=True,
+                            # filters for resulting chords:
+                            min_likelihood=1., min_consonance=0.35,
+                            whitelist=['dim'], blacklist=['sus2', 'sus4'],
+                            require_different_root=False):
+        """find the chords that differ from this chord by moving one
         of its notes up or down by a step (or a half step).
-        only searches for basic major or minor triads."""
-
+        if require_different_root is True, only returns those chords that have a different root to this one.
+            (e.g. filter out Cm when coming from C)"""
 
         # explored_note_sets = set()
         output_chords = []
-        triad_notes = self.triad.notes
-        for n in triad_notes:
-            # the notes that are kept steady:
-            stable_notes = [sn for sn in triad_notes if sn != n]
-            distances = [2, 1, -1, -2] # up or down by whole or half step
-            for d in distances:
-                new_note = n + d
-                if new_note not in triad_notes:
-                    new_chord_notes = NoteList(stable_notes + [new_note])
-                    chord_matches = matching_chords(new_chord_notes, exact=True, min_likelihood=0.8, display=False)
+        # loop through N-sized permutations of the notes in this chord:
+        replacement_permutations = list(itertools.permutations(range(len(self)), num_notes)) # list of tuples of note indices
+        # print(f'Possible replacement permutations: {",".join([str(r) for r in replacement_permutations])}')
+        # import ipdb; ipdb.set_trace()
+        for rep_idxs in replacement_permutations:
+            # print(f' Trying replacement permutation: {rep_idxs}')
+            stable_idxs = [j for j in range(len(self)) if j not in rep_idxs]
+
+            # which notes do stay stable, and which are replaced:
+            rep_notes = [self.notes[i] for i in rep_idxs]
+            stable_notes = [self.notes[j] for j in stable_idxs]
+
+            distance_permutations = list(itertools.product(distances, repeat=num_notes))
+            # log(f'  Possible distance permutations: {",".join([str(d) for d in distance_permutations])}')
+            # loop through all possible ways of shifting those notes:
+            for rep_dists in distance_permutations:
+                if (not oblique) and 0 in rep_dists:
+                    # log(f'  {rep_dists} filtered because: oblique')
+                    continue
+                if (not parallel) and all_equal(rep_dists):
+                    # log(f'  {rep_dists} filtered because: parallel')
+                    continue
+                nonzero_dists = [d for d in rep_dists if d != 0]
+                dist_directions = [sign(d) for d in nonzero_dists]
+                if (not similar):
+                    if all_equal(dist_directions) and not all_equal(nonzero_dists):
+                        # log(f'  {rep_dists} filtered because: similar')
+                        continue
+                if (not contrary):
+                    if not all_equal(dist_directions):
+                        # log(f'  {rep_dists} filtered because: contrary')
+                        continue
+
+                # log(f'   Trying distance permutation: {rep_dists}')
+
+                new_notes = [n + d for n,d in zip(rep_notes, rep_dists)]
+                # check if any of the new notes have landed on an existing note:
+                valid_replacement = True
+                for i, n in enumerate(new_notes):
+                    other_new_notes = [new_notes[j] for j in range(num_notes) if j!=i]
+                    num_overlaps = 0
+                    if n in other_new_notes:
+                        valid_replacement = False
+                        log(f'-   Considered replacing {rep_notes} with {new_notes}, to make {stable_notes + new_notes}')
+                        log(f'-   But replacement discarded: {n} clashes with other replacements {other_new_notes}')
+                        break
+                    elif n in self.notes: # (or if the same note is repeated)
+                        num_overlaps += 1
+                        # print(f'-   Considered replacing {rep_notes} with {new_notes}, to make {stable_notes + new_notes}')
+                        # print(f'-   But replacement discarded: clashes with {self.notes} or contains repeats')
+                        # break
+                if num_overlaps == num_notes:
+                    valid_replacement = False
+                    log(f'-   Considered replacing {rep_notes} with {new_notes}, to make {stable_notes + new_notes}')
+                    log(f'-   But replacement discarded: overlaps exactly with {self.notes}')
+
+                if valid_replacement:
+                    # these notes have been shifted and form a new chord that is not the original
+                    new_chord_notes = NoteList(stable_notes + new_notes)
+                    chord_matches = matching_chords(new_chord_notes, exact=True, invert=False,
+                                        min_likelihood=min_likelihood, min_consonance=min_consonance,
+                                        whitelist=whitelist, blacklist=blacklist, display=False)
                     if len(chord_matches) > 1:
-                        # print(f'Multiple possible chord matches for notes {new_chord_notes}: {[ch.name for ch in chord_matches]}')
-                        valid_matches = [ch for ch in chord_matches if ch.likelihood >= min_likelihood]
-                        output_chords.extend(valid_matches)
+                        log(f'++    Multiple possible chord matches for notes {new_chord_notes}: {[ch.name for ch in chord_matches]}')
+                        # valid_matches = [ch for ch in chord_matches if ch.likelihood >= min_likelihood]
+                        # output_chords.extend(chord_matches)
                     elif len(chord_matches) == 0:
                         pass # no matches
                         # print(f'No matches for: {new_chord_notes}')
                     else:
-                        # print(f'    Valid chord:  {new_chord_notes}: {chord_matches[0].name}')
-                        match = chord_matches[0]
-                        if match.likelihood >= min_likelihood:
-                            output_chords.append(match)
+                        log(f'==    Valid chord:  {new_chord_notes}: {chord_matches[0].name}')
+                        # match = chord_matches[0]
+                            # output_chords.append(match)
+                    for chord in chord_matches:
+                        # filter out chords with the same root if asked for:
+                        if (chord.root != self.root) or (not require_different_root):
+                            # and avoid adding the same chord twice:
+                            if chord not in output_chords:
+                                output_chords.append(chord)
         return output_chords
+
+        # for n in triad_notes:
+        #     # the notes that are kept steady:
+        #     stable_notes = [sn for sn in triad_notes if sn != n]
+        #     distances = [2, 1, -1, -2] # up or down by whole or half step
+        #     for d in distances:
+        #         new_note = n + d
+        #         if new_note not in triad_notes:
+        #             new_chord_notes = NoteList(stable_notes + [new_note])
+        #             chord_matches = matching_chords(new_chord_notes, exact=True, min_likelihood=0.8, display=False)
+        #             if len(chord_matches) > 1:
+        #                 # print(f'Multiple possible chord matches for notes {new_chord_notes}: {[ch.name for ch in chord_matches]}')
+        #                 valid_matches = [ch for ch in chord_matches if ch.likelihood >= min_likelihood]
+        #                 output_chords.extend(valid_matches)
+        #             elif len(chord_matches) == 0:
+        #                 pass # no matches
+        #                 # print(f'No matches for: {new_chord_notes}')
+        #             else:
+        #                 # print(f'    Valid chord:  {new_chord_notes}: {chord_matches[0].name}')
+        #                 match = chord_matches[0]
+        #                 if match.likelihood >= min_likelihood:
+        #                     output_chords.append(match)
+        # return output_chords
 
     def get_semiadjacent_triads(self):
         """find the chords that differ from this (basic triad) chord by moving TWO
@@ -2054,7 +2140,8 @@ def matching_chords(notes, display=True, return_scores=False,
                     search_no5s=True,
                     min_recall=0.9, min_precision=0.85,
                     min_likelihood=0.5, min_consonance=0.35,
-                    size_cutoff=5,
+                    allow_fuzzy=True, size_cutoff=5,
+                    whitelist=None, blacklist=None,
                     max_results=10, **kwargs):
     # re-cast input:
     if not isinstance(notes, NoteList):
@@ -2062,19 +2149,22 @@ def matching_chords(notes, display=True, return_scores=False,
 
     # for chords with 5(?) notes or less, we can efficiently search all their permutations:
     if len(notes) <= size_cutoff:
-        note_permutations = [NoteList(ns) for ns in permutations(notes)]
+        note_permutations = [NoteList(ns) for ns in itertools.permutations(notes)]
         interval_permutations = [nl.ascending_intervals() for nl in note_permutations]
     else:
         # # otherwise we'll search only the inversions instead of all permutations
         # #  which is faster but less complete:
         # note_permutations = [notes.rotate(i) for i in range(len(notes))]
         # interval_permutations = {notes[i]: note_permutations[i].ascending_intervals() for i in range(len(notes))}
-        log(f'{len(notes)} is too many for exact permutation searching')
-        log(f'So falling back on fuzzy matching')
-        if 'require_root' not in kwargs:
-            kwargs['require_root'] = invert
-        return fuzzy_matching_chords(notes, display=display, invert=invert, assume_root=invert, # require_root=invert,
-                                     min_likelihood=min_likelihood, max_results=max_results, **kwargs)
+        print(f'{len(notes)} is too many for exact permutation searching')
+        if not exact:
+            print(f'So falling back on fuzzy matching')
+            if 'require_root' not in kwargs:
+                kwargs['require_root'] = invert
+            return fuzzy_matching_chords(notes, display=display, invert=invert, assume_root=invert, # require_root=invert,
+                                         min_likelihood=min_likelihood, max_results=max_results, **kwargs)
+        else:
+            raise Exception(f'Set exact=False for notelists exceeding size_cutoff, or set size_cutoff higher than {size_cutoff}')
 
 
     candidate_names = []
@@ -2096,18 +2186,37 @@ def matching_chords(notes, display=True, return_scores=False,
     else:
         candidate_chords = [Chord.from_cache(cn) for cn in candidate_names]
 
-    filtered_chords = [ch for ch in candidate_chords if ch.likelihood >= min_likelihood and ch.consonance >= min_consonance]
+    # filter chords by likelihood, consonance, and blacklist/whitelist
+    if whitelist is None:
+        whitelist_factors = []
+    else:
+        whitelist_factors = [AbstractChord(w).factors if type(w) is not AbstractChord else w.factors for w in whitelist]
+    if blacklist is None:
+        blacklist_factors = []
+    else:
+        blacklist_factors = [AbstractChord(b).factors if type(b) is not AbstractChord else b.factors for b in blacklist]
+
+    filtered_chords = [ch for ch in candidate_chords
+                        if (ch.likelihood >= min_likelihood
+                            and ch.consonance >= min_consonance
+                            and ch.factors not in blacklist_factors)
+                        or ch.factors in whitelist_factors]
 
     sorted_cands = sorted(filtered_chords,
                           key=lambda c: (c.likelihood,
                                          c.consonance),
                           reverse=True)[:max_results]
 
-    if len(sorted_cands) == 0 and not exact:
-        log(f'No exact chord matches found for notes: {notes}')
-        log(f'So falling back on fuzzy matching')
-        return fuzzy_matching_chords(notes, display=display, invert=invert, assume_root=invert, require_root=invert,
-                                     min_likelihood=min_likelihood, max_results=max_results, **kwargs)
+    if len(sorted_cands) == 0:
+        if not exact:
+            print(f'No exact chord matches found for notes: {notes}')
+            print(f'So falling back on fuzzy matching')
+            return fuzzy_matching_chords(notes, display=display, invert=invert, assume_root=invert, require_root=invert,
+                                         min_likelihood=min_likelihood, whitelist=whitelist, blacklist=blacklist,
+                                         max_results=max_results, **kwargs)
+        else:
+            # return or display the zero exact matches we have
+            pass
 
     # otherwise, we have found at least one perfect match, so display the results:
     if display:
@@ -2140,7 +2249,8 @@ def matching_chords(notes, display=True, return_scores=False,
 def fuzzy_matching_chords(note_list, display=True,
                     assume_root=False, require_root=False, invert=False,
                     upweight_third=True, downweight_fifth=True,
-                    min_recall=0.8, min_precision=0.7, min_likelihood=0.5,
+                    min_recall=0.8, min_precision=0.7, min_likelihood=0.5, min_consonance=0.25,
+                    whitelist=None, blacklist=None, # overrides likl/cons filters, but not rec/prec filters
                     max_results=8, **kwargs):
     """from an unordered set of notes, return a dict of candidate chords that could match those notes.
     we make no assumptions about the note list, except in the case of assume_root, where we slightly
@@ -2169,6 +2279,15 @@ def fuzzy_matching_chords(note_list, display=True,
         prefer_sharps = input_sharps > input_flats
         log(f'Decided to prefer sharps: {prefer_sharps}')
 
+    # filter chords by likelihood, consonance, and blacklist/whitelist; figure out those filtering factors here
+    if whitelist is None:
+        whitelist_factors = []
+    else:
+        whitelist_factors = [AbstractChord(w).factors if type(w) is not AbstractChord else w.factors for w in whitelist]
+    if blacklist is None:
+        blacklist_factors = []
+    else:
+        blacklist_factors = [AbstractChord(b).factors if type(b) is not AbstractChord else b.factors for b in blacklist]
 
     candidates = {} # we'll build a list of Chord object candidates as we go
     # keying candidate chord objs to (rec, prec, likelihood, consonance) tuples
@@ -2212,11 +2331,13 @@ def fuzzy_matching_chords(note_list, display=True,
                     precision, recall = scores['precision'], scores['recall']
                     consonance = candidate.consonance # float from ~0.4 to ~0.9, in principle
 
-                    if recall >= min_recall and precision >= min_precision and likelihood >= min_likelihood:
-                        candidates[candidate] = {   'recall': round(recall,    2),
-                                                 'precision': round(precision, 2),
-                                                'likelihood': round(likelihood,2),
-                                                'consonance': round(consonance,3)}
+                    if recall >= min_recall and precision >= min_precision:
+                        if (likelihood >= min_likelihood and consonance >= min_consonance) or (candidate.factors in whitelist_factors):
+                            if candidate.factors not in blacklist_factors:
+                                candidates[candidate] = {   'recall': round(recall,    2),
+                                                         'precision': round(precision, 2),
+                                                        'likelihood': round(likelihood,2),
+                                                        'consonance': round(consonance,3)}
 
     # return sorted candidates dict:
     sorted_cands = sorted(candidates,
@@ -2263,7 +2384,7 @@ def most_likely_chord(note_list, stats=False, **kwargs):
     for kwarg in ['min_precision', 'min_recall', 'min_likelihood']:
         if kwarg not in kwargs:
             kwargs[kwarg] = 0.0
-    candidates = matching_chords(note_list, return_scores=True, display=False, **kwargs)
+    candidates = fuzzy_matching_chords(note_list, return_scores=True, display=False, **kwargs)
     if len(candidates) > 0:
         best_match = list(candidates.keys())[0]
         match_params = candidates[best_match]

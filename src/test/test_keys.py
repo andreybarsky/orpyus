@@ -57,6 +57,11 @@ def unit_test():
     compare(Key('C').chord(2).to_key('G'), Chord('Am'))
     compare(Key('C').chord(2).abstract(), Scale('major').chord(2))
 
+    # key extensions:
+
+    compare(Key('C').extended_contains('D'), False)
+    compare(Key('C').extended_contains('Fm'), True)
+    compare(Key('C').extended_contains('Gm'), True)
 
     # matching_keys(['C', Chord('F'), 'G7', 'Bdim'], upweight_pentatonics=False)
     #

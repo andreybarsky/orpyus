@@ -272,6 +272,25 @@ def check_all(iterable, check, comparison):
             raise Exception(f"invalid check arg ({check}) to assert_all, must be one of: 'isinstance', '==, 'is', 'type_is', 'is_in'")
     return True
 
+def all_equal(iterable):
+    """returns True if all elements in the iterable evaluate as equal to each other.
+    (assumes commutativity of the equality operation)"""
+    prev_item = None
+    for item in iterable:
+        if prev_item is not None and item != prev_item:
+            return False
+        prev_item = item
+    return True
+
+def sign(value:int):
+    """returns 1 for a positive value, -1 for a negative value, and 0 for 0"""
+    if value == 0:
+        return 0
+    elif value > 0:
+        return 1
+    else:
+        return -1
+
 def transpose_nested_list(nested_list):
     """Given a list of lists (of equal length), or other iterables like strings,
       which represent values across separate rows, returns a list of lists

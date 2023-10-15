@@ -87,6 +87,8 @@ DIACRITICS = { 'ScaleDegree': '\u0311', # caret above integer (a common conventi
                'interval_not_in_input': '\u0332',  # underline
                'chord_in_related_scale': '\u0323', # dot below
                'chord_not_in_scale': '\u0332', # underline
+
+               'chromatic': '\u0368', # diacritic 'c' above
                }
 
 SCALE_MARKS = { # near natural major:

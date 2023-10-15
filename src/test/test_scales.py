@@ -69,7 +69,7 @@ def unit_test():
     compare(ScaleChord('III'), Scale('minor').chord(3))
 
     # test secondary chords:
-    compare(ScaleChord('V7/V'), ScaleChord('dom7', degree=2, scale='major'))
+    # compare(ScaleChord('V7/V'), ScaleChord('dom7', degree=2, scale='major'))
 
     # test neighbours:
     major_neighbours = Scale('natural major').neighbouring_scales

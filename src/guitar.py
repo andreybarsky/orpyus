@@ -222,7 +222,7 @@ class Guitar:
         and shows the resulting fret diagram"""
         sounded_notes = self.fret(frets)
         print(f'Sounded notes: {sounded_notes}')
-        sounded_chord = self.most_likely_chord(frets)
+        sounded_chord = self.most_likely_chord(frets, assume_root=True)
         print(f'Detected chord: {sounded_chord}')
 
         # construct Fretboard object for display:
@@ -328,17 +328,22 @@ class Guitar:
         if isinstance(chord, str):
             chord = Chord(chord, prefer_sharps=('#' in chord) if preserve_accidental else None)
 
+        # how much space to leave for intervals:
+        interval_space = 2 if max(chord.factors) < 10 else 3
+        # and for notes: leave 2 chars if any non-natural notes are in the chord, else 1
+        note_space = 2 if (sum([not n.is_natural() for n in chord.notes]) > 0) else 1
+
         #### determine cell values:
         root_locs = self.locate_note(chord.root, min_fret=min_fret, max_fret=max_fret)
         cells = {}
         # loop across all the notes in chord, find all their locations:
         for iv, note in zip(chord.intervals, chord.notes):
             if intervals_only:
-                cell_val = iv.factor_name
+                cell_val = f'{iv.factor_name:>{interval_space}}'
             elif notes_only:
-                cell_val = note.name
+                cell_val = f'{note.name:<2}'
             else: # both
-                cell_val = f'{iv.factor_name:>3}:{note.name}'
+                cell_val = f'{iv.factor_name:>{interval_space}}:{note.name:<2}'
             note_cells = {loc: cell_val for loc in self.locate_note(note, min_fret=min_fret, max_fret=max_fret)}
             cells.update(note_cells)
 
@@ -347,9 +352,10 @@ class Guitar:
             # determine how much space to leave for note names on index, by seeing if tuned strings contain accidentals:
             note_space = 2 if self.tuning_is_natural() else 3
 
+
             if intervals_only:
                 # replace note with interval on index labels as well
-                index = [f'{(chord.factor_intervals[chord.note_factors[string.note]].factor_name):>3}'
+                index = [f'{(chord.factor_intervals[chord.note_factors[string.note]].factor_name):>{interval_space}}'
                          if string.note in chord.notes
                          else ' '*3
                          for string in self.tuned_strings ]
@@ -359,7 +365,7 @@ class Guitar:
                          else ' '*note_space
                          for string in self.tuned_strings ]
             else: # notes AND intervals:
-                index = [f'{(chord.factor_intervals[chord.note_factors[string.note]].factor_name):>3}:{string.chroma:<{note_space}}'
+                index = [f'{(chord.factor_intervals[chord.note_factors[string.note]].factor_name):>{interval_space}}:{string.chroma:<{note_space}}'
                          if string.note in chord.notes
                          else ' '*(3+note_space)
                          for string in self.tuned_strings ]
@@ -462,7 +468,7 @@ class Guitar:
             title = str(ac)
             self.show_chord(c, fret_labels=False, show_index=False, min_fret=4, max_fret=16, fret_size=6, intervals_only=True, title=title, **kwargs)
 
-    def show_chord_progression(self, progression, end_fret=13, **kwargs):
+    def show_chord_progression(self, progression, max_fret=13, **kwargs):
         from src.progressions import ChordProgression
         # try casting to ChordProgression type if it is not one:
         if type(progression) != ChordProgression:
@@ -471,10 +477,11 @@ class Guitar:
         if 'fret_size' not in kwargs:
             kwargs['fret_size'] = 6
         print(f'{progression} on tuning:{self.name}')
-        for numeral, chord in zip(progression.as_numerals(sep=None), progression.chords):
-            # title=f'\n{numeral} Chord: {chord}'
-            title = str(chord)
-            self.show_chord(chord, title=title, end_fret=end_fret, **kwargs)
+        for i, (numeral, chord) in enumerate(zip(progression.as_numerals(sep=None), progression.chords)):
+            # title=f'\n{chord.simple_numeral}: {chord.chord_name}'
+            # title = f'\n{i+1}: {chord}'
+            title = f'\n  {chord}'
+            self.show_chord(chord, title=title, max_fret=max_fret, **kwargs)
 
     def show(self, obj, *args, **kwargs):
         """wrapper around the show_note, show_chord, show_key etc. methods.

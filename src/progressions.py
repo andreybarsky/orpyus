@@ -531,7 +531,7 @@ class ChordProgression(Progression): # , ChordList):
         #### transposition
         if isinstance(other, (int, Interval)):
             new_key = self.key + other
-            print(f'- Transposed to {new_key}')
+            log(f'- Transposing {self} to {new_key}')
             return self.in_key(new_key)
         elif isinstance(other, str):
             # check if a roman numeral:
@@ -801,13 +801,19 @@ class ChordProgression(Progression): # , ChordList):
         chromatic_notes = notes.chromatic_sharp_notes if self.key.prefer_sharps else notes.chromatic_flat_notes
         disp_df = DataFrame(['Chord', '', ''] + [f'{n.chroma:<2}' for n in chromatic_notes])
         for r in range(voice_table.num_rows):
-            margin = [self.chords[r].chord_name, self.chords[r].mod_numeral, ' | ']
+            # margin = [self.chords[r].chord_name, self.chords[r].mod_numeral, ' | ']
+            margin = [voice_table.row_labels[r], self.chords[r].mod_numeral, ' | ']
             # pretty_row = ['+' if cell==1 else ' ' for cell in voice_table.rows[r]]
             df_row = margin + voice_table.rows[r]
             disp_df.append(df_row)
         disp_df.show()
 
-    def suggest_chromatic_lines(self, allowed_breaks=1, min_length=4, min_likelihood=0.35, min_consonance=0.3):
+    def suggest_chromatic_lines(self, allowed_breaks=1,
+                                # line parameters:
+                                min_length=4,
+                                # chord parameters:
+                                diatonic=True, min_likelihood=0.35, min_consonance=0.3):
+
         lines, proposed_lines, voice_table = self.find_chromatic_lines(allowed_breaks=allowed_breaks, min_length=3, _return_table=True, disp=False)
         finalised_proposed_lines = {}
         chromatic_notes = notes.chromatic_sharp_notes if self.key.prefer_sharps else notes.chromatic_flat_notes
@@ -833,10 +839,14 @@ class ChordProgression(Progression): # , ChordList):
                     start_chord_num = str(start_row+1) + parsing.num_suffixes[start_row+1]
                     a_an = 'an' if absent_note.chroma[0] in 'AEF' else 'a' # english grammar rules
                     if new_chord.likelihood >= min_likelihood and new_chord.consonance >= min_consonance:
-                        print(f'Try changing {modified_chord_num} chord ({Chord._marker}{chord_to_modify.chord_name}) by adding {a_an} {absent_note} to make it: {Chord._marker}{new_chord.chord_name}')
-                        print(f'    which would add a {dir_name} chromatic line (of size {len(line_contents)}) starting on {start_chord_num} chord ({Chord._marker}{start_chord.chord_name})')
-                        print(f'        that goes: {line_notes}')
-                        finalised_proposed_lines[line_start] = line_contents
+                        if (new_chord in self.key) or (not diatonic): # keep diatonic unless asked not to
+                            print(f'Try changing {modified_chord_num} chord ({Chord._marker}{chord_to_modify.chord_name}) by adding {a_an} {absent_note} to make it: {Chord._marker}{new_chord.chord_name}')
+                            print(f'    which would add a {dir_name} chromatic line (of size {len(line_contents)}) starting on {start_chord_num} chord ({Chord._marker}{start_chord.chord_name})')
+                            print(f'        that goes: {line_notes}')
+                            finalised_proposed_lines[line_start] = line_contents
+                            voice_table.row_labels[absent_row] = f'{chord_to_modify.chord_name} ({new_chord.chord_name})'
+                        else:
+                            print(f'{Chord._marker}{new_chord} would work to replace {modified_chord_num} chord {Chord._marker}{chord_to_modify}, but is not diatonic to key')
                     else:
                         log(f'Chord change to {new_chord} discarded as it is too obscure: likelihood {new_chord.likelihood}, consonance {new_chord.consonance}')
                 else:
@@ -856,7 +866,7 @@ class ChordProgression(Progression): # , ChordList):
             transp_prog = self + i
             is_easy = True
             for chord in transp_prog.chords:
-                if chord not in easy_chords:
+                if (chord not in easy_chords) and (len(chord) > 2): # dyad chords are always easy
                     is_easy = False
                     break
             if is_easy:
@@ -865,17 +875,22 @@ class ChordProgression(Progression): # , ChordList):
                     return transp_prog
                 playable_progressions.append(transp_prog)
         if return_all:
+            print(f'{len(playable_progressions)} possible guitar transpositions for chords: {self.chords}')
             return playable_progressions
         else:
+            print(f'No guitar transposition found for chords: {self.chords}')
             return None
 
-    def find_key(self, chords, candidate_scales = scales.natural_scales + scales.extended_scales,
+    def find_key(self, chords=None,
+                candidate_scales = scales.natural_scales + scales.extended_scales,
+                contract_extended_scales = True,
                 pad_with_tonic=False, verbose=False):
         """wraps around matching_keys but additionally uses cadence information to distinguish between competing candidates"""
 
         prev_verbosity = log.verbose
         # log.verbose=verbose
-
+        if chords is None:
+            chords = self.chords
 
         log(f'Searching for keys of {chords} with default parameters')
         matches = matching_keys(chords=chords, min_likelihood=0.7, min_recall=0.95, candidate_scales=candidate_scales,
@@ -981,7 +996,7 @@ class ChordProgression(Progression): # , ChordList):
             print(f'Determining key for ChordProgression: {chords}')
             print(f'    Best guess: {key}')
 
-            if key.is_extended():
+            if key.is_extended() and (contract_extended_scales):
                 print(f'     (contracted to {key.contraction})')
                 key = key.contraction
 
@@ -1456,11 +1471,11 @@ common_progressions = {
     Progression('I  IV   vi   V'): '1465', # more than a feeling, 1985, mr brightside,
                                        # shut up and dance, what makes you beautiful
 
-
     Progression('I  vi   IV   V'  ) : '50s', # aka doo-wop
     Progression('I  vi   ii   V  ') : 'blue moon',
     Progression('vi V    IV   III') : 'andalusian',
     Progression('i ♭VII ♭VI   V'  ) : 'andalusian minor',
+    Progression('I ♭VII ♭VI  ♭VII') : 'aeolian vamp', # all along the watchtower, stairway to heaven, my heart will go on
     Progression('vi IV   V    I'  ) : 'komuro',
 
     Progression('ii⁷ V⁷  Iᐞ⁷ V⁷') : 'jazz turnaround',
@@ -1516,18 +1531,6 @@ for prog_dict, rot_dict in zip([common_progressions, simple_progressions], [rota
 # rotated_simple_progressions = {p.simplify(): name for p,name in rotated_common_progressions.items()}
 
 common_progressions_by_name = reverse_dict(common_progressions)
-
-# just some songs I'm practicing:
-house_of_the_rising_sun = ChordProgression('Am C D F Am E Am E')
-assert house_of_the_rising_sun.key == Key('Am')
-cant_find_my_way_home = ChordProgression('G, D/F#, Dm/F, A, C, D, A')
-assert cant_find_my_way_home.key == Key('A')
-hollow = ChordProgression('A6 - Cmaj7#11 - Emadd9')
-assert hollow.key == Key('Em')
-would_you_go_with_me = ChordProgression('E C#m B E B A')
-assert would_you_go_with_me.key == Key('E')
-your_man = ChordProgression('C G D G') - 1 # josh turner again
-assert your_man.key == Key('Gb')
 
 # guitar-playable variants of the common progressions:
 def guitar_progressions():

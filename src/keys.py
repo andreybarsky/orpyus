@@ -520,7 +520,7 @@ class Key(Scale):
             return item in self.intervals
         elif isinstance(item, Note):
             return item in self.notes
-        elif type(item) is Chord:
+        elif type(item) in (Chord, KeyChord):
             # chord is 'in' this Key if all of its notes are:
             for note in item.notes:
                 if note not in self.notes:
@@ -543,6 +543,18 @@ class Key(Scale):
 
         else:
             raise TypeError(f'Key.__contains__ not defined for items of type: {type(item)}')
+
+    def extended_contains(self, chord):
+        """returns True if a given chord is in this scale or any of its extensions"""
+        if not isinstance(chord, Chord):
+            chord = Chord(chord)
+
+        if chord in self:
+            return True
+        for ext_key in self.extensions:
+            if chord in ext_key:
+                return True
+        return False
 
     def __add__(self, other):
         """Addition defined over Keys:
@@ -757,6 +769,9 @@ class KeyChord(Chord, ScaleChord):
         # ### compact repr for KeyChord class
         # mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
         # return f'{self._marker}{self.short_name} ({mod_numeral})'
+
+    def _register(self):
+        pass # KeyChords are not registered
 
     def __repr__(self):
         # in_str = 'not ' if not self.in_scale else ''
@@ -1053,24 +1068,44 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_
         # show degrees as columns
         longest_scale_len = max([len(s) for s in sorted_scores]) if len(sorted_scores) > 0 else 7
         scale_degrees = [ScaleDegree(n) for n in range(1, longest_scale_len+1)]
-        degs_str = '  '.join([f'{str(d)}' for d in scale_degrees])
+        # degs_str = '  '.join([f'{str(d)}' for d in scale_degrees])
+        ## degs_str removed because it plays havoc with extended scales
+        degs_str = 'Notes'
 
-        df = DataFrame(['Key', '', degs_str, '', 'Miss.', 'Rec.', 'Prec.', 'Likl.', 'Cons.'])
+        df = DataFrame(['  Key', '', degs_str, '', 'Miss.', 'Rec.', 'Prec.', 'Likl.', 'Cons.'])
         for cand, scores in sorted_scores.items():
             # scores = candidate_chords[cand]
             lik, cons = cand.likelihood, cand.consonance
             rec, prec = scores['recall'], scores['precision']
             # # take right bracket off the notelist and add it as its own column:
             # lb, rb = cand.notes._brackets
-            # display notes, but mark the ones that aren't in the input:
-            out = _settings.DIACRITICS['note_not_in_input']
+
             cand_note_in_input = [(n in input_notes) for n in cand.notes]
-            cand_notes_strs = [f'{n.name:2}' if cand_note_in_input[i] else f"{''.join([f'{nc}{out}' for nc in n.name]):{2+len(n.name)}}" for i,n in enumerate(cand.notes)]
-            notes_str = ' '.join(cand_notes_strs)
+            cand_note_is_chromatic = [(n in cand.chromatic_notes) for n in cand.notes]
+
+            # we'll add chromatic markers to the first char of each note name
+            # but to do that we first set up the list of the chromatic char if it exists
+            # for each note in teh sequence
+            chrom = _settings.DIACRITICS['chromatic']
+            chrom_markers = [chrom if cand_note_is_chromatic[i] else '' for i in range(len(cand.notes))]
+
+            # then combine that with the out-of-input diacritic in this list copm:
+            ooi = _settings.DIACRITICS['note_not_in_input']
+            ooi_notes = [f'{(note.name[0] + c + note.name[1:]):{2+len(c)}}' # chromatic diacritic goes between the first char, and the rest of the chars
+                            if cand_note_in_input[i] # plain note name
+                         else f"{note.name[0] + c + ooi + ''.join([f'{nc}{ooi}' for nc in note.name[1:]]):{2+len(note.name) + len(c)}}"
+                         # else f"{(c + ''.join([f'{nc}{ooi}' for nc in note.name])):{2+len(note.name) + len(c)}}" # add diacritic to note name
+                         for i,(note,c) in enumerate(zip(cand.notes, chrom_markers))]
+            # add brackets around chromatic notes:
+            # clb, crb = _settings.BRACKETS['chromatic_intervals']
+            # cand_notes_strs = [f' {note_name:>{2+len(note_name)}}' if not cand_note_is_chromatic[i] # plain note name (maybe with diacritic)
+            #                    else f'{(clb + note_name + crb):>{3+len(note_name)}}'   # brackets around chromatic notes
+            #                    for i,note_name in enumerate(cand_notes_strs)]
+            notes_str = ' '.join(ooi_notes)
             missing_notes = [n for n in input_notes if n not in cand.notes]
             missing_notes_str = ' '.join([f'{n.name:2}' for n in missing_notes]) if len(missing_notes) > 0 else ''
             # notes_str = (f'{cand.__repr__()}'.split(rb)[0]).split(lb)[-1].replace(Note._marker, '')
-            df.append([f'{cand._marker} {cand.name}', ' '+nlb,
+            df.append([f'{cand._marker}{cand.name}', ' '+nlb,
                         notes_str, nrb[-1], missing_notes_str,
                         f'{rec:.2f}', f'{prec:.2f}', f'{lik:.2f}', f'{cons:.3f}'])
         df.show(max_rows=max_results, margin=' ', **kwargs)

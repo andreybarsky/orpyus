@@ -1901,12 +1901,16 @@ class ScaleChord(AbstractChord):
                 self.scale_factor = []
                 self.root_in_scale = False
                 self.notes_in_scale = False
+            else:
+                raise Exception('fatal flow error')
         elif factor is not None:
             assert degree is None, f"ScaleChord received clashing factor/degree args"
             assert isinstance(factor, int), f"ScaleChord only understands integer factors, not {type(factor)}"
             self.scale_factor = factor
             self.scale_degree = scale.factor_degrees[factor]
             self.root_in_scale = True
+        else:
+            raise Exception('fatal flow error')
 
         if self.root_in_scale:
             self.notes_in_scale = scale.contains_degree_chord(degree, self)
@@ -1923,7 +1927,6 @@ class ScaleChord(AbstractChord):
         return abs_chord.in_scale(scale, degree=deg)
 
     @staticmethod
-
     def from_cache(scale, degree, order=3):
         # efficient scalechord init by cache lookup of scales and their degrees:
         assert type(scale) is Scale
@@ -2147,6 +2150,9 @@ class ScaleChord(AbstractChord):
         ### compact repr for ScaleChord class since it turns up in markov models etc. a lot:
         # mod_numeral = self.get_numeral(modifiers=True, marks=False, diacritics=False)
         return f'{self._marker}{self.mod_numeral}'
+
+    def _register(self):
+        pass # ScaleChords are not registered
 
     def __repr__(self):
         # in_str = 'not ' if not self.in_scale else ''
