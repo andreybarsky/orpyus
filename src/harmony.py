@@ -291,8 +291,6 @@ class HarmonicDataModel:
         self.attributions = {} # dict that keys (antecedent, subsequent) pairs to the names of those pairs in the data
 
 
-
-
         ### idea: extra flags to allow replacement of chords with substitutions, secondaries, tritones etc.
     def populate_with_progressions(self, progression_names, simplify=True):
         """accepts a dataset dict that keys Progression objects to informative names,
@@ -436,14 +434,11 @@ class HarmonicDataModel:
         else:
             print(f'\nContinuations for {lb}{progression.numerals} - ...{rb} :')
 
-
-
         ranked_conts = sorted(list(continuation_probabilities.keys()), key=lambda x: -continuation_probabilities[x])
 
         prob_threshold = 0.1
         num_conts = len(ranked_conts)
         conts_below_threshold = [c for c in ranked_conts if continuation_probabilities[c] < prob_threshold]
-
 
         for cont in ranked_conts:
             # display output:
@@ -489,17 +484,7 @@ class HarmonicDataModel:
         print('    ' + ', '.join(low_prob_strs))
 
 
-                # for prog_name, datapoint_weight in expl_counter.items():
-                #     print(f'            {prog_name} ( with weight = {datapoint_weight})')
 
-            # total_expl_weight = sum(sub_explanation.values())
-            # explanation_probabilities = {expl: round(w / total_expl_weight, 2)
-            #                               for expl,w in cont_explanation.items()}
-            #
-            # ranked_explanations = sorted(list(explanation_probabilities.keys()), key=lambda x: -explanation_probabilities[x])
-            # for expl in ranked_explanations:
-            #     expl_percent = f'{int(explanation_probabilities[expl] * 100)}%'
-            #     print(f'        {expl_percent}: {expl}')
 
 common_major_model = HarmonicDataModel('major')
 common_major_model.populate_with_progressions(common_progressions)
@@ -516,7 +501,6 @@ default_harmonic_models = {NaturalMajor: common_major_model,
 # # MajorHarmonicModel = HarmonicModel(NaturalMajor, degree_functions)
 #
 
-p = Progression('I visus4 IV')
 
 # attempt autocompletion:
 p = Progression('I V')
