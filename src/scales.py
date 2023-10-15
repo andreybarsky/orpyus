@@ -1,7 +1,7 @@
 from .intervals import *
 # from scales import interval_scale_names, key_name_intervals
 from .util import ModDict, rotate_list, reverse_dict, reverse_mod_dict, unpack_and_reverse_dict, numeral_subscript, reduce_aliases, check_all, log, precision_recall_scores
-from .chords import Factors, AbstractChord, Chord, ChordList, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
+from .chords import Factors, AbstractChord, Chord, ChordFactors, ChordList, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
 from .qualities import ChordModifier, Quality, Maj, Min, Dim, minor_mod, dim_mod, parse_chord_modifiers
 from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental, sh, fl
 from .display import chord_table
@@ -1930,7 +1930,10 @@ class ScaleChord(AbstractChord):
     def from_cache(scale, degree, order=3):
         # efficient scalechord init by cache lookup of scales and their degrees:
         assert type(scale) is Scale
-        degree = int(degree)
+        if degree != int(degree):
+            raise Exception('TBI error (fractional scaledegrees)')
+        else:
+            degree = int(degree)
 
         if (scale, degree, order) in cached_scale_chords:
             return cached_scale_chords[(scale, degree, order)]
@@ -2125,9 +2128,9 @@ class ScaleChord(AbstractChord):
         for chords that contain a 3rd, always in root position. if this chord is indeterminate,
         we use the simple triad on this scaledegree instead."""
         if not self.quality.perfect:
-            return AbstractChord.simplify(self)
-            # new_factors = ChordFactors({f:v for f,v in self.factors.items() if f in [1,3,5]})
-            # return self._reinit(factors=new_factors, inversion=0)
+            # return AbstractChord.simplify(self)
+            new_factors = ChordFactors({f:v for f,v in self.factors.items() if f in [1,3,5]})
+            return self._reinit(factors=new_factors, inversion=0)
         else:
             return self.scale_triad
 

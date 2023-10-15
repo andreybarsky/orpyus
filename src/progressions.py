@@ -218,7 +218,7 @@ class Progression:
     def analysis(self):
         return self.analyse(display=True, ret=False)
 
-    def as_numerals(self, sep=' ', modifiers=True, marks=default_marks, diacritics=default_diacs):
+    def to_numerals(self, sep=' ', modifiers=True, marks=default_marks, diacritics=default_diacs):
         """returns this Progression's representation in roman numeral form
         with respect to its Scale"""
 
@@ -230,15 +230,20 @@ class Progression:
         else:
             # just return the raw list, instead of a sep-connected string
             return numerals
-    get_numerals = as_numerals # convenience alias
+    get_numerals = as_numerals = to_numerals # convenience aliases
     @property
     def numerals(self):
-        return self.as_numerals()
+        return self.to_numerals()
+
+    @property
+    def mod_numerals(self):
+        """upper/lowercase numerals with chord type modifiers like 7, sus4, etc."""
+        return self.to_numerals(sep=None, modifiers=True, marks=False, diacritics=False)
 
     @property
     def simple_numerals(self):
         """just raw upper/lowercase numerals, no modifiers or diacritics etc."""
-        return self.as_numerals(sep=None, marks=False, diacritics=False, modifiers=False)
+        return self.to_numerals(sep=None, marks=False, diacritics=False, modifiers=False)
 
     def in_key(self, key, **kwargs):
         """returns a ChordProgression with these chords over a specified Key object"""
@@ -281,7 +286,7 @@ class Progression:
         """finds a nice key for playing these chords easily on guitar,
         with respect to guitar.standard_open_chord_names,
         by reverse-inheriting the ChordProgression method of the same name"""
-        return self.on_tonic('C').transpose_for_guitar(*args, **kwargs)
+        return self.on_tonic('Bb').transpose_for_guitar(*args, **kwargs)
 
     def __getitem__(self, i):
         return self.chords[i]
@@ -294,7 +299,7 @@ class Progression:
         if 'natural' in scale_name:
             scale_name = scale_name.replace('natural ', '')
         lb, rb = self._brackets
-        return f'Progression:  {lb}{self.as_numerals(marks=marks, diacritics=diacritics)}{rb}  (in {scale_name})'
+        return f'Progression:  {lb}{self.to_numerals(marks=marks, diacritics=diacritics)}{rb}  (in {scale_name})'
 
     def __repr__(self):
         return str(self)
@@ -324,14 +329,14 @@ class Progression:
             #                     for r in new_root_degrees]
             # return Progression(new_root_degrees, chords=self.chords, scale=self.scale)
         if isinstance(other, str): # add a new chord (as roman numeral)
-            new_numerals = self.numerals + [other]
+            new_numerals = self.mod_numerals + [other]
             return Progression(new_numerals, scale=self.scale)
         elif isinstance(other, (list, tuple)): # add new chords as list of roman numeral strings
             assert check_all(other, 'isinstance', 'str'), f"Progression got added with list/tuple, expected to loop over roman numeral strings but got: {type(other[0])}"
-            new_numerals = self.numerals + list(other)
+            new_numerals = self.mod_numerals + list(other)
             return Progression(new_numerals, scale=self.scale)
         elif isinstance(other, Progression): # concatenate two progressions
-            new_numerals = self.numerals + other.numerals
+            new_numerals = self.mod_numerals + other.mod_numerals
             new_chords = self.chords + other.chords
             return Progression(new_numerals, chords=new_chords, scale=self.scale)
 
@@ -356,6 +361,14 @@ class Progression:
         that starts on integer index 'start' and ends just before integer index 'stop'"""
         new_chords = self.chords[start:stop]
         return self.__class__(new_chords)
+
+    # progression completion logic:
+    def complete(self, model=None):
+        if model is None:
+            from src.harmony import default_harmonic_models
+            # get the default model for this progression's scale:
+            model = default_harmonic_models[self.scale]
+        model.complete(self)
 
     _brackets = _settings.BRACKETS['Progression']
 
@@ -536,7 +549,7 @@ class ChordProgression(Progression): # , ChordList):
         elif isinstance(other, str):
             # check if a roman numeral:
             if other.upper() in roman_numerals:
-                new_numerals = self.numerals + [other]
+                new_numerals = self.mod_numerals + [other]
                 return Progression(new_numerals, scale=self.scale).in_key(self.key)
             else:
                 # assume this is a string that casts to Chord
@@ -550,7 +563,7 @@ class ChordProgression(Progression): # , ChordList):
         elif isinstance(other, (list, tuple)):
             # if the first item is a numeral, assume the rest are numerals:
             if other[0].upper() in roman_numerals:
-                new_numerals = self.numerals + list(other)
+                new_numerals = self.mod_numerals + list(other)
                 return Progression(new_numerals, scale=self.scale).in_key(self.key)
             else:
                 # assume these are Chords, or strings that cast to Chords
@@ -558,7 +571,7 @@ class ChordProgression(Progression): # , ChordList):
                 return ChordProgression(new_chords, key=self.key)
 
         elif isinstance(other, Progression):
-            new_numerals = self.numerals + other.numerals
+            new_numerals = self.mod_numerals + other.mod_numerals
             return Progression(new_numerals, scale=self.key.scale).in_key(self.key)
 
         else:
@@ -591,11 +604,11 @@ class ChordProgression(Progression): # , ChordList):
         # numerals = self.as_numerals()
         # chord_names = ' '.join([c.short_name for c in self.chords])
         lb, rb = self._brackets
-        return f'{self.chords}  or  {lb}{self.as_numerals()}{rb}  (in {self.key.name})'
+        return f'{self.chords}  or  {lb}{self.to_numerals()}{rb}  (in {self.key.name})'
 
     def __str__(self, marks=default_marks, diacritics=default_diacs, chords_only=False, degrees_only=False):
         lb, rb = self._brackets
-        numerals = self.as_numerals(marks=marks, diacritics=diacritics, sep='@')
+        numerals = self.to_numerals(marks=marks, diacritics=diacritics, sep='@')
         split_numerals = numerals.split('@')
         # chord_name_list = [ch.compact_name for ch in self.chords]
         num_chords = zip(split_numerals, self.chords)
@@ -611,7 +624,7 @@ class ChordProgression(Progression): # , ChordList):
     def __repr__(self, marks=default_marks, diacritics=default_diacs):
         """ChordProgression repr comes out as a table
         with chords above and scale degrees below"""
-        numerals = self.as_numerals(marks=marks, diacritics=diacritics, sep='@')
+        numerals = self.to_numerals(marks=marks, diacritics=diacritics, sep='@')
         split_numerals = numerals.split('@')
         chord_names = [ch.chord_name for ch in self.chords]
         from src.display import DataFrame
@@ -1463,9 +1476,9 @@ common_progressions = {
 
     Progression('I  V    vi   IV' ) : 'axis',
     # rotations of the axis progression:
-    Progression('vi IV   I    V'  ) : 'aeolian axis', #
-    Progression('IV I    V    vi' ): 'lydian axis', # umbrella, higher love, boulevard of broken dreams, alejandro
-                                                    # what's my age again, dragostea din tei, elastic heart, stacy's mom
+    # Progression('vi IV   I    V'  ) : 'aeolian axis', #
+    # Progression('IV I    V    vi' ): 'lydian axis', # umbrella, higher love, boulevard of broken dreams, alejandro
+    #                                                 # what's my age again, dragostea din tei, elastic heart, stacy's mom
 
     Progression('I  V   ♭VII  IV' ) : 'deceptive axis',
     Progression('I  IV   vi   V'): '1465', # more than a feeling, 1985, mr brightside,
@@ -1476,7 +1489,7 @@ common_progressions = {
     Progression('vi V    IV   III') : 'andalusian',
     Progression('i ♭VII ♭VI   V'  ) : 'andalusian minor',
     Progression('I ♭VII ♭VI  ♭VII') : 'aeolian vamp', # all along the watchtower, stairway to heaven, my heart will go on
-    Progression('vi IV   V    I'  ) : 'komuro',
+    # Progression('vi IV   V    I'  ) : 'komuro', # rotation
 
     Progression('ii⁷ V⁷  Iᐞ⁷ V⁷') : 'jazz turnaround',
     Progression('Iᐞ⁷ vi⁷ ii⁷ V⁷') : 'rhythm changes',
@@ -1509,8 +1522,8 @@ common_progressions = {
     Progression('I   V⁷  i VII III VII i V⁷ i'): 'folia',
     Progression('III VII i V   III VII i V  i'): 'romanesca',
     Progression('i   VII i V   III VII i V  i'): 'passamezzo antico',
-    Progression('i   VII i V'                 ): 'passamezzo antico (first phrase)',
-    Progression('               III VII i V i'): 'passamezzo antico (second phrase)',
+    # Progression('i   VII i V'                 ): 'passamezzo antico (first phrase)',
+    # Progression('               III VII i V i'): 'passamezzo antico (second phrase)',
     }
 
 simple_progressions = {p.simplify(): name for p,name in common_progressions.items()}

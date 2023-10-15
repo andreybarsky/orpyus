@@ -2,9 +2,10 @@
 
 from .chords import AbstractChord, Chord
 from .scales import Scale, NaturalMajor, NaturalMinor, HarmonicMinor, ScaleChord
-from .progressions import Progression
+from .keys import Key, KeyChord
+from .progressions import Progression, ChordProgression, common_progressions
 from .util import unpack_and_reverse_dict, euclidean_gcd, log
-
+from collections import Counter
 
 function_names = {'T': 'tonic',
                   'ST': 'subtonic',
@@ -275,6 +276,239 @@ special_movements_functions =   {('VII', 'III'): ('ST', 'TP'), # sole function o
 
 
 
+class HarmonicDataModel:
+    """a type of harmonic model that is populated by scraping a database,
+    either of rooted ChordProgressions or of abstract numeral Progressions,
+    and explains its predictions by attribution to the database"""
+    def __init__(self, scale, memory=3):
+
+        if not isinstance(scale, Scale):
+            scale = Scale(scale)
+        self.scale = scale
+        self.memory = memory
+
+        self.continuations = Counter() # dict that keys
+        self.attributions = {} # dict that keys (antecedent, subsequent) pairs to the names of those pairs in the data
+
+
+
+
+        ### idea: extra flags to allow replacement of chords with substitutions, secondaries, tritones etc.
+    def populate_with_progressions(self, progression_names, simplify=True):
+        """accepts a dataset dict that keys Progression objects to informative names,
+        populates the self.continuations and self.attributions dicts
+        according to that data"""
+
+        continuations_by_length = {l: {} for l in range(1, self.memory+1)}
+        attributions = {}
+
+        for progression, prog_name in progression_names.items():
+            if progression.scale != self.scale:
+                print(f'\nProgression not in {self.scale}, ignoring ({prog_name})')
+                continue
+
+            print(f'\nProcessing progression {prog_name}: {progression}')
+
+            # memory can't be higher than the length of the progression:
+            prog_memory = min([self.memory, len(progression)])
+
+            for start in range(len(progression)):
+                # end_range = range(start+2, start+memory+1)
+                for end in range(start+2, start+prog_memory+2):
+                    # loop through end of progression back to start if needed:
+                    chord_idxs = [i % len(progression) for i in range(start, end)]
+
+                    seq_length = end-start
+                    if (seq_length-1) <= prog_memory:
+                        print(f'  processing subset from {start}-{end % len(progression)} (length={end-start})')
+                        continuations = continuations_by_length[seq_length-1] # dict object of antecedent-subsequent pairs
+
+                        # for i in chord_idxs:
+                        #     assert progression.chords[i].scale == self.scale
+
+                        if simplify:
+                            # use basic, unmodified numerals (i.e. V7 becomes V, but IV and iv stay IV and iv)
+                            chord_sublist = [progression.chords[i].simple_numeral for i in chord_idxs]
+                        else:
+                            # use modified numerals instead
+                            chord_sublist =  [progression.chords[i].mod_numeral for i in chord_idxs]
+
+                        antecedents = tuple(chord_sublist[:-1])
+                        subsequent = chord_sublist[-1]
+                        # assert len(antecedents) > 0
+                        # assert len(antecedents) == seq_length-1
+
+                        # update model:
+                        if antecedents not in continuations:
+                            continuations[antecedents] = Counter() # counter for each antecedent
+                        continuations[antecedents].update((subsequent,))
+                        print(f'    updated counter: {continuations[antecedents]}')
+
+                        # update attributions:
+                        seq_pair = (antecedents, subsequent)
+                        if seq_pair not in attributions:
+                            # attributions[seq_pair] = Counter()
+                            attributions[seq_pair] = []
+                        print(f'      associating {prog_name} with sequence: {antecedents} -> {subsequent}')
+                        # attributions[seq_pair].update((prog_name,))
+                        attributions[seq_pair].append(prog_name)
+
+        self.continuations = continuations_by_length
+        self.attributions = attributions
+
+    def populate_with_chordprogressions(self, chordprogression_names):
+        pass # TBI (requires robust key-finding)
+
+    def complete(self, progression, simplify=False, rooted=False):
+        if not isinstance(progression, Progression):
+            progression = Progression(progression, scale=self.scale)
+        else:
+            if progression.scale != self.scale:
+                print(f'== WARNING: Progression scale ({progression.scale}) does not match model scale {self.scale} == ')
+
+
+        possible_continuation_weights = Counter() # dict linking suggestions to logits
+        explanations = {} # dict linking suggestions to counters of attributions
+
+        end_idx = len(progression)
+
+        # memory can't be higher than the length of the progression:
+        prog_memory = min([self.memory, len(progression)])
+        # loop through the length of the progression in descending order,
+        # up to the limit of memory::
+        for start_idx in range(end_idx -1, end_idx -prog_memory -1, -1):
+            # are there any continuations of this length in the model?
+            seq_range = range(start_idx, end_idx)
+            log(f'seq range: {list(seq_range)}')
+            ante_len = len(seq_range)
+            if ante_len in self.continuations:
+
+                ante_chords = [progression.chords[i] for i in seq_range]
+                if simplify:
+                    ante_numerals = [ch.simple_numeral for ch in ante_chords]
+                else:
+                    ante_numerals = [ch.mod_numeral for ch in ante_chords]
+                log(f'  {ante_len} : {ante_numerals}')
+
+                # find matches in dataset:
+                ante_key = tuple(ante_numerals)
+                relevant_continuations = self.continuations[ante_len]
+                if ante_key in relevant_continuations:
+                    possible_subsequents = relevant_continuations[ante_key]
+                    log('    ' + str(possible_subsequents))
+                    # loop over each possible continuation and its weight in the dataset:
+                    for sub, weight in possible_subsequents.items():
+                        # augment weight by the length of this subsequence
+                        # (since more precise matches are more likely)
+                        aug_factor = ante_len
+                        aug_weight = weight * aug_factor
+                        possible_continuation_weights.update({sub: aug_weight})
+
+                        # and get the attributions:
+                        attr_key = (ante_key, sub)
+                        attrs = self.attributions[attr_key] # set of prog name strings
+                        log(f'      with data from: {attrs}')
+                        weighted_attrs = {attr: aug_factor for attr in attrs}
+                        # each of these contributes explanatory power based on the aug factor:
+                        if sub not in explanations:
+                            explanations[sub] = {}
+                        sub_explanations = explanations[sub]
+                        if ante_key not in sub_explanations:
+                            sub_explanations[ante_key] = Counter()
+
+                        sub_explanations[ante_key].update(weighted_attrs)
+
+                else:
+                    log(f'   no datapoints for subsequence: {ante_key}')
+
+
+
+        # convert logits to probabilities:
+        total_cont_weight = sum(possible_continuation_weights.values())
+        continuation_probabilities = {cont: round(w / total_cont_weight, 2)
+                                      for cont,w in possible_continuation_weights.items()}
+
+        lb, rb = progression._brackets
+
+        if isinstance(progression, ChordProgression):
+            # cont_str = Chord._marker + ScaleChord(cont, scale=progression.key.scale).in_key(progression.key).short_name
+            print(f'\nContinuations for {lb}{str(progression.chords)[2:-2]} - ...{rb} :')
+        else:
+            print(f'\nContinuations for {lb}{progression.numerals} - ...{rb} :')
+
+
+
+        ranked_conts = sorted(list(continuation_probabilities.keys()), key=lambda x: -continuation_probabilities[x])
+
+        prob_threshold = 0.1
+        num_conts = len(ranked_conts)
+        conts_below_threshold = [c for c in ranked_conts if continuation_probabilities[c] < prob_threshold]
+
+
+        for cont in ranked_conts:
+            # display output:
+            prob = continuation_probabilities[cont]
+            if prob > prob_threshold:
+                percent = f'{int(continuation_probabilities[cont] * 100)}%'
+
+                if isinstance(progression, ChordProgression):
+                    # resulting_prog_str = f'{lb}{"-".join([ch.chord_name for ch in (progression + cont)])}{rb}'
+                    cont_str = Chord._marker + ScaleChord(cont, scale=progression.key.scale).in_key(progression.key).short_name
+                    resulting_prog_str = f'{lb}{" - ".join([ch.short_name for ch in (progression + cont)])}{rb}'
+                else:
+                    cont_str = AbstractChord._marker + cont
+                    resulting_prog_str = f'{lb}{" - ".join((progression + cont).mod_numerals)}{rb}'
+                print(f'\n{percent} : {cont_str}    (to make: {resulting_prog_str})')
+
+                # explain reasoning:
+                print(f'    because:')
+                sub_explanation = explanations[cont]
+                already_mentioned = set() # to ensure we don't list the same prog twice
+                # explanation_antes = sub_explanation.keys() # counter of progression name strings
+                for ante_key, expl_counter in list(sub_explanation.items())[::-1]: # from longest to shortest
+                    prog_names = [name for name in expl_counter.keys() if name not in already_mentioned]
+                    ante_str = '-'.join(ante_key)
+                    if len(prog_names) <= 5:
+                        progs_str = ', '.join(prog_names) # progression names
+                        if len(progs_str) > 0:
+                            print(f'        [ {ante_str} ] to [ {cont} ] is seen in: {progs_str}')
+                            already_mentioned.update(prog_names)
+                    else:
+                        num_others = len(prog_names) - 4
+                        prog_names = list(prog_names)[:4]
+                        already_mentioned.update(prog_names)
+                        progs_str = ', '.join(prog_names) # just the first four
+                        print(f'        [ {ante_str} ] to [ {cont} ] is seen in: {progs_str}, and {num_others} others')
+        print(f'\nand other continuations with low probability:')
+
+        if isinstance(progression, ChordProgression):
+            chord_names = [Chord._marker + ScaleChord(cont, scale=progression.key.scale).in_key(progression.key).short_name for cont in conts_below_threshold]
+        else:
+            chord_names = conts_below_threshold
+        low_prob_strs = [f'{cname} ({int(continuation_probabilities[cont] * 100)}%)' for cname, c in zip(chord_names, conts_below_threshold)]
+        print('    ' + ', '.join(low_prob_strs))
+
+
+                # for prog_name, datapoint_weight in expl_counter.items():
+                #     print(f'            {prog_name} ( with weight = {datapoint_weight})')
+
+            # total_expl_weight = sum(sub_explanation.values())
+            # explanation_probabilities = {expl: round(w / total_expl_weight, 2)
+            #                               for expl,w in cont_explanation.items()}
+            #
+            # ranked_explanations = sorted(list(explanation_probabilities.keys()), key=lambda x: -explanation_probabilities[x])
+            # for expl in ranked_explanations:
+            #     expl_percent = f'{int(explanation_probabilities[expl] * 100)}%'
+            #     print(f'        {expl_percent}: {expl}')
+
+common_major_model = HarmonicDataModel('major')
+common_major_model.populate_with_progressions(common_progressions)
+
+common_minor_model = HarmonicDataModel('minor')
+common_minor_model.populate_with_progressions(common_progressions)
+
+default_harmonic_models = {NaturalMajor: common_major_model,
+                           NaturalMinor: common_minor_model}
 
 # major_model = HarmonicModel(NaturalMajor, major_function_degrees, major_function_subsequents,
 #                             exceptions=major_special_movements)
@@ -283,3 +517,7 @@ special_movements_functions =   {('VII', 'III'): ('ST', 'TP'), # sole function o
 #
 
 p = Progression('I visus4 IV')
+
+# attempt autocompletion:
+p = Progression('I V')
+common_major_model.complete(p)
