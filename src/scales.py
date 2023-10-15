@@ -2120,6 +2120,17 @@ class ScaleChord(AbstractChord):
             key = self.scale.on_tonic(tonic_note)
             return KeyChord(root=root_note, factors=self.factors, inversion=self.inversion, key=key, degree=self.scale_degree)
 
+    def simplify(self):
+        """returns the simplest version of this ScaleChord, which is a major or minor triad
+        for chords that contain a 3rd, always in root position. if this chord is indeterminate,
+        we use the simple triad on this scaledegree instead."""
+        if not self.quality.perfect:
+            return AbstractChord.simplify(self)
+            # new_factors = ChordFactors({f:v for f,v in self.factors.items() if f in [1,3,5]})
+            # return self._reinit(factors=new_factors, inversion=0)
+        else:
+            return self.scale_triad
+
     @property
     def scale_triad(self):
         """as Chord.simplify(), but always simplifies to the parent scale's respective triad on this degree"""
