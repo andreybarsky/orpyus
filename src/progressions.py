@@ -363,12 +363,15 @@ class Progression:
         return self.__class__(new_chords)
 
     # progression completion logic:
-    def complete(self, model=None):
+    def complete(self, model=None, display=True):
         if model is None:
             from src.harmony import default_harmonic_models
             # get the default model for this progression's scale:
             model = default_harmonic_models[self.scale]
-        model.complete(self)
+        if display:
+            model.complete(self, display=True)
+        else:
+            return model.complete(self, display=False)
 
     _brackets = _settings.BRACKETS['Progression']
 
@@ -1475,10 +1478,6 @@ common_progressions = {
     Progression('I ii iii IV V') : '12345',
 
     Progression('I  V    vi   IV' ) : 'axis',
-    # rotations of the axis progression:
-    # Progression('vi IV   I    V'  ) : 'aeolian axis', #
-    # Progression('IV I    V    vi' ): 'lydian axis', # umbrella, higher love, boulevard of broken dreams, alejandro
-    #                                                 # what's my age again, dragostea din tei, elastic heart, stacy's mom
 
     Progression('I  V   ♭VII  IV' ) : 'deceptive axis',
     Progression('I  IV   vi   V'): '1465', # more than a feeling, 1985, mr brightside,
@@ -1524,6 +1523,11 @@ common_progressions = {
     Progression('i   VII i V   III VII i V  i'): 'passamezzo antico',
     # Progression('i   VII i V'                 ): 'passamezzo antico (first phrase)',
     # Progression('               III VII i V i'): 'passamezzo antico (second phrase)',
+
+    # modal progressions:
+    Progression('I bVII IV', scale='mixolydian'): 'common mixolydian',
+    Progression('I II', scale='lydian'): 'lydian intro',
+
     }
 
 simple_progressions = {p.simplify(): name for p,name in common_progressions.items()}

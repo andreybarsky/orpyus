@@ -14,8 +14,13 @@ function_names = {'T': 'tonic',
                   'SD': 'subdominant', # same thing
                   'D': 'dominant'}
 
-### HarmonicModel class not intended to be user-facing; used instead to define major/minor markov models and harmonic functions
+
 class HarmonicModel:
+    # parent class for different harmonic model types
+    pass
+
+### HarmonicModel class not intended to be user-facing; used instead to define major/minor markov models and harmonic functions
+class HarmonicFunctionModel(HarmonicModel):
     def __init__(self, scale, function_degrees, ordered_functions,
                               function_subsequents,
                               special_movements_functions=None):
@@ -209,7 +214,7 @@ class HarmonicModel:
 
 ###### major:
 
-BasicMajorModel = HarmonicModel(  # basic tonic - subdominant - dominant model
+BasicMajorModel = HarmonicFunctionModel(  # basic tonic - subdominant - dominant model
                        scale = NaturalMajor,
             function_degrees = { 'T' : ['I', 'iii'],
                                  'PD': ['IV', 'ii',  'vi'],
@@ -226,7 +231,7 @@ special_movements_functions =  { ('IV','I'): ('PD', 'T'), # plagal cadence
                                },
                                )
 
-ClassicalMajorModel = HarmonicModel(  # slightly more sophisticated theoretical model
+ClassicalMajorModel = HarmonicFunctionModel(  # slightly more sophisticated theoretical model
                                       # with more classical-style formalisation of movement within degrees
                        scale = NaturalMajor,
             function_degrees = { 'T' : ['I'],
@@ -249,7 +254,7 @@ special_movements_functions =   {('IV','I'): ('TP', 'T'), # plagal cadence
                             )
 
 
-ClassicalMinorModel = HarmonicModel(  # extension of classical major model to minor key
+ClassicalMinorModel = HarmonicFunctionModel(  # extension of classical major model to minor key
                        scale = HarmonicMinor,
             function_degrees = { 'T' : ['i'],
                                  'ST': ['VII'], # minor-specific subtonic
@@ -274,22 +279,20 @@ special_movements_functions =   {('VII', 'III'): ('ST', 'TP'), # sole function o
                             )
 
 
-
-
-class HarmonicDataModel:
+class HarmonicDataModel(HarmonicModel):
     """a type of harmonic model that is populated by scraping a database,
     either of rooted ChordProgressions or of abstract numeral Progressions,
     and explains its predictions by attribution to the database"""
-    def __init__(self, scale, memory=3):
+    def __init__(self, scale, progressions, memory=3):
 
         if not isinstance(scale, Scale):
             scale = Scale(scale)
         self.scale = scale
         self.memory = memory
 
-        self.continuations = Counter() # dict that keys
-        self.attributions = {} # dict that keys (antecedent, subsequent) pairs to the names of those pairs in the data
-
+        self.populate_with_progressions(progressions)
+        # sets self.continuations and self.attributions,
+        # the core attributes of the model
 
         ### idea: extra flags to allow replacement of chords with substitutions, secondaries, tritones etc.
     def populate_with_progressions(self, progression_names, simplify=True):
@@ -333,8 +336,6 @@ class HarmonicDataModel:
 
                         antecedents = tuple(chord_sublist[:-1])
                         subsequent = chord_sublist[-1]
-                        # assert len(antecedents) > 0
-                        # assert len(antecedents) == seq_length-1
 
                         # update model:
                         if antecedents not in continuations:
@@ -357,13 +358,12 @@ class HarmonicDataModel:
     def populate_with_chordprogressions(self, chordprogression_names):
         pass # TBI (requires robust key-finding)
 
-    def complete(self, progression, simplify=False, rooted=False):
+    def complete(self, progression, simplify=False, display=True):
         if not isinstance(progression, Progression):
             progression = Progression(progression, scale=self.scale)
         else:
             if progression.scale != self.scale:
                 print(f'== WARNING: Progression scale ({progression.scale}) does not match model scale {self.scale} == ')
-
 
         possible_continuation_weights = Counter() # dict linking suggestions to logits
         explanations = {} # dict linking suggestions to counters of attributions
@@ -426,71 +426,146 @@ class HarmonicDataModel:
         continuation_probabilities = {cont: round(w / total_cont_weight, 2)
                                       for cont,w in possible_continuation_weights.items()}
 
-        lb, rb = progression._brackets
+        if not display:
+            # just return the dict of scores
+            return continuation_probabilities
 
-        if isinstance(progression, ChordProgression):
-            # cont_str = Chord._marker + ScaleChord(cont, scale=progression.key.scale).in_key(progression.key).short_name
-            print(f'\nContinuations for {lb}{str(progression.chords)[2:-2]} - ...{rb} :')
         else:
-            print(f'\nContinuations for {lb}{progression.numerals} - ...{rb} :')
+            lb, rb = progression._brackets
 
-        ranked_conts = sorted(list(continuation_probabilities.keys()), key=lambda x: -continuation_probabilities[x])
+            if isinstance(progression, ChordProgression):
+                # cont_str = Chord._marker + ScaleChord(cont, scale=progression.key.scale).in_key(progression.key).short_name
+                print(f'\nContinuations for {lb}{str(progression.chords)[2:-2]} ...{rb} :')
+            else:
+                print(f'\nContinuations for {lb}{progression.numerals} - ...{rb} :')
 
-        prob_threshold = 0.1
-        num_conts = len(ranked_conts)
-        conts_below_threshold = [c for c in ranked_conts if continuation_probabilities[c] < prob_threshold]
+            ranked_conts = sorted(list(continuation_probabilities.keys()), key=lambda x: -continuation_probabilities[x])
 
-        for cont in ranked_conts:
-            # display output:
-            prob = continuation_probabilities[cont]
-            if prob > prob_threshold:
-                percent = f'{int(continuation_probabilities[cont] * 100)}%'
+            prob_threshold = 0.1
+            num_conts = len(ranked_conts)
+            conts_below_threshold = [c for c in ranked_conts if continuation_probabilities[c] < prob_threshold]
 
-                if isinstance(progression, ChordProgression):
-                    # resulting_prog_str = f'{lb}{"-".join([ch.chord_name for ch in (progression + cont)])}{rb}'
-                    cont_str = Chord._marker + ScaleChord(cont, scale=progression.key.scale).in_key(progression.key).short_name
-                    resulting_prog_str = f'{lb}{" - ".join([ch.short_name for ch in (progression + cont)])}{rb}'
-                else:
-                    cont_str = AbstractChord._marker + cont
-                    resulting_prog_str = f'{lb}{" - ".join((progression + cont).mod_numerals)}{rb}'
-                print(f'\n{percent} : {cont_str}    (to make: {resulting_prog_str})')
+            for cont in ranked_conts:
+                # display output, one suggestion at a time:
+                prob = continuation_probabilities[cont]
+                if prob > prob_threshold:
+                    percent = f'{int(continuation_probabilities[cont] * 100)}%'
 
-                # explain reasoning:
-                print(f'    because:')
-                sub_explanation = explanations[cont]
-                already_mentioned = set() # to ensure we don't list the same prog twice
-                # explanation_antes = sub_explanation.keys() # counter of progression name strings
-                for ante_key, expl_counter in list(sub_explanation.items())[::-1]: # from longest to shortest
-                    prog_names = [name for name in expl_counter.keys() if name not in already_mentioned]
-                    ante_str = '-'.join(ante_key)
-                    if len(prog_names) <= 5:
-                        progs_str = ', '.join(prog_names) # progression names
-                        if len(progs_str) > 0:
-                            print(f'        [ {ante_str} ] to [ {cont} ] is seen in: {progs_str}')
-                            already_mentioned.update(prog_names)
+                    if isinstance(progression, ChordProgression):
+                        # resulting_prog_str = f'{lb}{"-".join([ch.chord_name for ch in (progression + cont)])}{rb}'
+                        cont_str = Chord._marker + ScaleChord(cont, scale=progression.key.scale).in_key(progression.key).short_name
+                        resulting_prog_str = f'{lb}{" - ".join([ch.short_name for ch in (progression + cont)])}{rb}'
                     else:
-                        num_others = len(prog_names) - 4
-                        prog_names = list(prog_names)[:4]
-                        already_mentioned.update(prog_names)
-                        progs_str = ', '.join(prog_names) # just the first four
-                        print(f'        [ {ante_str} ] to [ {cont} ] is seen in: {progs_str}, and {num_others} others')
-        print(f'\nand other continuations with low probability:')
+                        cont_str = AbstractChord._marker + cont
+                        resulting_prog_str = f'{lb}{" - ".join((progression + cont).mod_numerals)}{rb}'
+                    print(f'\n{percent} : {cont_str}    (to make: {resulting_prog_str})')
 
-        if isinstance(progression, ChordProgression):
-            chord_names = [Chord._marker + ScaleChord(cont, scale=progression.key.scale).in_key(progression.key).short_name for cont in conts_below_threshold]
-        else:
-            chord_names = conts_below_threshold
-        low_prob_strs = [f'{cname} ({int(continuation_probabilities[cont] * 100)}%)' for cname, c in zip(chord_names, conts_below_threshold)]
-        print('    ' + ', '.join(low_prob_strs))
+                    # explain reasoning:
+                    print(f'    because:')
+                    sub_explanation = explanations[cont]
+                    already_mentioned = set() # to ensure we don't list the same prog twice
+                    # explanation_antes = sub_explanation.keys() # counter of progression name strings
+                    for ante_key, expl_counter in list(sub_explanation.items())[::-1]: # from longest to shortest
+                        prog_names = [name for name in expl_counter.keys() if name not in already_mentioned]
+                        ante_str = '-'.join(ante_key)
+                        if len(prog_names) <= 5:
+                            progs_str = ', '.join(prog_names) # progression names
+                            if len(progs_str) > 0:
+                                print(f'        [ {ante_str} ] to [ {cont} ] is seen in: {progs_str}')
+                                already_mentioned.update(prog_names)
+                        else:
+                            num_others = len(prog_names) - 4
+                            prog_names = list(prog_names)[:4]
+                            already_mentioned.update(prog_names)
+                            progs_str = ', '.join(prog_names) # just the first four
+                            print(f'        [ {ante_str} ] to [ {cont} ] is seen in: {progs_str}, and {num_others} others')
+            print(f'\nand other continuations with low probability:')
+
+            if isinstance(progression, ChordProgression):
+                chord_names = [Chord._marker + ScaleChord(cont, scale=progression.key.scale).in_key(progression.key).short_name for cont in conts_below_threshold]
+            else:
+                chord_names = conts_below_threshold
+            low_prob_strs = [f'{cname} ({int(continuation_probabilities[cont] * 100)}%)' for cname, c in zip(chord_names, conts_below_threshold)]
+            print('    ' + ', '.join(low_prob_strs))
+
+    def rate(self, progression, exponent=0.5, simplify=True):
+        """calculates the probability of a given (abstract) Progression
+        according to the continuations defined by this model
+        and returns a float value"""
+
+        assert type(progression) is Progression, "harmonic model can only rate an abstract Progression"
+
+        pairwise_scores = []
+        patterns = []
 
 
 
+        for i in range(1, len(progression)):
+            next_chord = progression.chords[i]
 
-common_major_model = HarmonicDataModel('major')
-common_major_model.populate_with_progressions(common_progressions)
+            # how far back to look depends on this model's memory,
+            # but cannot go lower than 0:
+            start_idx = max([0, i - self.memory])
+            prev_chords = progression.chords[start_idx : i]
 
-common_minor_model = HarmonicDataModel('minor')
-common_minor_model.populate_with_progressions(common_progressions)
+            if simplify:
+                sub_numeral = next_chord.simple_numeral
+                prev_numerals = [ch.simple_numeral for ch in prev_chords]
+            else:
+                sub_numeral = next_chord.mod_numeral
+                prev_numerals = [ch.mod_numeral for ch in prev_chords]
+
+            print(f'step {i}, comparing sequence {prev_numerals} to {sub_numeral}')
+
+            found_match = False
+            # get model continuations for next chord, starting from longest antecedent:
+            for j in range(len(prev_chords)):
+                print(f'  step {i}.{j}, precursor sequence: {prev_numerals[j:]}')
+                antecedent_chords = prev_chords[j:]
+                if simplify:
+                    ante_key = tuple([ch.simple_numeral for ch in antecedent_chords])
+                else:
+                    ante_key = tuple([ch.mod_numeral for ch in antecedent_chords])
+
+                seq_len = len(ante_key)
+                if ante_key in self.continuations[seq_len]:
+                    subsequent_scores = self.continuations[seq_len][ante_key]
+                    if sub_numeral in subsequent_scores:
+                        raw_score = subsequent_scores[sub_numeral]
+                        probability = raw_score / len(subsequent_scores)
+                        pattern = (ante_key, sub_numeral)
+
+                        found_match = True
+                        print(f'  {ante_key} predicts {sub_numeral}, score: {probability}')
+                        break
+                    else:
+                        print(f'  {ante_key} occurs in model but does not predict {sub_numeral}')
+                else:
+                    print(f'  no len={seq_len} match for {ante_key}, does not occur in model')
+
+            if not found_match:
+                probability = 0 # no match found
+                pattern = None
+                print(f'    unexpected chord {sub_numeral} after {prev_numerals}, score: {probability}')
+
+            pairwise_scores.append(probability)
+            patterns.append((ante_key, sub_numeral))
+
+        # adjust scores by exponent weighting:
+        adj_scores = [s**exponent for s in pairwise_scores]
+        print(f'scores: {pairwise_scores}')
+        print(f'adj   : {adj_scores}')
+
+        # average of adjusted scores:
+        return round(sum(adj_scores) / len(adj_scores),  2)
+
+
+
+common_major_model = HarmonicDataModel('major', common_progressions)
+# common_major_model.populate_with_progressions(common_progressions)
+
+common_minor_model = HarmonicDataModel('minor', common_progressions)
+# common_minor_model.populate_with_progressions(common_progressions)
 
 default_harmonic_models = {NaturalMajor: common_major_model,
                            NaturalMinor: common_minor_model}

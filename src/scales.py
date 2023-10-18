@@ -2741,6 +2741,9 @@ parallel_scale_names = {
                         'mixolydian': 'dorian',
                         'phrygian': 'lydian',
 
+                        # harmonic major and minor are NOT parallel, since they
+                        # have different notes
+
 
                         # natural pentatonics and blues scales are straightforward:
                         'major pentatonic': 'minor pentatonic',
