@@ -3,6 +3,8 @@ from .util import reverse_dict, unpack_and_reverse_dict, reduce_aliases, log
 from .parsing import degree_names, is_valid_note_name, parse_alteration, accidental_offsets, offset_accidentals, fl, sh, nat, dfl, dsh
 from . import _settings
 
+from functools import cached_property
+
 # TBI: double dim/aug qualities?
 
 
@@ -69,34 +71,39 @@ class Quality:
             obj.full_name = name
             obj.value = value
 
+            print(f'Initialising new Quality object with args={name, value}, obj.full_name={obj.full_name} and obj.value={obj.value}')
+
+            # set instance attributes:
+            obj.major = obj.value == 1
+            obj.minor = obj.value == -1
+            obj.augmented = obj.value == 2
+            obj.diminished = obj.value == -2
+            obj.doubly_augmented = obj.value == 3
+            obj.doubly_diminished = obj.value == -3
+            obj.perfect = obj.value == 0
+
+            obj.indeterminate = obj.perfect # convenience alias
+
+            # an interval is 'major-ish' if it is major/augmented, and 'minor-ish' if it is minor/diminished:
+            obj.major_ish = obj.value >= 1
+            obj.minor_ish = obj.value <= -1
+
+            obj.aug_ish = obj.value >= 2
+            obj.dim_ish = obj.value <= -2
+
+            # an interval is 'doubled' if it is doubly augmented or doubly diminished
+            obj.doubled = (obj.doubly_augmented or obj.doubly_diminished)
+
             # allocate singleton instance to class attribute dict:
             cls.singleton_qualities[value] = obj
+
             return obj
 
 
-    def __init__(self):
-        # object has already been initialised by Quality.__new__
-        # with correct self.full_name and self.value attributes
+    # def __init__(self, name=None, value=None):
+    #     # object has already been initialised by Quality.__new__
+    #     # with correct self.full_name and self.value attributes
 
-        self.major = self.value == 1
-        self.minor = self.value == -1
-        self.augmented = self.value == 2
-        self.diminished = self.value == -2
-        self.doubly_augmented = self.value == 3
-        self.doubly_diminished = self.value == -3
-        self.perfect = self.value == 0
-
-        self.indeterminate = self.perfect # convenience alias
-
-        # an interval is 'major-ish' if it is major/augmented, and 'minor-ish' if it is minor/diminished:
-        self.major_ish = self.value >= 1
-        self.minor_ish = self.value <= -1
-
-        self.aug_ish = self.value >= 2
-        self.dim_ish = self.value <= -2
-
-        # an interval is 'doubled' if it is doubly augmented or doubly diminished
-        self.doubled = (self.doubly_augmented or self.doubly_diminished)
 
 
     @staticmethod
@@ -500,7 +507,7 @@ class ChordModifier:
     def name(self):
         return self.get_name()
 
-    @property
+    @cached_property
     def quality(self):
         """the 'quality' of a ChordModifier is not very well-defined,
         but useful for some purposes (e.g. in RomanNumerals).
@@ -509,7 +516,6 @@ class ChordModifier:
         or it omits the third, which makes it indeterminate,
         or alters the fifth, which can make it aug/dim."""
         if 5 in self.modifications:
-            #
             qual_name = perfect_offsets[self.modifications[5]]
         elif 5 in self.makes:
             qual_name = perfect_offsets[self.makes[5]]
@@ -518,7 +524,10 @@ class ChordModifier:
         elif 3 in self.makes:
             qual_name = major_offsets[self.makes[3]]
         elif 3 in self.removals:
-            return Ind
+            qual_name = 'ind'
+        else:
+            qual_name = 'maj'
+        return Quality(qual_name)
 
 
     @property

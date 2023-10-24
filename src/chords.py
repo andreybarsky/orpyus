@@ -605,7 +605,7 @@ class AbstractChord:
         elif self.quality.minor_ish:
             return AbstractChord.from_cache('m')
         else:
-            raise Exception(f'{self} has indeterminate quality and therefore has no associated triad')
+            raise MusicError(f'{self} has indeterminate quality and therefore has no associated triad')
 
     def __len__(self):
         """this chord's order, i.e. the number of notes/factors"""
@@ -711,7 +711,7 @@ class AbstractChord:
             return temp_chord
 
         else:
-            raise Exception(f'__add__ method not implemented between {self.__class__} and type: {type(other)}')
+            raise TypeError(f'__add__ method not defined between {self.__class__} and type: {type(other)}')
 
     def __sub__(self, other):
         """Chord - Note produces a new Chord with that note deleted
@@ -791,7 +791,7 @@ class AbstractChord:
         elif modifiers is not None:
             cache_key = (None, None, tuple(modifiers), inversion, assigned_name)
         else:
-            raise Exception(f'Chord init from cache must include one of: "name" or "factors" or "modifiers" (and, optionally, "inversion")')
+            raise TypeError(f'Chord init from cache must include one of: "name" or "factors" or "modifiers" (and, optionally, "inversion")')
 
         if cache_key in cached_abstract_chords:
             return cached_abstract_chords[cache_key]
@@ -1014,7 +1014,7 @@ class Chord(AbstractChord):
             root = Note.from_cache(root)
             suffix = None # name # i.e. None
         else:
-            raise Exception('neither name nor root provided to Chord init, we need one or the other!')
+            raise TypeError('neither name nor root provided to Chord init, we need one or the other!')
         return root, suffix
 
 
@@ -1208,12 +1208,12 @@ class Chord(AbstractChord):
         elif self.quality.minor_ish:
             return self.relative_major
         else:
-            raise Exception(f'Chord {self} is neither major or minor, and therefore has no relative')
+            raise MusicError(f'Chord {self} is neither major or minor, and therefore has no relative')
 
     @property
     def parallel_minor(self):
         if not self.quality.major_ish:
-            raise Exception(f'{self} is not major, and therefore has no parallel minor')
+            raise MusicError(f'{self} is not major, and therefore has no parallel minor')
         new_factors = ChordFactors(self.factors)
         new_factors[3] -= 1 # flatten third
         if 5 in self.factors: # if fifth is aug/dim, make it dim/aug
@@ -1223,7 +1223,7 @@ class Chord(AbstractChord):
     @property
     def parallel_major(self):
         if not self.quality.minor_ish:
-            raise Exception(f'{self} is not minor, and therefore has no parallel major')
+            raise MusicError(f'{self} is not minor, and therefore has no parallel major')
         new_factors = ChordFactors(self.factors)
         new_factors[3] += 1 # raise third
         if 5 in self.factors: # if fifth is aug/dim, make it dim/aug
@@ -1237,7 +1237,7 @@ class Chord(AbstractChord):
         elif self.quality.minor:
             return self.parallel_major
         else:
-            raise Exception(f'Chord {self} is neither major or minor, and therefore has no parallel')
+            raise MusicError(f'Chord {self} is neither major or minor, and therefore has no parallel')
 
     @property
     def triad(self):
@@ -1247,7 +1247,7 @@ class Chord(AbstractChord):
         elif self.quality.minor_ish:
             return minor_triads[self.root]
         else:
-            raise Exception(f'{self} has indeterminate quality and therefore has no associated triad')
+            raise MusicError(f'{self} has indeterminate quality and therefore has no associated triad')
 
     def get_adjacent_chords(self, num_notes=1, distances=[2,1,0,-1,-2], # i.e. up or down by whole or half step
                             # filters for types of motion: (relevant for num_notes > 1)
@@ -1439,7 +1439,7 @@ class Chord(AbstractChord):
             root_chroma = root.chroma if isinstance(root,Note) else root # cast to string
             cache_key = (None, factors, modifiers, root_chroma, inversion, assigned_name)
         else:
-            raise Exception(f'Chord init from cache must include one of: "name", or  "root" plus "factors" or "modifiers"')
+            raise TypeError(f'Chord init from cache must include one of: "name", or  "root" plus "factors" or "modifiers"')
 
         if cache_key in cached_chords:
             return cached_chords[cache_key]
@@ -1854,7 +1854,7 @@ if _settings.PRE_CACHE_CHORDS: # initialise common chord objects in cache for fa
     # let the cache point to them by their factors as well:
     cached_abstract_chords.update({(None,c.factors,None,None,None): c for c in cached_abstract_chords.values()})
     cached_abstract_chords[(None, None, (), None, None)] = AbstractChord() # major triad
-    cached_abstract_chords[(None, None, (ChordModifier('minor')), None, None)] = AbstractChord('m') # minor triad
+    cached_abstract_chords[(None, None, (ChordModifier('minor'),), None, None)] = AbstractChord('m') # minor triad
 
     # cache rooted chords by name up to a certain rarity:
     cached_chords.update({(tonic+chord_name,None,None,None,None,None): Chord(tonic+chord_name) for tonic in parsing.common_note_names for chord_name, rarity in chord_name_rarities.items() if rarity <= 1})

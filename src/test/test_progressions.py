@@ -1,12 +1,10 @@
 from ..progressions import *
 from ..chords import Chord, AbstractChord, ChordList
 from ..scales import MajorScale
+# from ..numerals import RomanNumeral
 from .testing_tools import compare
 
 def unit_test():
-    # test numeral parsing:
-    seven, dim = parse_roman_numeral('viidim')
-    compare([seven, dim], [7, AbstractChord('dim')])
 
     # test chordlist to numerals:
     compare(ChordList('Em11', 'Csus4', 'G7', 'Dmin9').as_numerals_in('G', modifiers=False, sep=' ', diacritics=False), 'vi IV I v')

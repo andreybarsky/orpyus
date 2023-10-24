@@ -8,6 +8,7 @@ if PROFILE_INIT:
 from src.intervals import *
 from src.notes import Note, OctaveNote, NoteList
 from src.chords import AbstractChord, Chord, ChordList, matching_chords
+from src.numerals import RomanNumeral, Roman, RN
 from src.scales import Scale, ScaleFactors, ScaleDegree, ScaleChord
 from src.keys import Key, KeyChord
 from src.progressions import Progression, ChordProgression
@@ -15,7 +16,7 @@ from src.guitar import Guitar, standard
 
 # individual test modules:
 from src.test import test_util, test_parsing, test_qualities, test_intervals, test_notes
-from src.test import test_chords, test_scales, test_keys, test_guitar, test_display
+from src.test import test_chords, test_numerals, test_scales, test_keys, test_guitar, test_display
 from src.test import test_progressions, test_matching
 
 from src import util
@@ -41,6 +42,7 @@ modules_to_test = [
                   test_intervals,
                   test_notes,
                   test_chords,
+                  test_numerals,
                   test_scales,
                   test_keys,
                   test_progressions,

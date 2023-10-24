@@ -197,21 +197,25 @@ modifier_marks.update({f'{acc}{i}' : f'{acc}{i}' for i in range(3,14) for acc in
 roman_degree_chords = {}
 # render as an alias dict linking numerals to major/minor qualities:
 for arabic,roman in numerals_roman.items():
-    roman_degree_chords[roman] = (arabic, 'major')
-    roman_degree_chords[roman.lower()] = (arabic, 'minor')
+    roman_degree_chords[roman] = (arabic, 0, 'major')
+    roman_degree_chords[roman.lower()] = (arabic, 0, 'minor')
 # and the reverse mapping, for SDC.__repr__:
 degree_chords_roman = reverse_dict(roman_degree_chords)
 
 progression_aliases = dict(roman_degree_chords)
 # fractional degrees for bIII chords etc:
 accidental_progression_aliases = {}
-for num, (deg, qual) in progression_aliases.items():
+for num, (deg, acc, qual) in progression_aliases.items():
     if deg > 1:
+        # loop through all possible flat signs:
         for flat_sign in offset_accidentals[-1]:
-            accidental_progression_aliases[flat_sign + num] = (round(deg-0.5, 1), qual)
+            # accidental_progression_aliases[flat_sign + num] = (round(deg-0.5, 1), qual)
+            accidental_progression_aliases[flat_sign + num] = (deg, -1, qual)
     if 1 < deg < 8:
+        # all possible sharp signs:
         for sharp_sign in offset_accidentals[1]:
-            accidental_progression_aliases[sharp_sign + num] = (round(deg+0.5, 1), qual)
+            # accidental_progression_aliases[sharp_sign + num] = (round(deg+0.5, 1), qual)
+            accidental_progression_aliases[sharp_sign + num] = (deg, +1, qual)
 progression_aliases.update(accidental_progression_aliases)
 # kludge: we have to specifically ignore 'dim' when reading roman numerals,
 # because it is the only modifier that contains a roman numeral ('i')

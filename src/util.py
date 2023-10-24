@@ -6,6 +6,8 @@ VERBOSE = False
 
 global_init_time = time.time()
 
+
+
 class Log:
     """logging class for detailed info from nested function execution"""
     def __init__(self, verbose=VERBOSE):
@@ -52,6 +54,17 @@ class Log:
             print('\n'.join(context_lines))
 
 log = Log()
+
+class MusicError(Exception):
+    """error type for when an operation is nonsensical or ill-defined
+    purely according to music theoretic concepts,
+    for example: Scale('major').relative_major"""
+    pass
+
+class MusicValueError(MusicError, ValueError):
+    """error type for when an incompatible value (but of the correct type) is given
+    to a musical class or function, for example ScaleDegree(0) or Key('H')"""
+    pass
 
 # generically useful functions used across modules:
 def rotate_list(lst, num_steps, N=None):

@@ -1,8 +1,9 @@
 from .intervals import *
+from .util import *
 # from scales import interval_scale_names, key_name_intervals
-from .util import ModDict, rotate_list, reverse_dict, reverse_mod_dict, unpack_and_reverse_dict, numeral_subscript, reduce_aliases, check_all, log, precision_recall_scores
 from .chords import Factors, AbstractChord, Chord, ChordFactors, ChordList, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
 from .qualities import ChordModifier, Quality, Maj, Min, Dim, minor_mod, dim_mod, parse_chord_modifiers
+from .numerals import RomanNumeral
 from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental, sh, fl
 from .display import chord_table
 from . import notes, _settings, parsing
@@ -1705,14 +1706,25 @@ class ScaleDegree(int):
     """class representing the degrees of a scale with associated mod-operations"""
     def __new__(cls, degree, num_degrees=7):
 
-        assert isinstance(degree, int)
+        fractional = False
+        # check for fractional scale degrees
+        if not isinstance(degree, int):
+            if int(degree) == degree: # a type that casts to int (such as an integer-valued float, or another ScaleDegree)
+                degree = int(degree)  # gets recast to int
+            else:
+                # this must be a fractional degree that is a factor of 0.5,
+                # no lower than 1.5 and no higher than 7.5:
+                assert isinstance(degree, float), "attempted to initialise ScaleDegree with something other than int or float"
+                assert degree % 1 == 0.5, "fractional ScaleDegrees must have .5 after the decimal"
+                assert 1.5 <= degree <= 7.5, "fractional ScaleDegrees below 1.5 or above 7.5 are ill-defined"
+                fractional = True
 
         extended_degree = degree
         # note about indexing:
         # negative degrees are defined, but the degree 0 is not. (to avoid confusion!)
         # therefore, the degree one step below 1 is the degree 7(-1)
         if degree == 0:
-            raise ValueError('ScaleDegree of 0 is ill-defined')
+            raise MusicValueError('ScaleDegree of 0 is ill-defined')
 
         sign = 1 if degree > 0 else -1
         if abs(degree) > num_degrees:
@@ -1777,11 +1789,11 @@ class ScaleDegree(int):
             return ScaleDegree(self.extended_degree, num_degrees=self.num_degrees)
 
     def __mul__(self, other):
-        raise Exception('ScaleDegree.__mul__ not defined')
+        raise TypeError('ScaleDegrees cannot be multiplied')
     def __div__(self, other):
-        raise Exception('ScaleDegree.__div__ not defined')
+        raise TypeError('ScaleDegree.__div__ not defined')
     def __mod__(self, other):
-        raise Exception('ScaleDegree.__mod__ not defined')
+        raise TypeError('ScaleDegree.__mod__ not defined')
 
     # def __int__(self):
     #     # casting a degree to an int returns the (base, not extended) degree
@@ -1843,11 +1855,13 @@ class ScaleChord(AbstractChord):
             if parsing.begins_with_roman_numeral(name):
                 # name indeed begins with a roman numeral
                 init_by_numeral = True # ignore usual init routine
-                degree, chord_params = parse_roman_numeral(name, return_params=True)
+                rn = RomanNumeral(name)
+                degree = rn.degree
+                # degree, chord_params = parse_roman_numeral(name, return_params=True)
                 flattened_root = parsing.is_flat(name[0]) # store whether input was something like bVII
 
                 # don't initialise chord yet, but do get its quality:
-                modifiers, inversion = chord_params
+                modifiers, inversion = rn.modifiers, rn.inversion
                 if dim_mod in modifiers:
                     chord_qual = Dim
                 elif minor_mod in modifiers:
@@ -1883,18 +1897,22 @@ class ScaleChord(AbstractChord):
 
         self.scale = scale
 
+        self._parse_degree(degree, factor) # assigns attributes: self.scale_degree,
+                                           # scale_factor, root_in_scale, notes_in_scale
+
+    def _parse_degree(self, degree, factor):
         if degree is not None:
             assert factor is None, f"ScaleChord received clashing factor/degree args"
             if isinstance(degree, ScaleDegree):
                 self.scale_degree = degree
-                self.scale_factor = scale.degree_factors[degree]
+                self.scale_factor = self.scale.degree_factors[degree]
                 self.root_in_scale = True
             elif isinstance(degree, int):
                 self.scale_degree = ScaleDegree.of_scale(self.scale, degree)
-                self.scale_factor = scale.degree_factors[degree]
+                self.scale_factor = self.scale.degree_factors[degree]
                 self.root_in_scale = True
+            ### catch fractional degrees: (where root is out-of-scale)
             elif isinstance(degree, float):
-                # fractional degree whose root is out-of-scale
                 upper, lower = ceil(degree), floor(degree)
                 assert degree != upper and degree != lower # i.e. not a float equal to an integer
                 self.scale_degree = round(lower + 0.5, 1) # ensure strict half-integer to 1d.p.
@@ -1907,42 +1925,53 @@ class ScaleChord(AbstractChord):
             assert degree is None, f"ScaleChord received clashing factor/degree args"
             assert isinstance(factor, int), f"ScaleChord only understands integer factors, not {type(factor)}"
             self.scale_factor = factor
-            self.scale_degree = scale.factor_degrees[factor]
+            self.scale_degree = self.scale.factor_degrees[factor]
             self.root_in_scale = True
         else:
             raise Exception('fatal flow error')
 
         if self.root_in_scale:
-            self.notes_in_scale = scale.contains_degree_chord(degree, self)
+            self.notes_in_scale = self.scale.contains_degree_chord(degree, self)
 
+    ### deprecated as main init method handles numeral case now:
+    # @staticmethod
+    # def from_numeral(numeral, scale=None):
+    #     from src.progressions import parse_roman_numeral, Progression
+    #     deg, abs_chord = parse_roman_numeral(numeral)
+    #     if scale is None:
+    #         scale = infer_chord_scale(deg, abs_chord.quality)
+    #     else:
+    #         if not isinstance(scale, Scale):
+    #             scale = Scale(scale)
+    #     return abs_chord.in_scale(scale, degree=deg)
+
+    # efficient scalechord init by cache lookup of scales and their degrees:
     @staticmethod
-    def from_numeral(numeral, scale=None):
-        from src.progressions import parse_roman_numeral, Progression
-        deg, abs_chord = parse_roman_numeral(numeral)
-        if scale is None:
-            scale = infer_chord_scale(deg, abs_chord.quality)
-        else:
-            if not isinstance(scale, Scale):
-                scale = Scale(scale)
-        return abs_chord.in_scale(scale, degree=deg)
+    def from_cache(scale=None, degree=None, numeral=None, order=3):
+        """cached scalechords can be initialised by providing either:
+        - 'scale' and 'degree' args, to fetch the chord on that degree of that scale
+        - or 'numeral' arg, with optional 'scale' (auto-detected if not given)"""
 
-    @staticmethod
-    def from_cache(scale, degree, order=3):
-        # efficient scalechord init by cache lookup of scales and their degrees:
-        assert type(scale) is Scale
-        if degree != int(degree):
-            raise Exception('TBI error (fractional scaledegrees)')
-        else:
-            degree = int(degree)
+        if degree is not None:
+            assert (scale is not None) and (numeral is None)
+            assert type(scale) is Scale
+            if degree != int(degree):
+                raise MusicValueError('TBI error (fractional scaledegrees)')
+            else:
+                degree = int(degree)
 
-        if (scale, degree, order) in cached_scale_chords:
-            return cached_scale_chords[(scale, degree, order)]
-        else:
-            chord_obj = scale.chord(degree, order=order)
-            if _settings.DYNAMIC_CACHING:
-                log(f'Registering scale chord by scale {scale.name} and degree={degree} of order={order} to cache')
-                cached_scale_chords[(scale, degree, order)] = chord_obj
-            return chord_obj
+            if (scale, degree, order) in cached_scale_chords:
+                return cached_scale_chords[(scale, degree, order)]
+            else:
+                chord_obj = scale.chord(degree, order=order)
+                if _settings.DYNAMIC_CACHING:
+                    log(f'Registering scale chord by scale {scale.name} and degree={degree} of order={order} to cache')
+                    cached_scale_chords[(scale, degree, order)] = chord_obj
+                return chord_obj
+
+        elif numeral is not None:
+            assert degree is None
+
 
     @property
     def numeral(self):
@@ -2174,78 +2203,78 @@ class ScaleChord(AbstractChord):
         return f'{self.name} {self.intervals} (in: {self.scale._marker}{self.scale.name})'
         # return f'{self._marker}{self.get_numeral(modifiers=True, marks=False, diacritics=False)}'
 
-
-def parse_roman_numeral(numeral, ignore_alteration=False, return_params=False):
-    """given a (string) roman numeral, in upper or lower case,
-    with a potential chord modifier at the end,
-    parse into a (degree, AbstractChord) tuple, where degree is an int between 1-7.
-
-    also understands slashes as either inversions or secondary chords or both.
-
-    if return_params is False, returns the AbstractChord object itself.
-        if True, returns the modifiers/inversion parameters used to initialise it.
-        (in case we want to avoid double-initialising downstream)"""
-
-    if ignore_alteration and parsing.is_accidental(numeral[0]):
-        # if required, disregard accidentals in the start of this degree, like bIII -> III
-        numeral = numeral[1:]
-
-    slashed_parts = '/'.split(numeral)
-    if len(slashed_parts) == 1: # simple numeral, no inversion or secondary tonicisation
-        inversion = 0
-        secondary_numeral = None
-    elif len(slashed_parts) == 2: # either an inversion or a secondary chord
-        left, right = slashed_parts
-        if right.isnumeric():
-            # seems to be an inversion
-            numeral, inversion = left, right
-            secondary_numeral = None
-        else:
-            # seems to be a secondary chord
-            inversion = 0
-            numeral, secondary_numeral = left, right
-    elif len(slashed_parts) == 3: # assume both!
-        left, mid, right = slashed_parts
-        assert mid.isnumeric(), f"Received multiple slashes in ScaleChord init and expected the middle part to be an inversion, but was: {mid}"
-        numeral, inversion, secondary_numeral = left, mid, right
-    else:
-        raise Exception(f'Too many slashes ({len(slashed_parts)-1}) in ScaleChord name: {numeral}')
-
-        # recursive function call to understand the tonicised chord:
-        secondary_degree, secondary_quality_str = reduce_aliases(numeral, parsing.progression_aliases)[0]
-        secondary_quality = Quality.from_cache(name=secondary_quality_str)
-        secondary_scale = MajorScale if secondary_quality.major else MinorScale
-
-
-
-    out = reduce_aliases(numeral, parsing.progression_aliases)
-    assert isinstance(out[0], tuple) # an integer, quality tuple
-    deg, quality_str = out[0]
-    quality = Quality.from_cache(name=quality_str)
-
-    modifiers = []
-    inversion = 0
-
-    if quality.minor:
-        modifiers.append(minor_mod)
-
-    if len(out) > 1: # got one or more additional modifiers as well
-        rest = ''.join(out[1:])
-
-        rest_inv = rest.split('/')
-        if len(rest_inv) > 1:
-            assert len(rest_inv) == 2 # chord part and inversion part
-            rest, inversion = rest_inv[0], int(rest_inv[1])
-
-        if len(rest) > 0:
-            rest_mods = parse_chord_modifiers(rest, catch_duplicates=True)
-            modifiers.extend(rest_mods)
-
-    if not return_params:
-        chord = AbstractChord.from_cache(modifiers=modifiers, inversion=inversion)
-        return deg, chord
-    else:
-        return deg, (modifiers, inversion)
+#
+# def parse_roman_numeral(numeral, ignore_alteration=False, return_params=False):
+#     """given a (string) roman numeral, in upper or lower case,
+#     with a potential chord modifier at the end,
+#     parse into a (degree, AbstractChord) tuple, where degree is an int between 1-7.
+#
+#     also understands slashes as either inversions or secondary chords or both.
+#
+#     if return_params is False, returns the AbstractChord object itself.
+#         if True, returns the modifiers/inversion parameters used to initialise it.
+#         (in case we want to avoid double-initialising downstream)"""
+#
+#     if ignore_alteration and parsing.is_accidental(numeral[0]):
+#         # if required, disregard accidentals in the start of this degree, like bIII -> III
+#         numeral = numeral[1:]
+#
+#     slashed_parts = '/'.split(numeral)
+#     if len(slashed_parts) == 1: # simple numeral, no inversion or secondary tonicisation
+#         inversion = 0
+#         secondary_numeral = None
+#     elif len(slashed_parts) == 2: # either an inversion or a secondary chord
+#         left, right = slashed_parts
+#         if right.isnumeric():
+#             # seems to be an inversion
+#             numeral, inversion = left, right
+#             secondary_numeral = None
+#         else:
+#             # seems to be a secondary chord
+#             inversion = 0
+#             numeral, secondary_numeral = left, right
+#     elif len(slashed_parts) == 3: # assume both!
+#         left, mid, right = slashed_parts
+#         assert mid.isnumeric(), f"Received multiple slashes in ScaleChord init and expected the middle part to be an inversion, but was: {mid}"
+#         numeral, inversion, secondary_numeral = left, mid, right
+#     else:
+#         raise Exception(f'Too many slashes ({len(slashed_parts)-1}) in ScaleChord name: {numeral}')
+#
+#         # recursive function call to understand the tonicised chord:
+#         secondary_degree, secondary_quality_str = reduce_aliases(numeral, parsing.progression_aliases)[0]
+#         secondary_quality = Quality.from_cache(name=secondary_quality_str)
+#         secondary_scale = MajorScale if secondary_quality.major else MinorScale
+#
+#
+#
+#     out = reduce_aliases(numeral, parsing.progression_aliases)
+#     assert isinstance(out[0], tuple) # an integer, quality tuple
+#     deg, quality_str = out[0]
+#     quality = Quality.from_cache(name=quality_str)
+#
+#     modifiers = []
+#     inversion = 0
+#
+#     if quality.minor:
+#         modifiers.append(minor_mod)
+#
+#     if len(out) > 1: # got one or more additional modifiers as well
+#         rest = ''.join(out[1:])
+#
+#         rest_inv = rest.split('/')
+#         if len(rest_inv) > 1:
+#             assert len(rest_inv) == 2 # chord part and inversion part
+#             rest, inversion = rest_inv[0], int(rest_inv[1])
+#
+#         if len(rest) > 0:
+#             rest_mods = parse_chord_modifiers(rest, catch_duplicates=True)
+#             modifiers.extend(rest_mods)
+#
+#     if not return_params:
+#         chord = AbstractChord.from_cache(modifiers=modifiers, inversion=inversion)
+#         return deg, chord
+#     else:
+#         return deg, (modifiers, inversion)
 
 
 def infer_chord_scale(degree, quality, return_evidence=False):
@@ -2831,7 +2860,8 @@ def matching_scales(chords=None, intervals=None, major_roots=None, min_recall=0.
         if roman:
             degrees, abs_chords = [], []
             for num in split_numerals:
-                deg, ch = parse_roman_numeral(num)
+                rn = RomanNumeral(num)
+                deg, ch = rn.degree, rn.chord
                 degrees.append(deg)
                 abs_chords.append(ch)
         else:
