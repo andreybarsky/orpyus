@@ -33,25 +33,60 @@ class Quality:
     """class representing interval quality: major/minor-ness
     as well as perfect/augmented/diminished qualities
     with inversion method defined for the major-minor and aug-dim relationship"""
-    def __init__(self, name=None, value=None):
+
+    # since there are only 7 possible Quality objects, this class uses __new__
+    # to fetch an existing instance of the desired quality if one exists.
+
+    # those instances are contained in this class attribute dict:
+    singleton_qualities = {} # (a dict of value->object pairs)
+
+    def __new__(cls, name=None, value=None):
+        """constructor method to ensure singleton objects for each Quality type"""
+        # obj = super(object, cls).__new__()
+
+        if isinstance(name, int):
+            # received an int input to name, which means it should be the value instead
+            # that's ok, we quietly re-parse the args:
+            value = name
+            name = None
+
         if name is not None:
             assert value is None, "Quality init must provide one of 'name' OR 'value', but got both"
-            self.full_name, self.value = self._parse_input(name)
+            full_name, value = cls._parse_input(name)
         elif value is not None:
             assert name is None, "Quality init must provide one of 'name' OR 'value', but got both"
 
-            self.value = value
-            self.full_name = value_names[value]
+            # obj.value = value
+            full_name = value_names[value]
         else:
-            raise Exception("Quality init must provide one of 'name' or 'value', but got neither")
+            raise TypeError("Quality init must provide one of 'name' or 'value', but got neither")
+
+        if value in cls.singleton_qualities:
+            # fetch pre-initialised object from class attribute dict:
+            return cls.singleton_qualities[value]
+        else:
+            obj = object.__new__(cls)
+            obj.full_name = name
+            obj.value = value
+
+            # allocate singleton instance to class attribute dict:
+            cls.singleton_qualities[value] = obj
+            return obj
+
+
+    def __init__(self):
+        # object has already been initialised by Quality.__new__
+        # with correct self.full_name and self.value attributes
 
         self.major = self.value == 1
         self.minor = self.value == -1
-        self.perfect = self.value == 0
         self.augmented = self.value == 2
         self.diminished = self.value == -2
         self.doubly_augmented = self.value == 3
         self.doubly_diminished = self.value == -3
+        self.perfect = self.value == 0
+
+        self.indeterminate = self.perfect # convenience alias
 
         # an interval is 'major-ish' if it is major/augmented, and 'minor-ish' if it is minor/diminished:
         self.major_ish = self.value >= 1
@@ -63,7 +98,9 @@ class Quality:
         # an interval is 'doubled' if it is doubly augmented or doubly diminished
         self.doubled = (self.doubly_augmented or self.doubly_diminished)
 
-    def _parse_input(self, inp):
+
+    @staticmethod
+    def _parse_input(inp):
         """accepts either a string denoting quality name, or an existing quality.
         sanitises input and returns the corresponding canonical name and quality value"""
 
@@ -80,10 +117,10 @@ class Quality:
                 value = quality_values[canonical_name]
                 return canonical_name, value
             else:
-                raise Exception(f'Quality object init received unknown quality name: {inp}')
+                raise ValueError(f'Quality object init received unknown quality name: {inp}')
 
         else:
-            raise Exception(f'Quality object initialised using name arg, expected string (or Quality object) but got type: {type(name)}')
+            raise TypeError(f'Quality object initialised using name arg, expected string (or Quality object) but got type: {type(inp)}')
 
     @staticmethod
     def from_offset_wrt_major(offset):
@@ -179,6 +216,8 @@ class Quality:
 
     _brackets = _settings.BRACKETS['Quality']
 
+# singleton_qualities = {} # dict of value->object pairs
+
 
 # interval semitone distances from major or perfect interval degrees:
 
@@ -207,7 +246,6 @@ value_qualities = {v: Quality(q) for v,q in value_names.items()}
 ###############################################################
 
 # pre-initialised interval qualities:
-
 Major = Maj = M = Quality('major')
 Minor = Min = m = Quality('minor')
 Perfect = Perf = P = Ind = Indeterminate = Quality('perfect')
@@ -215,6 +253,8 @@ Augmented = Aug = A = Quality('augmented')
 Diminished = Dim = d = Quality('diminished')
 DoublyAugmented = AAug = AA = Quality('doubly augmented')
 DoublyDiminished = DDim = dd = Quality('doubly diminished')
+
+
 
 #################################################################
 
@@ -375,7 +415,7 @@ class ChordModifier:
                 elif len(mods) > 2:
                     raise ValueError(f'{alias} refers not to one ChordModifier but to multiple: {mods}')
                 else:
-                    raise Exception
+                    raise Exception(f'unexpected fatal error')
         else:
             raise TypeError(f'ChordModifier initialised with alias, expected to be string or ChordModifier object but got: {type(alias)}')
 
@@ -459,6 +499,27 @@ class ChordModifier:
     @property
     def name(self):
         return self.get_name()
+
+    @property
+    def quality(self):
+        """the 'quality' of a ChordModifier is not very well-defined,
+        but useful for some purposes (e.g. in RomanNumerals).
+        we say: a ChordModifier is major by default,
+        unless it flattens the third, in which case it is minor,
+        or it omits the third, which makes it indeterminate,
+        or alters the fifth, which can make it aug/dim."""
+        if 5 in self.modifications:
+            #
+            qual_name = perfect_offsets[self.modifications[5]]
+        elif 5 in self.makes:
+            qual_name = perfect_offsets[self.makes[5]]
+        elif 3 in self.modifications:
+            qual_name = major_offsets[self.modifications[3]]
+        elif 3 in self.makes:
+            qual_name = major_offsets[self.makes[3]]
+        elif 3 in self.removals:
+            return Ind
+
 
     @property
     def order(self):
