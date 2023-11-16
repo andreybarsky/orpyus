@@ -89,9 +89,13 @@ class Progression:
 
         if check_all(numerals, 'isinstance', str):
             # roman numeral strings
-            # which we parse into AbstractChords based on their case and suffixes
+            # which we parse into RomanNumeral objects:
+            numerals = [RomanNumeral(rn) for rn in numerals]
 
-            self.numerals = [RomanNumeral(rn) for rn in numerals]
+        # now we can deal with RomanNumeral objects:
+        if check_all(numerals, 'isinstance', RomanNumeral):
+
+            self.numerals = numerals
             self.root_degrees = [rn.degree for rn in self.numerals]
 
             # base_degree_chord_params = [parse_roman_numeral(n, return_params=True) for n in numerals] # degree, AbstractChord tuples
@@ -117,7 +121,7 @@ class Progression:
                     # deg, ch = parse_roman_numeral(numerals[i], ignore_alteration=True)
                     rn = RomanNumeral(numerals[i])
                     base_degree_chords[i] = rn.natural_degree, ch
-                    log(f'So quietly replaced with {numerals[i][1:]} (in scale: {self.scale.name}')
+                    log(f'So quietly replaced with {rn} (in scale: {self.scale.name}')
                     self.root_degrees = [deg for (deg,ch) in base_degree_chords]
 
 
@@ -152,6 +156,7 @@ class Progression:
             else:
                 # use the abstractchords we have been given (and cast them to ScaleChords)
                 self.chords = ChordList([ScaleChord(factors=chords[i].factors, inversion=chords[i].inversion, scale=self.scale, degree=d) for i,d in enumerate(self.root_degrees)])
+            self.numerals = [ch.numeral for ch in self.chords]
 
         elif check_all(numerals, 'isinstance', ScaleChord):
             ### allow init by scalechords alone
@@ -336,7 +341,10 @@ class Progression:
             #                     for r in new_root_degrees]
             # return Progression(new_root_degrees, chords=self.chords, scale=self.scale)
         if isinstance(other, str): # add a new chord (as roman numeral)
-            new_numerals = self.mod_numerals + [other]
+            new_numerals = self.numerals + [RomanNumeral(other)]
+            return Progression(new_numerals, scale=self.scale)
+        elif isinstance(other, RomanNumeral):
+            new_numerals = self.numerals + [other]
             return Progression(new_numerals, scale=self.scale)
         elif isinstance(other, (list, tuple)): # add new chords as list of roman numeral strings
             assert check_all(other, 'isinstance', 'str'), f"Progression got added with list/tuple, expected to loop over roman numeral strings but got: {type(other[0])}"
@@ -347,6 +355,41 @@ class Progression:
             new_chords = self.chords + other.chords
             return Progression(new_numerals, chords=new_chords, scale=self.scale)
 
+    def shift(self, value, relative=False):
+        """shifts the root degrees of this progression up or down by an integer.
+        not included in addition operation as addition is reserved for key transposition,
+        but this 'shift' operation is used for computing relative major/minor progressions."""
+        # new_root_degrees = [r + value for r in self.root_degrees]
+        # # mod to range 1-7:
+        # new_root_degrees = [((r-1) % 7) + 1
+        #                     if isinstance(r, float) # i.e. catch fractional (float) degrees
+        #                     else r                  # use ScaleDegree as normal
+        #                     for r in new_root_degrees]
+        new_numerals = [rn + value for rn in self.numerals]
+        new_scale = self.scale if not relative else self.scale.parallel
+        return Progression(new_numerals, chords=self.chords, scale=new_scale)
+
+    @property
+    def relative(self):
+        """returns the relative major or minor variant of this progression"""
+        if self.scale.quality.major:
+            return self.shift(2, relative=True)
+        elif self.scale.quality.minor:
+            return self.shift(-2, relative=True)
+        else:
+            raise MusicError(f'{self} is neither major or minor, so has no relative')
+    @property
+    def relative_minor(self):
+        if self.scale.quality.major:
+            return self.relative
+        else:
+            raise MusicError(f'{self} is not major, so has no relative minor')
+    @property
+    def relative_major(self):
+        if self.scale.quality.minor:
+            return self.relative
+        else:
+            raise MusicError(f'{self} is not minor, so has no relative major')
 
 
     def pad_with_tonic(self):

@@ -1,7 +1,7 @@
 from .chords import AbstractChord
 from . import parsing, _settings
 from .util import reduce_aliases
-from .qualities import Quality, Major, Minor, Ind, minor_mod, parse_chord_modifiers
+from .qualities import Quality, Major, Minor, Ind, minor_mod, parse_chord_modifiers, ChordModifier
 
 from math import ceil
 from functools import cached_property
@@ -25,6 +25,12 @@ class RomanNumeral:
     singleton_numerals = {}
     def __new__(cls, name):
         """constructor method to enforce singleton instances of each numeral"""
+
+        # catch re-casting:
+        if isinstance(name, RomanNumeral):
+            # i.e. if passed a RomanNumeral as first arg, just quietly return it
+            return name
+
         if name in cls.singleton_numerals:
             return cls.singleton_numerals[name]
         else:
@@ -61,6 +67,7 @@ class RomanNumeral:
                 obj.natural_degree = major_degree
             else:
                 obj.secondary_degree = None
+                obj.secondary_quality = None
 
             obj.quality = obj._determine_quality(obj.modifiers)
 
@@ -211,11 +218,43 @@ class RomanNumeral:
 
 
     @staticmethod
-    def from_integer(integer, quality=None, accidental_value=0):
+    def from_integer(integer, quality=None, accidental_value=0, inversion=0, modifiers=None):
         """alternative constructor method for integer input, with optional
-        quality and accidental_value arguments."""
-        prefix = RomanNumeral._integer_to_prefix(integer, quality, accidental_value)
-        return RomanNumeral(prefix)
+        quality and accidental_value arguments. (default major and natural respectively)"""
+        # # just cast to string and initialise as that:
+        # prefix = RomanNumeral._integer_to_prefix(integer, quality, accidental_value)
+        # return RomanNumeral(prefix)
+        # # more efficient constructor that skips string parsing:
+        obj = object.__new__(RomanNumeral)
+        if quality is None:
+            # major by default
+            quality = Major
+        elif isinstance(quality, str):
+            quality = Quality(quality)
+
+        # assign attributes:
+        obj.primary_numeral = RomanNumeral._integer_to_prefix(integer, quality, 0)
+        obj.accidental = accidental_value
+        obj.inversion = inversion
+        obj.quality = quality
+        obj.natural_degree = obj.primary_degree = integer
+
+        # this constructor doesn't allow for secondary attributes:
+        obj.secondary_numeral = obj.secondary_degree = obj.secondary_quality = None
+
+        # cast modifiers if needed:
+        obj.modifiers = [minor_mod] if quality.minor else []
+        if modifiers is not None:
+            if not isinstance(modifiers, (list, tuple)):
+                modifiers = [modifiers]
+            for mod in modifiers:
+                if not isinstance(mod, ChordModifier):
+                    mod = ChordModifier(mod)
+                if mod != minor_mod: # minor modifier is already included
+                    obj.modifiers.append(mod)
+
+        # finish construction:
+        return obj
 
     @staticmethod
     def from_chord(chord, natural_degree=None, accidental_value=None):
@@ -252,6 +291,27 @@ class RomanNumeral:
             suffix = suffix[1:]
         # now just initialise from string:
         return RomanNumeral(prefix + suffix)
+
+    def __add__(self, other):
+        """adding a roman numeral with an int transposes the numeral
+        up by that many degrees"""
+        if isinstance(other, int):
+            # return new numeral with all the same attributes
+            # except primary degree is shifted up:
+            new_degree = self.natural_degree + other
+            # mod to range (1,7):
+            new_degree = ((new_degree - 1) % 7) + 1
+            return self.from_integer(new_degree, self.quality, self.accidental, self.inversion, self.modifiers)
+        else:
+            raise TypeError(f'addition not defined between RomanNumeral and {type(other)}')
+
+    def __sub__(self, other):
+        if isinstance(other, int):
+            # just addition with the negation:
+            return self + (-other)
+        else:
+            raise TypeError(f'subtraction not defined between RomanNumeral and {type(other)}')
+
 
     @property
     def degree(self):

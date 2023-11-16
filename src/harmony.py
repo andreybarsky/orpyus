@@ -31,7 +31,7 @@ class HarmonicFunctionModel(HarmonicModel):
             scale = Scale(scale)
         self.scale = scale
 
-        self.function_degrees = {f:[ScaleChord.from_numeral(n, scale=self.scale) for n in nums] for f, nums in function_degrees.items() }
+        self.function_degrees = {f:[ScaleChord(n, scale=self.scale) for n in nums] for f, nums in function_degrees.items() }
         self.degree_functions = unpack_and_reverse_dict(self.function_degrees)
 
         self.ordered = ordered_functions
@@ -42,7 +42,7 @@ class HarmonicFunctionModel(HarmonicModel):
             self.special_movements = {}
         else:
             exceptions = special_movements_functions
-            self.special_movements = {(ScaleChord.from_numeral(n1, scale=self.scale), ScaleChord.from_numeral(n2, scale=self.scale)) : (f1, f2)
+            self.special_movements = {(ScaleChord(n1, scale=self.scale), ScaleChord(n2, scale=self.scale)) : (f1, f2)
                                       for (n1, n2), (f1, f2) in exceptions.items()}
 
 
@@ -59,7 +59,7 @@ class HarmonicFunctionModel(HarmonicModel):
         markov_dct = {}
 
         node_numerals = degree_functions.keys()
-        num2chord = {num: ScaleChord.from_numeral(num, scale=scale) for num in node_numerals}
+        num2chord = {num: ScaleChord(num, scale=scale) for num in node_numerals}
         node_chords = [num2chord[num] for num in node_numerals]
 
         for num, prev_chord in zip(node_numerals, node_chords):
@@ -283,19 +283,21 @@ class HarmonicDataModel(HarmonicModel):
     """a type of harmonic model that is populated by scraping a database,
     either of rooted ChordProgressions or of abstract numeral Progressions,
     and explains its predictions by attribution to the database"""
-    def __init__(self, scale, progressions, memory=3):
+    def __init__(self, scale, progressions, memory=3, shift_scale=False):
 
         if not isinstance(scale, Scale):
             scale = Scale(scale)
         self.scale = scale
         self.memory = memory
 
-        self.populate_with_progressions(progressions)
+        self.populate_with_progressions(progressions, shift_scale=shift_scale)
         # sets self.continuations and self.attributions,
         # the core attributes of the model
 
         ### idea: extra flags to allow replacement of chords with substitutions, secondaries, tritones etc.
-    def populate_with_progressions(self, progression_names, simplify=True):
+
+    ### TBI: these dict string keys should be replaced with RomanNumeral objects when possible
+    def populate_with_progressions(self, progression_names, simplify=True, shift_scale=False):
         """accepts a dataset dict that keys Progression objects to informative names,
         populates the self.continuations and self.attributions dicts
         according to that data"""
@@ -303,12 +305,21 @@ class HarmonicDataModel(HarmonicModel):
         continuations_by_length = {l: {} for l in range(1, self.memory+1)}
         attributions = {}
 
+        parallel_scale = self.scale.parallel
+
         for progression, prog_name in progression_names.items():
             if progression.scale != self.scale:
-                print(f'\nProgression not in {self.scale}, ignoring ({prog_name})')
-                continue
+                # progression given is not for this scale
+                if shift_scale and progression.scale == parallel_scale:
+                    # we can try shifting to relative and logging that
+                    print(f'\n{progression} not in {self.scale._marker}{self.scale.name}, but shifting to relative: {progression.relative}')
+                    progression = progression.relative
+                else:
+                    # otherwise ignore it
+                    print(f'\nProgression {prog_name} not in {self.scale._marker}{self.scale.name}, ignoring ({prog_name})')
+                    continue
 
-            print(f'\nProcessing progression {prog_name}: {progression}')
+            log(f'\nProcessing progression {prog_name}: {progression}')
 
             # memory can't be higher than the length of the progression:
             prog_memory = min([self.memory, len(progression)])
@@ -321,7 +332,7 @@ class HarmonicDataModel(HarmonicModel):
 
                     seq_length = end-start
                     if (seq_length-1) <= prog_memory:
-                        print(f'  processing subset from {start}-{end % len(progression)} (length={end-start})')
+                        log(f'  processing subset from {start}-{end % len(progression)} (length={end-start})')
                         continuations = continuations_by_length[seq_length-1] # dict object of antecedent-subsequent pairs
 
                         # for i in chord_idxs:
@@ -341,14 +352,14 @@ class HarmonicDataModel(HarmonicModel):
                         if antecedents not in continuations:
                             continuations[antecedents] = Counter() # counter for each antecedent
                         continuations[antecedents].update((subsequent,))
-                        print(f'    updated counter: {continuations[antecedents]}')
+                        log(f'    updated counter: {continuations[antecedents]}')
 
                         # update attributions:
                         seq_pair = (antecedents, subsequent)
                         if seq_pair not in attributions:
                             # attributions[seq_pair] = Counter()
                             attributions[seq_pair] = []
-                        print(f'      associating {prog_name} with sequence: {antecedents} -> {subsequent}')
+                        log(f'      associating {prog_name} with sequence: {antecedents} -> {subsequent}')
                         # attributions[seq_pair].update((prog_name,))
                         attributions[seq_pair].append(prog_name)
 
@@ -457,7 +468,7 @@ class HarmonicDataModel(HarmonicModel):
                         resulting_prog_str = f'{lb}{" - ".join([ch.short_name for ch in (progression + cont)])}{rb}'
                     else:
                         cont_str = AbstractChord._marker + cont
-                        resulting_prog_str = f'{lb}{" - ".join((progression + cont).mod_numerals)}{rb}'
+                        resulting_prog_str = f'{lb}{" - ".join([str(rn) for rn in (progression + cont).numerals])}{rb}'
                     print(f'\n{percent} : {cont_str}    (to make: {resulting_prog_str})')
 
                     # explain reasoning:
@@ -564,7 +575,7 @@ class HarmonicDataModel(HarmonicModel):
 common_major_model = HarmonicDataModel('major', common_progressions)
 # common_major_model.populate_with_progressions(common_progressions)
 
-common_minor_model = HarmonicDataModel('minor', common_progressions)
+common_minor_model = HarmonicDataModel('minor', common_progressions, shift_scale=True)
 # common_minor_model.populate_with_progressions(common_progressions)
 
 default_harmonic_models = {NaturalMajor: common_major_model,

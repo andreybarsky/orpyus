@@ -1333,7 +1333,7 @@ class Scale:
             # compare alterations to commonly registered scales,
             # in rough order of rarity:
             waves = [['ionian', 'aeolian']] + \
-                     + [list(canonical_scale_names_by_rarity[r]) for r in (2,3,4)]
+                       [list(canonical_scale_names_by_rarity[r]) for r in (2,3,4)]
             # [, # natural scales
             #          [names[0] for mode_idx, names in base_scale_mode_names['natural major'].items() if mode_idx not in [1,6]], # diatonic modes
             #          ['harmonic minor', 'melodic minor', 'harmonic major', 'melodic major'], # non-diatonic heptatonic scales
@@ -2405,8 +2405,15 @@ base_scale_factor_names = { # base scales are defined here, modes and subscales 
     # natural-melodic hybrids:
     ScaleFactors('1,  2,  b3,  4,  5,  b6, [6],  b7, [7]'): ['full minor', 'chromatic minor (natural/melodic)', 'chromatic minor NM', 'NM minor'],
     ScaleFactors('1,  2,  b3,  4,  5, [b6], 6,  [b7], 7 '): ['full minor melodic', 'chromatic minor (melodic/natural)', 'chromatic minor MN', 'MN minor'],
-    ScaleFactors('1,  2,   3,  4,  5,  b6, [6],  b7, [7]'): ['full major', 'chromatic major (natural/melodic)', 'chromatic major NM', 'NM major'],
-    ScaleFactors('1,  2,   3,  4,  5, [b6], 6,  [b7], 7 '): ['full major melodic', 'chromatic major (melodic/natural)', 'chromatic major MN', 'MN major'],
+    ScaleFactors('1,  2,   3,  4,  5, [b6], 6,  [b7], 7'): ['full major', 'chromatic major (natural/melodic)', 'chromatic major NM', 'NM major'],
+    ScaleFactors('1,  2,   3,  4,  5,  b6, [6],  b7, [7] '): ['full major melodic', 'chromatic major (melodic/natural)', 'chromatic major MN', 'MN major'],
+    # the missing third hybrid: 'rock scales', natural/dorian/mixo hybrids:
+    ScaleFactors('1,  2,  b3,  4,  5,  b6,  [6], b7'): ['rock minor', 'chromatic minor (natural/dorian)', 'chromatic minor ND', 'ND minor'],
+    ScaleFactors('1,  2,  b3,  4,  5, [b6],  6,  b7'): ['rock minor dorian', 'chromatic minor (dorian/natural)', 'chromatic minor DN', 'DN minor'],
+    ScaleFactors('1,  2,   3,  4,  5,   6, [b7],  7 '): ['rock major', 'chromatic major (natural/mixolydian)', 'chromatic major NX', 'NX major'],
+    ScaleFactors('1,  2,   3,  4,  5,   6,  b7 , [7]'): ['rock major mixolydian', 'chromatic major (mixolydian/natural)', 'chromatic major XN', 'XN major'],
+
+
 
     # ScaleFactors('1,  2,   3,  4,  5,[b6],  6,[b7],  7'): ['full major'],
     # ScaleFactors('1,  2,  b3,  4,  5,  b6, [6], b7, [7]'): ['full minor'],
@@ -2717,6 +2724,9 @@ HarmonicMajor = HarmonicMajorScale = Scale('harmonic major')
 MelodicMinor = MelodicMinorScale = Scale('melodic minor')
 MelodicMajor = MelodicMajorScale = Scale('melodic major')
 
+RockMinor = RockMinorScale = Scale('rock minor')
+RockMajor = RockMajorScale = Scale('rock major')
+
 ExtendedMinor = ExtendedMinorScale = Scale('extended minor')
 FullMinor = FullMinorScale = Scale('full minor')
 ExtendedMajor = ExtendedMajorScale = Scale('extended major')
@@ -2730,21 +2740,28 @@ melodic_scales = [MelodicMajor, MelodicMinor]
 diatonic_scales = [Ionian, Dorian, Phrygian, Lydian, Mixolydian, Aeolian, Locrian]
 diatonic_scale_factors = [sc.factors for sc in diatonic_scales] # for efficient diatonicity checks
 
-extended_scales = [ExtendedMinor, ExtendedMajor, FullMinor, FullMajor]
+extended_scales = [ExtendedMinor, ExtendedMajor, RockMajor, RockMinor, FullMinor, FullMajor]
 scale_extensions = {  MinorScale: ExtendedMinor,
                       HarmonicMinor: ExtendedMinor,
-                        ExtendedMinor: FullMinor,
-                        MelodicMinor: FullMinor,
+                      Dorian: RockMinor,
+                      ExtendedMinor: FullMinor,
+                      RockMinor: FullMinor,
+                      MelodicMinor: FullMinor,
 
                       MajorScale: ExtendedMajor,
                       HarmonicMajor: ExtendedMajor,
-                        ExtendedMajor: FullMajor,
-                        MelodicMajor: FullMajor
+                      Mixolydian: RockMajor,
+                      ExtendedMajor: FullMajor,
+                      RockMajor: FullMajor,
+                      MelodicMajor: FullMajor,
                    }
 scale_contractions = {ExtendedMinor: NaturalMinor,
                       FullMinor: NaturalMinor,
+                      RockMinor: NaturalMinor,
                       ExtendedMajor: NaturalMajor,
-                      FullMajor: NaturalMajor}
+                      FullMajor: NaturalMajor,
+                      RockMajor: NaturalMajor,
+                     }
 
 searchable_heptatonics = diatonic_scales + harmonic_scales + melodic_scales
 extended_searchable_heptatonics = searchable_heptatonics + extended_scales
@@ -2772,7 +2789,6 @@ parallel_scale_names = {
 
                         # harmonic major and minor are NOT parallel, since they
                         # have different notes
-
 
                         # natural pentatonics and blues scales are straightforward:
                         'major pentatonic': 'minor pentatonic',

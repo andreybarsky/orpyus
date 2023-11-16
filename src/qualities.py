@@ -71,7 +71,7 @@ class Quality:
             obj.full_name = name
             obj.value = value
 
-            print(f'Initialising new Quality object with args={name, value}, obj.full_name={obj.full_name} and obj.value={obj.value}')
+            # log(f'Initialising new Quality object with args={name, value}, obj.full_name={obj.full_name} and obj.value={obj.value}')
 
             # set instance attributes:
             obj.major = obj.value == 1

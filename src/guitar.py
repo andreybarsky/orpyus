@@ -574,11 +574,13 @@ dadgbe = dropD = dropd = Guitar('DADGBE')
 # (subjective and personal, but the main use is for the Progression.transpose_for_guitar method)
 standard_open_chord_names = {
                 'A', 'Am', 'A7', 'Am7', 'Amaj7', 'Asus2', 'Asus4',
-                 'B7', 'Bm7',
-                 'C', 'C7', 'Cmaj7', 'Csus2', 'Cadd9',
-                 'D', 'Dm', 'D7', 'Dm7', 'Dmaj7', 'Dsus2', 'Dsus4',
-                 'E', 'Em', 'E7', 'Em7', 'Emaj7', 'Esus4',
-                 'Fmaj7', # I still have trouble even with partial bars on Fmaj
-                 'G', 'G7', 'Gmaj7',
+                #    'Bbm',
+                'B7', 'Bm7',  #  'Bm',
+                'C', 'C7', 'Cmaj7', 'Csus2', 'Cadd9',  'Cdim', # 'Cm',
+                'D', 'Dm', 'D7', 'Dm7', 'Dmaj7', 'Dsus2', 'Dsus4',
+                'E', 'Em', 'E7', 'Em7', 'Emaj7', 'Esus4',
+                'Fmaj7',  #  'F',
+                  # 'Gb',
+                'G', 'G7', 'Gmaj7',
                             }
 standard_open_chords = set([Chord.from_cache(c) for c in standard_open_chord_names])
