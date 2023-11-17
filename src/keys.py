@@ -813,7 +813,9 @@ def matching_diatonic_keys(chords=None, notes=None,
         scale_degree_weights = {1: 2,    # how much weight to place on each degree of candidate scales.
                                 3: 1.5,  # by default, tonics, thirds, and fifths
                                 5: 1.5},
-        scale_chord_weights = {1: 3, 4: 2, 5: 2},
+        scale_chord_weights =  {1: 3,    # how much weight to place on the notes of harmonised notes
+                                4: 2,    # of chords in candidate scales. by default, the 1, 4, and 5
+                                5: 2},   # chords have their notes weighted most highly
         verbose=False):
     ... # TBC
 
@@ -988,7 +990,7 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_
             # and by scale chord notes:
             for root_degree, degree_weight in scale_chord_weights.items():
                 root_chord = scale.chord(root_degree, order=3)
-                chord_notes = [key_tonic + iv for iv in root_chord.intervals]
+                chord_notes = [key_tonic + iv for iv in root_chord.intervals_from_tonic]
                 chord_note_weights = {n: degree_weight for n in chord_notes}
                 scale_note_weights.update(chord_note_weights)
 
