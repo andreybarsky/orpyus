@@ -804,20 +804,45 @@ relative_co5_distances = IntervalList([0, 5, 2, 3, 4, 1, 6, 1, 4, 3, 2, 5])
 # which is why it's hardcoded instead of being computed at init
 
 
-def matching_diatonic_keys(chords=None, notes=None,
+def matching_natural_keys(chords=None, notes=None,
         min_precision=0, min_recall=0.9, # minimum accuracy stats to return a match
         weight_counts=True,  # if True, place more weight on repeated notes
         chord_factor_weights = {1: 1.5,  # if using chords, how much weight to place on each chord factor.
                                 3: 1.2,  # by default, chord tonics and thirds are worth more,
                                 5: 0.8}, # while fifths are worth less (because they are often implicit)
-        scale_degree_weights = {1: 2,    # how much weight to place on each degree of candidate scales.
-                                3: 1.5,  # by default, tonics, thirds, and fifths
-                                5: 1.5},
-        scale_chord_weights =  {1: 3,    # how much weight to place on the notes of harmonised notes
-                                4: 2,    # of chords in candidate scales. by default, the 1, 4, and 5
-                                5: 2},   # chords have their notes weighted most highly
+        #scale_degree_weights = {1: 2,    # how much weight to place on each degree of candidate scales.
+                                #3: 1.5,  # by default, tonics, thirds, and fifths
+                                #5: 1.5},
+        #scale_chord_weights =  {1: 3,    # how much weight to place on the notes of harmonised notes
+                                #4: 2,    # of chords in candidate scales. by default, the 1, 4, and 5
+                                #5: 2},   # chords have their notes weighted most highly
         verbose=False):
-    ... # TBC
+    """returns the natural key associated with a set of notes,
+    or a matchset of possible matches for such a natural key.
+    input can be provided either as a bare NoteList, or as a ChordList
+        (which will be decomposed into notes).
+    if weight_counts = True, will weight notes more highly by their occurrence
+        frequency in the input.
+    """
+
+    # quietly accept a notelist if given as first argument:
+    if isinstance(chords, NoteList):
+        notes = chords
+        chords = None
+
+    # parse input into counter-dict of notes frequencies:
+    if chords is not None:
+        assert notes is None, "conflicting input - matching_natural_keys() expects ONE of: chords, notes"
+        if not isinstance(chords, ChordList):
+            chords = ChordList(chords)
+        # compute weighted notes wrt provided factor weights (and ignoring frequency counts if asked)
+        input_note_weights = chords.weighted_note_counts(chord_factor_weights, ignore_counts=(not weight_counts))
+    elif notes is not None:
+        if not isinstance(notes, NoteList):
+            notes = NoteList(notes)
+        input_note_weights = Counter(notes)
+
+    candidate_scale = MajorScale
 
 
 def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_tonic=False,

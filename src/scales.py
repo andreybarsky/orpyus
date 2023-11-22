@@ -2102,6 +2102,11 @@ class ScaleChord(AbstractChord):
         else:
             return self.scale.fractional_degree_intervals[self.scale_degree]
 
+    @property
+    def intervals_from_tonic(self):
+        """returns the intervals of this ScaleChord relative to the scale tonic"""
+        return self.intervals + self.root_interval_from_tonic
+
     def in_key(self, key, verify_scale=False):
         """constructs a KeyChord object from this ScaleChord with respect to a
         desired Key (keeping the same scale degree) - this may change the scale if it exists"""
@@ -3045,10 +3050,11 @@ def matching_scales(chords=None, intervals=None, major_roots=None, min_recall=0.
             df.append(df_row)
         df.show(max_rows=max_results, margin=' ', **kwargs)
 
-
-print('')
-degree_chord_pairs = [(1, AbstractChord('min')), (5, AbstractChord('7')), (7, AbstractChord('maj'))]
-matching_scales(degree_chord_pairs, major_roots=True)
+if __name__ == '__main__':
+    # test matching scales:
+    print('')
+    degree_chord_pairs = [(1, AbstractChord('min')), (5, AbstractChord('7')), (7, AbstractChord('maj'))]
+    matching_scales(degree_chord_pairs, major_roots=True)
 
 # cached scale attributes for performance:
 if _settings.PRE_CACHE_SCALES:

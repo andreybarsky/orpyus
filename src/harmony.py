@@ -572,14 +572,7 @@ class HarmonicDataModel(HarmonicModel):
 
 
 
-common_major_model = HarmonicDataModel('major', common_progressions)
-# common_major_model.populate_with_progressions(common_progressions)
 
-common_minor_model = HarmonicDataModel('minor', common_progressions, shift_scale=True)
-# common_minor_model.populate_with_progressions(common_progressions)
-
-default_harmonic_models = {NaturalMajor: common_major_model,
-                           NaturalMinor: common_minor_model}
 
 # major_model = HarmonicModel(NaturalMajor, major_function_degrees, major_function_subsequents,
 #                             exceptions=major_special_movements)
@@ -587,7 +580,19 @@ default_harmonic_models = {NaturalMajor: common_major_model,
 # # MajorHarmonicModel = HarmonicModel(NaturalMajor, degree_functions)
 #
 
+if __name__ == '__main__':
+    # verbosely initialise progression-based harmonic models:
 
-# attempt autocompletion:
-p = Progression('I V')
-common_major_model.complete(p)
+    common_major_model = HarmonicDataModel('major', common_progressions)
+    # common_major_model.populate_with_progressions(common_progressions)
+
+    common_minor_model = HarmonicDataModel('minor', common_progressions, shift_scale=True)
+    # common_minor_model.populate_with_progressions(common_progressions)
+
+    default_harmonic_models = {NaturalMajor: common_major_model,
+                            NaturalMinor: common_minor_model}
+
+
+    # attempt autocompletion:
+    p = Progression('I V')
+    common_major_model.complete(p)
