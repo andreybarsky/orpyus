@@ -1,7 +1,7 @@
 #### string parsing functions
 from collections import defaultdict
 from .util import reverse_dict, unpack_and_reverse_dict, log
-from . import _settings
+from .config import settings
 import string
 
 ################### accidentals
@@ -22,7 +22,7 @@ def accidental_value(acc):
 accidentals_to_ascii = {char: chars[-1] for chars in offset_accidentals.values() for char in chars}
 
 
-if _settings.PREFER_UNICODE_ACCIDENTALS:
+if settings.PREFER_UNICODE_ACCIDENTALS:
     fl = flat = '♭'
     sh = sharp = '♯'
     dfl = dflat = '𝄫'
@@ -62,7 +62,7 @@ def is_accidental(char):
         raise ValueError("'' is technically not an accidental but this is an edge case")
     return (char in accidental_offsets.keys())
 def cast_accidental(acc, max_len=1):
-    """reads what might be unicode accidentals and casts to preferred accidental according to _settings"""
+    """reads what might be unicode accidentals and casts to preferred accidental according to config.settings"""
     assert isinstance(acc, str) and len(acc) <= max_len, f'Invalid input to parse_accidental: {acc} (where max_len={max_len})'
     if acc in accidentals_to_ascii:
         return preferred_accidentals[acc]
@@ -184,7 +184,7 @@ roman_numerals = reverse_dict(numerals_roman)
 modifier_marks = { 'dim':  '°', 'hdim7': 'ø', # ᶲ ?
                    'aug':  '⁺',  'maj':  'ᐞ',
                    'sus':  'ˢ',  'add':  'ᵃ',
-_settings.CHARACTERS['unknown_chord']: _settings.CHARACTERS['unknown_superscript'],
+settings.CHARACTERS['unknown_chord']: settings.CHARACTERS['unknown_superscript'],
 } # '⁽ᵃ⁾'}
 
 # all numerals also get turned into modifier marks:

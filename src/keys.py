@@ -1,10 +1,11 @@
-from . import notes, scales, parsing, _settings
+from . import notes, scales, parsing
 from .parsing import fl, sh, nat, dfl, dsh
 from .intervals import Interval, IntervalList
 from .notes import Note, NoteList, chromatic_notes
 from .scales import Scale, ScaleFactors, ScaleDegree, ScaleChord, common_scales, scale_extensions, scale_contractions
 from .chords import Chord, AbstractChord, ChordList
 from .util import ModDict, check_all, precision_recall, reverse_dict, unpack_and_reverse_dict, log
+from .config import settings
 
 from collections import Counter
 from functools import cached_property
@@ -678,7 +679,7 @@ class Key(Scale):
         return f'{str(self)}  {lb}{notes_str}{rb}'
 
     # Key object unicode identifier:
-    _marker = _settings.MARKERS['Key']
+    _marker = settings.MARKERS['Key']
 
 
 
@@ -1105,7 +1106,7 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_
             note_weights_str = ',  '.join([f'{n.name}: {w:.1f}' for n,w in input_note_weights.items()])
             print(f'Note weights:\n  {note_weights_str}')
 
-        nlb, nrb = _settings.BRACKETS['NoteList']
+        nlb, nrb = settings.BRACKETS['NoteList']
 
         # show degrees as columns
         longest_scale_len = max([len(s) for s in sorted_scores]) if len(sorted_scores) > 0 else 7
@@ -1128,18 +1129,18 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_
             # we'll add chromatic markers to the first char of each note name
             # but to do that we first set up the list of the chromatic char if it exists
             # for each note in teh sequence
-            chrom = _settings.DIACRITICS['chromatic']
+            chrom = settings.DIACRITICS['chromatic']
             chrom_markers = [chrom if cand_note_is_chromatic[i] else '' for i in range(len(cand.notes))]
 
             # then combine that with the out-of-input diacritic in this list copm:
-            ooi = _settings.DIACRITICS['note_not_in_input']
+            ooi = settings.DIACRITICS['note_not_in_input']
             ooi_notes = [f'{(note.name[0] + c + note.name[1:]):{2+len(c)}}' # chromatic diacritic goes between the first char, and the rest of the chars
                             if cand_note_in_input[i] # plain note name
                          else f"{note.name[0] + c + ooi + ''.join([f'{nc}{ooi}' for nc in note.name[1:]]):{2+len(note.name) + len(c)}}"
                          # else f"{(c + ''.join([f'{nc}{ooi}' for nc in note.name])):{2+len(note.name) + len(c)}}" # add diacritic to note name
                          for i,(note,c) in enumerate(zip(cand.notes, chrom_markers))]
             # add brackets around chromatic notes:
-            # clb, crb = _settings.BRACKETS['chromatic_intervals']
+            # clb, crb = settings.BRACKETS['chromatic_intervals']
             # cand_notes_strs = [f' {note_name:>{2+len(note_name)}}' if not cand_note_is_chromatic[i] # plain note name (maybe with diacritic)
             #                    else f'{(clb + note_name + crb):>{3+len(note_name)}}'   # brackets around chromatic notes
             #                    for i,note_name in enumerate(cand_notes_strs)]

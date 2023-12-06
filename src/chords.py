@@ -3,7 +3,9 @@ from .intervals import Interval, IntervalList, P5, default_degree_intervals
 from .util import log, precision_recall, rotate_list, check_all, all_equal, sign, reverse_dict, unpack_and_reverse_dict, reduce_aliases
 from .qualities import Quality, ChordModifier, parse_chord_modifiers
 from .parsing import sh, fl, nat
-from . import notes, parsing, qualities, tuning, _settings
+from . import notes, parsing, qualities, tuning,
+from .config import settings, def_chords
+#from .config.def_chords import chord_names_by_rarity
 
 from collections import defaultdict, UserDict, Counter
 import itertools
@@ -310,14 +312,14 @@ class AbstractChord:
             flat_intervals = self.intervals.flatten()
             if flat_intervals in intervals_to_chord_names:
                 # affix with extended chord identifying char:
-                ext_char = _settings.CHARACTERS['extended_chord']
+                ext_char = settings.CHARACTERS['extended_chord']
                 return intervals_to_chord_names[flat_intervals] + ext_char
             elif self.factors == _major_triad:
                 return ''
             elif self.assigned_name is not None:
                 log(f'Falling back on assigned name for unregistered chord: {self.assigned_name}')
                 ### experimental: register this chord under this name too
-                if _settings.DYNAMIC_CACHING and cache_initialised:
+                if settings.DYNAMIC_CACHING and cache_initialised:
                     log(f'Post-hoc registering chord inside AbstractChord.get_suffix')
                     self._register()
                 return self.assigned_name
@@ -449,7 +451,7 @@ class AbstractChord:
             #         cons_list.append(cons)
             # simple average of consonance list: (weighting incorporated by the extra_factors mechanic)
             raw_cons = sum(cons_list) / len(cons_list)
-            if _settings.DYNAMIC_CACHING:
+            if settings.DYNAMIC_CACHING:
                 cached_consonances_by_suffix[(temperament,self.suffix)] = raw_cons
 
         if raw:
@@ -797,7 +799,7 @@ class AbstractChord:
             return cached_abstract_chords[cache_key]
         else:
             chord_obj = AbstractChord(name=name, factors=factors, modifiers=modifiers, inversion=inversion, assigned_name=assigned_name)
-            if _settings.DYNAMIC_CACHING:
+            if settings.DYNAMIC_CACHING:
                 log(f'Registering abstract chord by key {cache_key} to cache')
                 cached_abstract_chords[cache_key] = chord_obj
             return chord_obj
@@ -849,8 +851,8 @@ class AbstractChord:
         return f'{str(self)} {self.intervals}'
 
     # AbstractChord object unicode identifier:
-    _marker = _settings.MARKERS['AbstractChord']
-    _unknown_char = _settings.CHARACTERS['unknown_chord']
+    _marker = settings.MARKERS['AbstractChord']
+    _unknown_char = settings.CHARACTERS['unknown_chord']
 
 ################################################################################
 
@@ -1446,7 +1448,7 @@ class Chord(AbstractChord):
         else:
             chord_obj = Chord(name=name, factors=factors, modifiers=modifiers,
                               root=root, inversion=inversion, assigned_name=assigned_name)
-            if _settings.DYNAMIC_CACHING:
+            if settings.DYNAMIC_CACHING:
                 log(f'Registering chord by key {cache_key}  to cache')
                 cached_chords[cache_key] = chord_obj
             return chord_obj
@@ -1479,7 +1481,7 @@ class Chord(AbstractChord):
         # we return what it was named at init (with a warning marker)
         # plus a parenthetical true name if one exists:
         else:
-            comp_char = _settings.CHARACTERS['compound_slash_chord']
+            comp_char = settings.CHARACTERS['compound_slash_chord']
             if self.compound_true_name is not None:
                 true_name_str = f' ({self.compound_true_name})'
             else:
@@ -1499,7 +1501,7 @@ class Chord(AbstractChord):
         """outputs list of notes in this chord,
         with diacritic dotes to indicate notes outside the starting octave"""
         notes_str = [] # notes are annotated with accent marks depending on which octave they're in (with respect to root)
-        up1, up2, down1, down2 = [_settings.DIACRITICS[d] for d in ['octave_above', '2_octaves_above', 'octave_below', '2_octaves_below']]
+        up1, up2, down1, down2 = [settings.DIACRITICS[d] for d in ['octave_above', '2_octaves_above', 'octave_below', '2_octaves_below']]
 
         for i, n in zip(self.intervals, self.notes):
             assert (self.bass + i) == n, f'bass ({self.bass}) + interval ({i}) should be {n}, but is {self.bass + i}'
@@ -1532,7 +1534,7 @@ class Chord(AbstractChord):
         return f'{str(self)}  {lb}{notes_str}{rb}'
 
     # Chord object unicode identifier:
-    _marker = _settings.MARKERS['Chord']
+    _marker = settings.MARKERS['Chord']
 
 
 ################################################################################
@@ -1716,7 +1718,7 @@ class Factors(UserDict):
         return f'{self.__class__.__name__}: {str(self)}'
 
     # ChordFactors object unicode identifier:
-    _brackets = _settings.BRACKETS['ChordFactors']
+    _brackets = settings.BRACKETS['ChordFactors']
 
 # ChordFactors are simply the type of Factors that apply to Chords:
 class ChordFactors(Factors):
@@ -1732,15 +1734,14 @@ _major_triad = ChordFactors({1:0, 3:0, 5:0})
 
 cache_initialised = False # flag that avoids certain behaviours during library import
 
-# we rank chords by their rarity for purposes such as searching and note-matching
-# this is a subjective list but it does the job:
-chord_names_by_rarity = { 0: ['', 'm', '7', '5'],   # basic chords: major/minor triads, dominant sevenths, and power chords
-                          1: ['m7', 'maj7', 'dim', 'sus4', 'sus2', 'add9'], # maj/min7s, dim triads, and common melodic alterations
-                          2: ['9', 'maj9', 'm9', 'aug', '6', 'm6'],
-                          3: ['dim7', 'hdim7', 'aug7', 'mmaj7', f'7{fl}5', f'7{sh}9', f'7{fl}9', f'({fl}5)'],
-                          4: ['dim9', 'dmin9', 'mmaj9', 'hdmin9', 'dimM7', 'augM7', 'augM9', 'maj13'] + [f'{q}{d}' for q in ('', 'm', 'maj') for d in (11,13)],
-                          5: [f'maj13{nat}11', 'add11'] + [f'{q}{d}' for q in ('dim', 'mmaj') for d in (11,13)],
-                          6: [], 7: [], 8: [], 9: []}
+# import base rarity definitions for common chord names:
+#from .defines.def_chords import chord_names_by_rarity
+from def_chords import chord_names_by_rarity
+
+
+# and calculate the rarities of more complex, modified chords
+# based on the relative rarity of the base chord types used
+# to formulate them:
 
 max_rarity = len(chord_names_by_rarity)-1
 # 'tweaks' are the chord modifiers that can be applied to other base chords: (e.g. the sus2 in C7sus2)
@@ -1848,7 +1849,7 @@ cached_abstract_chords = {}
 cached_chords = {}
 cached_consonances_by_suffix = {}
 
-if _settings.PRE_CACHE_CHORDS: # initialise common chord objects in cache for faster access later
+if settings.PRE_CACHE_CHORDS: # initialise common chord objects in cache for faster access later
     # cache abstract chords by name up to a certain rarity:
     cached_abstract_chords.update({(chord_name,None,None,None,None): AbstractChord(chord_name) for chord_name, rarity in chord_name_rarities.items() if rarity <= 1}) # not currently used
     # let the cache point to them by their factors as well:
@@ -1862,7 +1863,7 @@ if _settings.PRE_CACHE_CHORDS: # initialise common chord objects in cache for fa
     cached_chords.update({(None,c.factors,None,c.root.chroma,None,None): c for c in cached_chords.values()})
 
     # intonation = tuning.get_intonation()
-    # cached_consonances_by_suffix.update({(intonation, ac.suffix): ac.consonance for ac in cached_abstract_chords.values()}) # does this perform a double update if _settings.DYNAMIC_CACHING is on?
+    # cached_consonances_by_suffix.update({(intonation, ac.suffix): ac.consonance for ac in cached_abstract_chords.values()}) # does this perform a double update if settings.DYNAMIC_CACHING is on?
 
 cache_initialised = True
 
@@ -1910,7 +1911,7 @@ class ChordList(list):
         super().__init__(valid_chords)
 
     # outer brackets for this container class:
-    _brackets = _settings.BRACKETS['ChordList']
+    _brackets = settings.BRACKETS['ChordList']
 
 
     def __str__(self, brackets=True):

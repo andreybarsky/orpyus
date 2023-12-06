@@ -9,15 +9,17 @@ from .keys import Key, KeyChord, matching_keys# , most_likely_key
 from .util import reduce_aliases, rotate_list, check_all, reverse_dict, log
 from .parsing import auto_split, superscript, fl, sh, nat # roman_numerals, numerals_roman, modifier_marks,
 from .numerals import RomanNumeral
-from . import parsing, _settings, notes, scales
+from . import parsing, notes, scales
+from .config import settings, def_progressions
+from def_progressions import common_progressions
 
 from collections import Counter
 
 # import numpy as np  # not needed yet
 
 # global defaults:
-default_diacs = _settings.DEFAULT_PROGRESSION_DIACRITICS
-default_marks = _settings.DEFAULT_PROGRESSION_MARKERS
+default_diacs = settings.DEFAULT_PROGRESSION_DIACRITICS
+default_marks = settings.DEFAULT_PROGRESSION_MARKERS
 
 # functions of (major?) scale chords, indexed by interval (not degree)
 scale_functions = { 0: "T", # 1st, tonic
@@ -79,7 +81,7 @@ class Progression:
         if isinstance(numerals, str):
             original_numerals = numerals
             # remove all diacritics:
-            numerals = ''.join([c for c in numerals if c not in _settings.DIACRITICS.values()])
+            numerals = ''.join([c for c in numerals if c not in settings.DIACRITICS.values()])
             # and all scale marks:
 
             split_numerals = auto_split(numerals, allow='°øΔ♯♭♮+𝄫𝄪#/' + ''.join(parsing.modifier_marks.values()))
@@ -423,7 +425,7 @@ class Progression:
         else:
             return model.complete(self, display=False)
 
-    _brackets = _settings.BRACKETS['Progression']
+    _brackets = settings.BRACKETS['Progression']
 
 def most_grammatical_progression(progressions, add_resolution=True, return_scores=True, verbose=False):
     """given an iterable of Progression objects, compare their cadences and return the one that seems most likely/grammatical"""
@@ -653,7 +655,7 @@ class ChordProgression(Progression): # , ChordList):
         # just a wrapper around this progression's ChordList's method:
         self.chords.play(*args, **kwargs)
 
-    _brackets = _settings.BRACKETS['ChordProgression']
+    _brackets = settings.BRACKETS['ChordProgression']
 
     def long_str(self):
         # numerals = self.as_numerals()
@@ -1194,9 +1196,9 @@ class DegreeMotion:
     def __repr__(self):
         return str(self)
 
-    _movement_marker = _settings.MARKERS['right']
-    _up_arrow = _settings.MARKERS['up']
-    _down_arrow = _settings.MARKERS['down']
+    _movement_marker = settings.MARKERS['right']
+    _up_arrow = settings.MARKERS['up']
+    _down_arrow = settings.MARKERS['down']
 
 
 class RootMotion(DegreeMotion):
@@ -1411,7 +1413,7 @@ class ScaleChordMotion:
         return '\n'.join(lines)
         # return f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name} (in {self.scale.name})\nDegree distance:\n{self.degree_distances}\nInterval distance:\n{self.interval_distances}'
 
-    _arrow = _settings.MARKERS['right']
+    _arrow = settings.MARKERS['right']
 
 class KeyChordMotion(ScaleChordMotion):
     def __init__(self, start_chord, end_chord, key=None):
@@ -1525,76 +1527,13 @@ def propose_root_motions(start, direction):
 
 
 
-common_progressions = {
-    Progression('I IV V'  ) : '145',
-    Progression('ii V I'  ) : '251',
-    Progression('ii V i'  ) : 'minor 251',
-    Progression('V IV I'  ) : '541',
-    Progression('I vi V'  ) : '165',
-    Progression('I V IV V') : '1545',
-
-    Progression('I IV  ii V ') : '1425',
-    Progression('I III IV iv') : '134m4',
-    Progression('I ii iii IV V') : '12345',
-
-    Progression('I  V    vi   IV' ) : 'axis',
-
-    Progression('I  V   ♭VII  IV' ) : 'deceptive axis',
-    Progression('I  IV   vi   V'): '1465', # more than a feeling, 1985, mr brightside,
-                                       # shut up and dance, what makes you beautiful
-
-    Progression('I  vi   IV   V'  ) : '50s', # aka doo-wop
-    Progression('I  vi   ii   V  ') : 'blue moon',
-    Progression('vi V    IV   III') : 'andalusian',
-    Progression('i ♭VII ♭VI   V'  ) : 'andalusian minor',
-    Progression('I ♭VII ♭VI  ♭VII') : 'aeolian vamp', # all along the watchtower, stairway to heaven, my heart will go on
-    # Progression('vi IV   V    I'  ) : 'komuro', # rotation
-
-    Progression('ii⁷ V⁷  Iᐞ⁷ V⁷') : 'jazz turnaround',
-    Progression('Iᐞ⁷ vi⁷ ii⁷ V⁷') : 'rhythm changes',
-    Progression('Iᐞ⁷ ii⁷ V⁷ IVᐞ⁷') : '1 to 4',
-    Progression('Iᐞ⁷ II⁷ ii⁷ V⁷ Iᐞ⁷') : 'a-train',
-    Progression('I⁷  IV⁷ ii⁷ V⁷') : 'montgomery-ward bridge',
-    Progression('v⁷ I⁷ IV IV vi⁷ II⁷ ii⁷ V⁷'): 'full montgomery-ward bridge',
-
-    # Progression('I⁷ IV⁷ I⁷  V⁷    ') : 'blues',
-    Progression('I⁷ IV⁷ I⁷  V⁷ IV⁷') : '12-bar blues',
-    Progression('i⁷ iv⁷ i⁷ ♭VI⁷ V⁷') : 'minor blues',
-    Progression('III⁷ VI⁷ II⁷ V⁷ I') : 'ragtime',
-
-    Progression('I ♭VII IV I   ') : 'mixolydian vamp',
-    Progression('i III VII IV'): 'plagal cascade',
-    Progression('i bVII v bVI  ') : "can't stop", # & zephyr song, hello, someone new
-    Progression('I V ii IV'): 'closing time', # all star, closing time, hot n cold, just like heaven, I'm like a bird
-
-    Progression('vi ii  V I'  ) : 'circle',
-    Progression('VI ii° V i'  ) : 'circle minor',
-    Progression('I IV vii° iii vi ii V'     ): 'full circle',
-    Progression('i iv VII  III VI ii° V i'  ): 'full circle minor',
-
-    Progression('IVᐞ⁷ V⁷   iii⁷ vi' ): 'royal road',
-    Progression('VIᐞ⁷ VII⁷ v⁷   i ' ): 'royal road minor',
-    Progression('iv⁷  v⁷   IIIᐞ⁷ VI'): 'royal road minor (variant)',
-    Progression('IVᐞ⁷ V⁷   iii⁷  vi⁷ ii⁷ V⁷ I'): 'full royal road',
-    Progression('iv⁷  v⁷   IIIᐞ⁷ VI iiø⁷ V⁷ i'): 'full royal road minor',
-
-    Progression('I   V⁷  i VII III VII i V⁷ i'): 'folia',
-    Progression('III VII i V   III VII i V  i'): 'romanesca',
-    Progression('i   VII i V   III VII i V  i'): 'passamezzo antico',
-    # Progression('i   VII i V'                 ): 'passamezzo antico (first phrase)',
-    # Progression('               III VII i V i'): 'passamezzo antico (second phrase)',
-
-    # modal progressions:
-    Progression('I bVII IV', scale='mixolydian'): 'common mixolydian',
-    Progression('I II', scale='lydian'): 'lydian intro',
-
-    }
 
 simple_progressions = {p.simplify(): name for p,name in common_progressions.items()}
 
 # augmented dicts that includes all their rotations as well:
 rotated_common_progressions = dict(common_progressions)
 rotated_simple_progressions = dict(simple_progressions)
+
 
 for prog_dict, rot_dict in zip([common_progressions, simple_progressions], [rotated_common_progressions, rotated_simple_progressions]):
     for prog, name in prog_dict.items():
@@ -1607,6 +1546,12 @@ for prog_dict, rot_dict in zip([common_progressions, simple_progressions], [rota
 
 # rotated_simple_progressions = {p.simplify(): name for p,name in rotated_common_progressions.items()}
 
+# import named progressions as strings of roman numerals:
+from def_progressions import common_progressions as common_progression_defines
+# and cast them to Progression objects:
+common_progressions = {Progression(chords):name for chords, name in common_progression_defines.items()}
+
+# get the reverse mapping too:
 common_progressions_by_name = reverse_dict(common_progressions)
 
 # guitar-playable variants of the common progressions:

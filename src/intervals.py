@@ -2,7 +2,8 @@ from .qualities import Quality #, Major, Minor, Perfect, Augmented, Diminished
 from .parsing import degree_names, span_names, multiple_names, num_suffixes, offset_accidentals
 from .util import ModDict, rotate_list, least_common_multiple, euclidean_gcd, numeral_subscript, log
 from .conversion import value_to_pitch
-from . import _settings, tuning
+from .config import settings
+from . import tuning
 import math
 from functools import cached_property
 
@@ -124,7 +125,7 @@ class Interval:
         technically EQUAL tuning has no defined ratios, but we approximate them using
             very large side lengths.
         if temperament is None (as default), fall back on the tuning system specified
-            in _settings.TUNING_SYSTEM"""
+            in settings.TUNING_SYSTEM"""
         ratios = tuning.get_ratios(temperament, context='CONSONANCE')
         if self.value in ratios:
             return ratios[self.value]
@@ -165,7 +166,7 @@ class Interval:
 
             # so we invert it into a consonance between 0-1:
             consonance = (15 - dissonance) / 15
-            if _settings.DYNAMIC_CACHING:
+            if settings.DYNAMIC_CACHING:
                 cached_consonances[(temperament, self.value)] = consonance
             return consonance
     @property
@@ -207,7 +208,7 @@ class Interval:
             default_value = default_degree_intervals[degree] + (12*octave_span)
             interval_value = default_value + offset
             interval_obj = Interval.from_cache(interval_value, extended_degree, max_degree)
-            if _settings.DYNAMIC_CACHING and max_degree==7:
+            if settings.DYNAMIC_CACHING and max_degree==7:
                 cached_intervals_by_degree[(extended_degree, quality, offset)] = interval_obj
             return interval_obj
 
@@ -528,7 +529,7 @@ class Interval:
             return IrregularInterval(value, degree, max_degree, span_size)
         elif (value, degree) in cached_intervals:
             return cached_intervals[(value, degree)]
-        elif _settings.DYNAMIC_CACHING:
+        elif settings.DYNAMIC_CACHING:
             new_interval = Interval(value, degree)
             cached_intervals[(value,degree)] = new_interval
             return new_interval
@@ -541,7 +542,7 @@ class Interval:
         and span_size parameters of the current Interval object in case this Interval is Irregular"""
         return Interval.from_cache(value, degree, self.max_degree, self.span_size)
 
-    _brackets = _settings.BRACKETS['Interval']
+    _brackets = settings.BRACKETS['Interval']
 
     perfect_degrees = {1,4,5,8} # true for diatonic intervals, but maybe not for irregular intervals?
 
@@ -1031,7 +1032,7 @@ class IntervalList(list):
         return str(self)
 
     # IntervalList object unicode identifier:
-    _brackets = _settings.BRACKETS['IntervalList']
+    _brackets = settings.BRACKETS['IntervalList']
 
 # quality-of-life alias:
 Intervals = IntervalList

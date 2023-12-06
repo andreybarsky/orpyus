@@ -16,6 +16,14 @@ minor_qualdist = {0: 10, 1: -3,  2: 6,  3: 7,  4: -9,  5: 8,  6: -2,
                   7:  7,  8: 5,  9: 0,  10: 5,  11: 0,}
                 # or whatever
 
+# specific scales to search once we have established a tonality:
+major_scales = [NaturalMajor, HarmonicMajor, MelodicMajor,
+                Mixolydian, Lydian, BluesMajor]
+
+minor_scales = [NaturalMinor, HarmonicMinor, MelodicMinor,
+                Dorian, Phrygian, BluesMinor,
+                NeapolitanMinor, NeapolitanMajor, DoubleHarmonic]
+
 @dataclass
 class Tonality:
     tonic: Note
@@ -31,12 +39,13 @@ class Tonality:
             raise Exception('Tonality should be either major or minor')
 
     def __truediv__(self, weighted_ivs: dict[Interval, float]):
-        """compute dot product with intervals and return score
+        """ '/' operator: compute dot product with intervals and return score
         proportional to how those intervals match this tonality."""
         return sum(self * weighted_ivs)
 
     def __mul__(self, weighted_ivs: dict[Interval, float]):
-        """compute pairwise product with intervals and the scores at each point."""
+        """ '*' operator: compute pairwise product with intervals and the scores
+        at each point."""
         return [prior * weighted_ivs[iv]
                     if iv in weighted_ivs else 0
                     for iv, prior in self.distribution.items()]
@@ -103,7 +112,6 @@ def match_qualdist_to_intervals(ivs: IntervalList, weight_counts=True,
 
 
 
-
 def notes_tonality(notes: NoteList):
     """accepts a set of notes, either as a NoteList (unweighted)
         or as a dict keying Notes to arbitrary float weightings.
@@ -150,6 +158,230 @@ def chords_tonality(chords, chord_factor_weights = {1: 2, 3: 1.5}, weight_counts
         chords = chords.chords
     weighted_notes = chords.weighted_note_counts(chord_factor_weights, ignore_counts=(not weight_counts))
     return notes_tonality(weighted_notes)
+
+### SCALE MATCHING
+
+
+def matching_scales(chords=None, intervals=None, major_roots=None, min_recall=0.85, min_precision=0.0,
+                    candidate_scales = [MajorScale, MinorScale,
+                                        HarmonicMinor, MelodicMinor, ExtendedMinor, FullMinor,
+                                        HarmonicMajor, MelodicMajor, ExtendedMajor, FullMajor,
+                                        Lydian, Mixolydian, # note! these are the scales corresponding to adjacent major keys on the circle of fifths
+                                        Dorian, Phrygian, # and these correspond to adjacent Co5 scales for minor keys
+                                        Locrian],  # just for completeness although it will rarely turn up in practice
+                    filter_redundancies = True,
+                    max_results=None, display=True, **kwargs):
+    """accepts either:
+          chords: a list of roman numeral chords, e.g. ["i", "V7", "VII"]
+                   or a string of the same, with clear separators, e.g.: "i - V7 - VII"
+                or a list of degree-chord pairs, of the form: [(root degree, AbstractChord), etc.]
+            or
+          intervals: an IntervalList (or object that casts to IntervalList)
+       and returns a list of matching Scales based on which intervals/factors correspond to those chords
+    if major_roots is True, interpret chords like III and VII as being rooted on their major intervals
+        (i.e. the major 3rd and major 7th), unless specified bIII and bVII etc.
+    if major_roots is False, interpret those chords as rooted on their minor intervals,
+        (i.e. the minor 3rd and 7th), unless specified #III and #VII.
+    if major_roots is None, we make a best guess - use the tonic's quality if there, or
+        assume major if not otherwise specified.
+
+    if filter_redundant is True, avoids displaying extended/full scales if their base form
+        is a better fit for the input intervals."""
+
+    # keep in mind: a raised 7th (Interval(11)) is usually more indicative of
+    # harmonic minor than it is of natural major, at least melodically
+
+    # check if first arg is an intervallist, in which case silently correct and treat it as one:
+    if isinstance(chords, IntervalList):
+        intervals = chords
+        chords = None
+
+    if chords is not None:
+        if isinstance(chords, str):
+            # assume a string of roman numerals:
+            split_numerals = auto_split(chords)
+            roman = True
+        elif isinstance(chords[0], str):
+            # assume a list of roman numerals
+            split_numerals = chords
+            roman = True
+        else:
+            # assume degree, chord pairs
+            assert len(chords[0]) == 2, "expected input to matching_scales to be roman numerals or list of (degree, abs_chord) pairs"
+            roman = False
+
+        if roman:
+            degrees, abs_chords = [], []
+            for num in split_numerals:
+                rn = RomanNumeral(num)
+                deg, ch = rn.degree, rn.chord
+                degrees.append(deg)
+                abs_chords.append(ch)
+        else:
+            degrees = [d for d,ch in chords]
+            abs_chords = [ch for d,ch in chords]
+
+        # determine if numeral degrees are relative to major or minor scale:
+        if roman and (major_roots is None):
+            # if any roots are flattened (e.g. bIII), we assume that those flats are relative to major scale:
+            contains_flats = True in [parsing.contains_flat(num) for num in split_numerals]
+            if contains_flats:
+                major_roots = True
+        if major_roots is None:
+            # otherwise, try and guess from tonic if present:
+            if 1 in degrees:
+                which_1 = [i for i,d in enumerate(degrees) if d==1][0]
+                tonic_chord = abs_chords[which_1]
+                major_roots = not tonic_chord.quality.minor_ish # assume major for maj/aug/ind tonic chords
+            else:
+                major_roots = True # assume major since not otherwise specified
+
+        if display: # expensively work out roman numerals of those pairs for table output
+            root_scale = MajorScale if major_roots else MinorScale
+            # ensure split numerals have proper superscripts etc. even if roman chords were given:
+            # split_numerals = [ch.in_scale(root_scale, degree=d).mod_numeral for d,ch in zip(degrees, abs_chords)]
+            scale_chords = [ch.in_scale(root_scale, degree=d) for d,ch in zip(degrees, abs_chords)]
+            simple_numerals = [sch.simple_numeral for sch in scale_chords]
+            mod_numerals = [sch.mod_numeral for sch in scale_chords]
+
+        # determine intervals to match against
+        # how far does each chord start from the scale tonic:
+        if major_roots:
+            root_intervals_from_tonic = [MajorScale._get_arbitrary_degree_interval(d) for d in degrees]
+            minor_assumed = False
+        else:
+            root_intervals_from_tonic = [MinorScale._get_arbitrary_degree_interval(d) for d in degrees]
+            minor_assumed = (3 in degrees or 6 in degrees or 7 in degrees)
+        # how far is each note in each chord from the scale tonic:
+        all_intervals_from_tonic = IntervalList()
+        for ch, root_iv in zip(abs_chords, root_intervals_from_tonic):
+            chord_intervals_from_tonic = ch.intervals + root_iv
+            all_intervals_from_tonic.extend(chord_intervals_from_tonic.flatten())
+
+        unique_intervals_from_tonic = IntervalList(all_intervals_from_tonic.flatten().unique())
+
+    elif intervals is not None:
+        # cast to IntervalList object if needed:
+        intervals = IntervalList(intervals) if not isinstance(intervals, IntervalList) else intervals
+        unique_intervals_from_tonic = intervals.unique()
+
+
+    # main matching loop
+    import numpy as np
+    candidate_interval_grid = np.zeros((len(candidate_scales), 12))
+    for i, cand in enumerate(candidate_scales):
+        grid_row = [1  if i in cand else 0  for i in range(12) ]
+        candidate_interval_grid[i] = grid_row
+    input_intervals_set = unique_intervals_from_tonic
+    input_interval_row = np.asarray([1  if i in input_intervals_set else 0  for i in range(12) ])
+
+    perfect_matches = []
+    candidate_scores = {}
+    for i, cand in enumerate(candidate_scales):
+        cand_interval_row = candidate_interval_grid[i]
+        difference = cand_interval_row - input_interval_row
+        # here 0s are matches, 1s are where input not in candidate, -1s are mismatches
+        # or to put another way: (0,-1) are retrieved, (0) are relevant
+        mismatches  = sum([d == -1 for d in difference])
+        # a 'perfect' match can be partial, it simply has no mismatches:
+        if mismatches == 0:
+            perfect_matches.append(cand)
+        # scores:
+        matches = sum([d == 0 for d in difference])
+        spares = sum([d == 1 for d in difference])
+        num_retrieved = matches + spares
+        num_relevant = matches
+        rec, prec = precision_recall_scores(num_retrieved, num_relevant, 12, 12)
+        # somewhere these became backwards relative to matching_keys etc...
+        score = {'precision': round(prec,3), 'recall': round(rec,3)}
+        candidate_scores[cand] = score
+
+    # filter out extensions that are less precise than their bases
+    if filter_redundancies:
+        redundant_scales = []
+        for base_scale, ext_scale in scale_extensions.items():
+            # (i.e. no need for extended minor if natural minor is a perfect fit,
+            # and likewise no need for full minor if extended minor is a perfect fit)
+            ### TBI: could this be generalised with Scale.is_subset type methods instead of hardcoding?
+            if base_scale in candidate_scores and ext_scale in candidate_scores:
+                base_prec, ext_prec = candidate_scores[base_scale]['precision'], candidate_scores[ext_scale]['precision']
+                if base_prec >= ext_prec:
+                    redundant_scales.append(ext_scale)
+        candidate_scores = {cand:score for cand,score in candidate_scores.items()
+                            if cand not in redundant_scales}
+
+
+    # filter scores by minimum precision:
+    if min_recall > 0 or min_precision > 0:
+        candidate_scores = {cand:score for cand,score in candidate_scores.items()
+                            if score['recall'] >= min_recall
+                            and score['precision'] >= min_precision}
+
+    sorted_cands = sorted(candidate_scores.keys(),
+                          key=lambda x: (-candidate_scores[x]['recall'],
+                                         -candidate_scores[x]['precision']))
+    sorted_scores = {cand:candidate_scores[cand] for cand in sorted_cands}
+
+    # return matches and scores
+    if not display:
+        return {cand: candidate_scores[cand] for cand in sorted_cands}
+    else:
+        from src.display import DataFrame
+
+
+        ilb, irb = _settings.BRACKETS['IntervalList']
+        out = _settings.DIACRITICS['interval_not_in_input']
+
+        # title: (including its own table for chords themselves)
+        input_factors_str = ' '.join(unique_intervals_from_tonic.as_factors)
+
+
+        if chords is not None:
+            title = (f'Matching scales for chords: {"-".join(mod_numerals)}  (scale factors: {input_factors_str})')
+            ### root intervals of each chord:
+            chords_df = DataFrame(['Degree', 'Numeral', '', 'Intervals from root', ''])
+            for ch, root_iv, num in zip(abs_chords, root_intervals_from_tonic, simple_numerals):
+                flat_intervals_from_tonic = (ch.intervals + root_iv).flatten(sort=False).as_factors
+                flat_intervals_str = ' '.join([f'{fiv:<2}' for fiv in flat_intervals_from_tonic])
+                chords_df.append([num, ch.short_name, ilb[0], flat_intervals_str, irb])
+            chords_df.show(header=False, header_char='-', title=title)
+            if (not major_roots) and (minor_assumed):
+                print(f'(assuming root degrees are relative to minor scale)')
+            print('') # newline
+
+        elif intervals is not None:
+            print(f'Matching scales for intervals: {intervals}')
+
+        # matches:
+
+
+        df = DataFrame(['Scale', ''] + ['']*12   + # one column per possible semitone
+                       ['', 'Miss.', '', 'Rec.', 'Prec.',
+                        'Likl.', 'Cons.'])
+        for cand, score in sorted_scores.items():
+            prec, rec = score['precision'], score['recall']
+            lik, cons = cand.likelihood, cand.consonance
+
+            # work out which interval factors go in which column:
+            semitone_ivs = [Interval(v) if v in cand.intervals else None for v in range(12)]
+            factor_ivs = [f'{iv.factor_name:>2}' if iv is not None else f' .' for iv in semitone_ivs]
+
+            # but mark the factors that aren't in the input:
+            cand_iv_in_input =  [(iv in unique_intervals_from_tonic or iv is None) for iv in semitone_ivs]
+            factor_ivs_marked = [fiv if cand_iv_in_input[i]    # don't underline in-input ivs
+                                 else fiv + out
+                                  for i,fiv in enumerate(factor_ivs)]
+
+            missing_ivs = [iv for iv in unique_intervals_from_tonic if iv not in cand.intervals]
+            missing_ivs_str = ','.join([f'{iv.factor_name:>2}' for iv in missing_ivs]) if len(missing_ivs) > 0 else ''
+
+            df_row = [f'{cand._marker} {cand.name:<}', ilb[0]] + factor_ivs_marked + [irb, missing_ivs_str, ' ',
+                                                                     f'{rec:.2f}', f'{prec:.2f}',
+                                                                     f'{lik:.2f}', f'{cons:.3f}']
+
+            df.append(df_row)
+        df.show(max_rows=max_results, margin=' ', **kwargs)
+
 
 
 ### CHORD MATCHING

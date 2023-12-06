@@ -1,4 +1,5 @@
-from . import parsing, _settings
+from . import parsing
+from .config import settings
 from .util import log
 import math
 
@@ -117,7 +118,7 @@ class Fretboard:
 
         # fret_sep_char = '|'
         assert len(fret_sep_char) == 1
-        highlight_chars = _settings.BRACKETS['fret_highlight']
+        highlight_chars = settings.BRACKETS['fret_highlight']
         hl_left, hl_right = highlight_chars
 
         if start_fret == 1:
@@ -386,7 +387,7 @@ class DataFrame:
             return final_string
 
 
-    _combi_chars = set(_settings.DIACRITICS.values())
+    _combi_chars = set(settings.DIACRITICS.values())
 
 
 class Grid:
@@ -652,7 +653,7 @@ def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
             elif type(scores) == list:
                 chord_scores = scores[i]
 
-        clb, crb = _settings.BRACKETS['chromatic_intervals']
+        clb, crb = settings.BRACKETS['chromatic_intervals']
 
         for col_name in columns:
             # separate out intervallist/notelist brackets into their own columns:
@@ -668,7 +669,7 @@ def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
 
                 # annotate chromatic intervals:
                 if parent_scale is not None and len(parent_scale.chromatic_intervals) > 0:
-                    ivlb, ivrb = _settings.BRACKETS['Interval']
+                    ivlb, ivrb = settings.BRACKETS['Interval']
                     for iv in parent_scale.chromatic_intervals:
                         iv_short = iv.short_name[1:-1] # interval short name without surrounding brackets
                         intervals_str = intervals_str.replace(f'{ivlb}{iv_short}{ivrb}', f'{clb}{iv_short}{crb}')
@@ -697,15 +698,15 @@ def chord_table(chords, columns=['chord', 'intervals', 'tertian', 'degrees'],
                 df_row.extend([factors_str])
 
             elif col_name == 'degrees':
-                cmark = _settings.CHARACTERS['chromatic_degree']
+                cmark = settings.CHARACTERS['chromatic_degree']
                 scale_degs = [str(int(parent_scale.interval_degrees[iv]))  if iv not in parent_scale.chromatic_intervals else cmark for iv in chord_intervals_wrt_scale]
                 scale_degs_str = ', '.join(scale_degs)
                 df_row.append(scale_degs_str)
             elif col_name == 'tert':
                 if chord.is_tertian():
-                    tert_str = _settings.CHARACTERS['true']
+                    tert_str = settings.CHARACTERS['true']
                 elif chord.is_inverted_tertian():
-                    tert_str = _settings.CHARACTERS['somewhat']
+                    tert_str = settings.CHARACTERS['somewhat']
                 else:
                     tert_str = ' '
                 df_row.append('  ' + tert_str)

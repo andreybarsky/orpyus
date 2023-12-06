@@ -6,7 +6,10 @@ from .qualities import ChordModifier, Quality, Maj, Min, Dim, minor_mod, dim_mod
 from .numerals import RomanNumeral
 from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental, sh, fl
 from .display import chord_table
-from . import notes, _settings, parsing
+from . import notes, parsing
+from .config import settings, def_scales
+#from .config.def_scales import base_scale_defines, base_scale_mode_names, scale_name_replacements, parallel_scale_names, heptatonic_scale_names_by_rarity, other_scale_names_by_rarity
+
 from math import floor, ceil
 import re
 
@@ -568,7 +571,7 @@ class Scale:
         else:
             cons_list = list(self.get_pairwise_consonances(extra_degrees=[1,1,3,4,5], temperament=temperament).values())
             raw_cons = sum(cons_list) / len(cons_list)**1.1 # slightly downweight shorter scales
-            if _settings.DYNAMIC_CACHING:
+            if settings.DYNAMIC_CACHING:
                 cached_consonances[(temperament,self.scale)] = raw_cons
 
         if raw:
@@ -694,7 +697,7 @@ class Scale:
         chord_intervals = IntervalList([Interval.from_cache(iv.value) for iv in scale_intervals]) - start_interval
         if linked:
             chord_obj = ScaleChord(chord_intervals, scale=self, degree=i)
-            if _settings.DYNAMIC_CACHING:
+            if settings.DYNAMIC_CACHING:
                 log(f'Registering scale chord by {(self.name, i, order)} to cache')
                 cached_scale_chords[(self, i, order)] = chord_obj
             return chord_obj
@@ -1426,8 +1429,8 @@ class Scale:
     def __repr__(self):
         return str(self)
 
-    _marker = _settings.MARKERS['Scale']
-    _chromatic_brackets = _settings.BRACKETS['chromatic_intervals']
+    _marker = settings.MARKERS['Scale']
+    _chromatic_brackets = settings.BRACKETS['chromatic_intervals']
 
 
 ##### supporting classes for Scale class: ScaleFactors, ScaleDegree, ScaleChord
@@ -1485,13 +1488,13 @@ class ScaleFactors(Factors):
         if len(scale_intervals) != len(set(scale_intervals)):
             raise ValueError(f'ScaleFactors object ({self}) contains a repeated interval on multiple factors: {self.as_intervals.repeated()}')
 
-    _brackets = _settings.BRACKETS['ScaleFactors']
+    _brackets = settings.BRACKETS['ScaleFactors']
 
     def _parse_out_chromatic_factors(self, inp_string):
         """Given a single input string of the form: '1, b2, [b3], 3' etc.
         search that string for elements enclosed within square brackets, and
         separate them out into a new list"""
-        lb, rb, = _settings.BRACKETS['chromatic_intervals']
+        lb, rb, = settings.BRACKETS['chromatic_intervals']
         if lb in inp_string and rb in inp_string:
             bracket_matches_list = re.findall(r'\[([^]]+)\]', inp_string)
             output_string = re.sub(r'\[[^]]+\]', '', inp_string) # replace brackets and their contents with emptystring
@@ -1595,7 +1598,7 @@ class ScaleFactors(Factors):
 
             prefer_sharps = self._sharp_preference()
             factor_strs = []
-            clb, crb = _settings.BRACKETS['chromatic_intervals']
+            clb, crb = settings.BRACKETS['chromatic_intervals']
 
             for d in sorted_tmp_keys:
                 is_chromatic = temp_dct[d]
@@ -1819,7 +1822,7 @@ class ScaleDegree(int):
     def __repr__(self):
         return str(self)
 
-    _diacritic = _settings.DIACRITICS['ScaleDegree']
+    _diacritic = settings.DIACRITICS['ScaleDegree']
 
 
 class ScaleChord(AbstractChord):
@@ -1964,7 +1967,7 @@ class ScaleChord(AbstractChord):
                 return cached_scale_chords[(scale, degree, order)]
             else:
                 chord_obj = scale.chord(degree, order=order)
-                if _settings.DYNAMIC_CACHING:
+                if settings.DYNAMIC_CACHING:
                     log(f'Registering scale chord by scale {scale.name} and degree={degree} of order={order} to cache')
                     cached_scale_chords[(scale, degree, order)] = chord_obj
                 return chord_obj
@@ -1985,7 +1988,7 @@ class ScaleChord(AbstractChord):
     def mod_numeral(self):
         return self.get_numeral(modifiers=True, marks=False, diacritics=False)
 
-    def get_numeral(self, modifiers=True, marks=_settings.DEFAULT_PROGRESSION_MARKERS, diacritics=_settings.DEFAULT_PROGRESSION_DIACRITICS):
+    def get_numeral(self, modifiers=True, marks=settings.DEFAULT_PROGRESSION_MARKERS, diacritics=settings.DEFAULT_PROGRESSION_DIACRITICS):
         """returns the roman numeral associated with this ScaleChord
         with respect to its Scale and its degree within it"""
 
@@ -2003,7 +2006,7 @@ class ScaleChord(AbstractChord):
             else:
                 # this chord's root is not even adjacent to any scale factor
                 # so it gets called a chromatic / out-of-scale chord
-                lb, rb = _settings.BRACKETS['non_key_chord_root']
+                lb, rb = settings.BRACKETS['non_key_chord_root']
                 raise Exception('this should never actually occur')
 
         else:
@@ -2019,7 +2022,7 @@ class ScaleChord(AbstractChord):
                 related_scales = [# 'natural minor',
                                   'harmonic major', 'melodic major',
                                   'lydian', 'mixolydian']
-                rel_scalename_marks = {scale_name:_settings.SCALE_MARKS[scale_name] for scale_name in related_scales}
+                rel_scalename_marks = {scale_name:settings.SCALE_MARKS[scale_name] for scale_name in related_scales}
                 rel_scale_marks = {common_scales_by_name[n]: rel_scalename_marks[n] for n in related_scales}
                              # dominant/subdominant keys?
 
@@ -2027,13 +2030,13 @@ class ScaleChord(AbstractChord):
                 related_scales = [# 'natural major',
                                   'harmonic minor', 'melodic minor',
                                   'dorian', 'phrygian']
-                rel_scalename_marks = {scale_name:_settings.SCALE_MARKS[scale_name] for scale_name in related_scales}
+                rel_scalename_marks = {scale_name:settings.SCALE_MARKS[scale_name] for scale_name in related_scales}
                 rel_scale_marks = {common_scales_by_name[n]: rel_scalename_marks[n] for n in related_scales}
 
             else:
                 # just report the parallel scale
                 if self.scale.has_parallel():
-                    rel_scale_marks = {self.scale.parallel: _settings.SCALE_MARKS['parallel']}
+                    rel_scale_marks = {self.scale.parallel: settings.SCALE_MARKS['parallel']}
                 else:
                     rel_scale_marks = {}
 
@@ -2046,9 +2049,9 @@ class ScaleChord(AbstractChord):
             # set out-of-scale diacritics:
             if (chord_in_related_scale) and (not marks):
                 # no need for the diacritic if an out-of-scale mark is shown
-                diacritic = _settings.DIACRITICS['chord_in_related_scale']
+                diacritic = settings.DIACRITICS['chord_in_related_scale']
             else:
-                diacritic = _settings.DIACRITICS['chord_not_in_scale']
+                diacritic = settings.DIACRITICS['chord_not_in_scale']
 
 
         # next, decide whether the numeral should be upper or lowercase:
@@ -2338,9 +2341,11 @@ def infer_scale(degree_qualities):
 
 
 
+# import scale definitions as strings:
+from def_scales import base_scale_defines, base_scale_mode_names, scale_name_replacements, parallel_scale_names, heptatonic_scale_names_by_rarity, other_scale_names_by_rarity
 
-# 'standard' scales are: naturals, harmonic majors/minors, and melodic minor, the most commonly used in pop music
-standard_scale_names = {'natural major', 'natural minor', 'harmonic major', 'harmonic minor', 'melodic minor'}
+## 'standard' scales are: naturals, harmonic majors/minors, and melodic minor, the most commonly used in pop music
+#standard_scale_names = {'natural major', 'natural minor', 'harmonic major', 'harmonic minor', 'melodic minor'}
 # 'base' scales are those not obtained by rotations of any other scales:
 # base_scale_names = {'natural major', 'melodic minor', 'harmonic minor', 'harmonic major', 'neapolitan major', 'neapolitan minor', 'double harmonic'}
 # 'natural' scales are just the natural major and minors:
@@ -2350,198 +2355,21 @@ natural_scale_names = {'natural major', 'natural minor'}
 # with names as a list, where the first item in the list is taken to be the
 # 'canonical' name for that scale, with all others as valid aliases.
 
-base_scale_factor_names = { # base scales are defined here, modes and subscales are added later:
+#### now we import the scale definitions described in string form
+#### from .defines, and instantiate them as ScaleFactors
 
-    #### heptatonic scales:
-    ScaleFactors('1,  2,  3,  4,  5,  6,  7'): ['natural major', 'major'],
-    # ScaleFactors('1,  2, b3,  4,  5, b6, b7'): ['natural minor', 'minor'],
-    ScaleFactors('1,  2,  3,  4,  5, b6,  7'): ['harmonic major'],
-    ScaleFactors('1,  2, b3,  4,  5, b6,  7'): ['harmonic minor'],
-    # ScaleFactors('1,  2,  3,  4,  5, b6, b7'): ['melodic major'],
-    ScaleFactors('1,  2, b3,  4,  5,  6,  7'): ['melodic minor', 'jazz minor', 'melodic minor ascending'], # (ascending)
-    ScaleFactors('1, b2, b3,  4,  5,  6,  7'): ['neapolitan major', 'phrygian melodic minor'],
-    ScaleFactors('1, b2, b3,  4,  5, b6,  7'): ['neapolitan minor', 'phrygian harmonic minor'],
-    ScaleFactors('1, b2,  3,  4,  5, b6,  7'): ['double harmonic', 'double harmonic major'],
-    ScaleFactors('1, b2,bb3,  4,  5, b6,bb7'): ['miyako-bushi'],
+#from .defines.define_scales import base_scale_defines
 
-    #### pentatonic scales:
-    ScaleFactors('1,  2,  3,  5,  6'): ['major pentatonic', 'pentatonic', 'natural major pentatonic', 'ryo'], # mode 1
-
-    # modes of the hirajoshi / in scale:
-    ScaleFactors('1,  2, b3,  5, b6'): ['hirajoshi'], # base scale with 5 modes
-
-    # modes of the dorian pentatonic:
-    ScaleFactors('1,  2, b3,  5,  6'): ['dorian pentatonic'], # base scale with modes 2 and 5
-    # ScaleFactors('1, b2,  4,  5, b7'): ['kokinjoshi'], # mode 2
-    # ScaleFactors('1, b3,  4, b5, b7'): ['minor b5 pentatonic'], # mode 5
-
-    # pentatonics derived from (flattened) 9th chords:
-    ScaleFactors('1,  2,  3,  5,  7'): ['blues major pentatonic', 'maj9 pentatonic', 'major 9th pentatonic'],
-    ScaleFactors('1,  2,  3,  5, b7'): ['dominant pentatonic', 'dominant 9th pentatonic'],
-    ScaleFactors('1,  2, b3,  5, b7'): ['pygmy', 'm9 pentatonic', 'minor 9th pentatonic'],
-    ScaleFactors('1,  2, b3,  5,  7'): ['minor-major pentatonic', 'mmaj9 pentatonic'],
-    ScaleFactors('1,  2,  3, #5, b7'): ['augmented pentatonic', 'aug9 pentatonic'],
-    ScaleFactors('1,  2,  3, #5,  7'): ['augmented major pentatonic', 'augmaj9 pentatonic'],
-    ScaleFactors('1,  2, b3, b5,  6'): ['diminished pentatonic', 'dim9 pentatonic'],
-    ScaleFactors('1, b2, b3, b5,  6'): ['diminished minor pentatonic', 'dmin9 pentatonic', ],
-    ScaleFactors('1,  2, b3, b5,  b7'): ['half-diminished pentatonic', 'hdim9 pentatonic'],
-    ScaleFactors('1, b2, b3, b5,  b7'): ['half-diminished minor pentatonic', 'hdmin9 pentatonic'],
-    ScaleFactors('1, #2,  3,  5,  b7'): ['hendrix pentatonic'],
-
-    # misc:
-    ScaleFactors('1,  2,  4,  5,  7'): ['suspended', 'suspended pentatonic'],
-    ScaleFactors('1,  3,  4,  5,  7'): ['okinawan'],
-    # ScaleFactors('1, b2, b3,  5, b6'): ['balinese'], # 2nd mode of okinawan scale
-    ScaleFactors('1,  2,  3,  5, b6'): ['major b6 pentatonic'],
-
-    #### scales containing chromatic intervals:
-    ScaleFactors('1, b3,  4, [b5], 5, b7'): ['minor blues', 'blues', 'minor blues hexatonic'],
-    # ScaleFactors('1,  2, [b3], 3,  5,  6'): ['major blues', 'major blues hexatonic'],
-    ScaleFactors('1, b2, [b3], 4,  5,  b6, [b7]'): ['sakura'],
-    # ScaleFactors('1, 2, 3, 4, 5, 6, [b7],7'): ['bebop dominant'],
-    # ScaleFactors('1, 2, 3, 4, 5,[b6], 6, 7'): ['bebop', 'bebop major', 'barry harris', 'major 6th diminished'],
-    # ScaleFactors('1, 2,b3, 4, 5,[b6], 6, 7'): ['bebop minor', 'bebop melodic minor', 'minor 6th diminished'],
-
-    # natural-harmonic hybrids:
-    ScaleFactors('1,  2,  b3,  4,  5,  b6,  b7, [7]'): ['extended minor', 'chromatic minor (natural/harmonic)', 'chromatic minor NH', 'NH minor'],
-    ScaleFactors('1,  2,  b3,  4,  5,  b6, [b7], 7'):  ['extended minor harmonic', 'chromatic minor (harmonic/natural)', 'chromatic minor HN', 'HN minor'],
-    ScaleFactors('1,  2,   3,  4,  5, [b6], 6,   7 '): ['extended major', 'chromatic major (natural/harmonic)', 'chromatic major NH', 'NH major'],
-    ScaleFactors('1,  2,   3,  4,  5,  b6, [6],  7 '): ['extended major harmonic', 'chromatic major (harmonic/natural)', 'chromatic major HN', 'HN major'],
-    # natural-melodic hybrids:
-    ScaleFactors('1,  2,  b3,  4,  5,  b6, [6],  b7, [7]'): ['full minor', 'chromatic minor (natural/melodic)', 'chromatic minor NM', 'NM minor'],
-    ScaleFactors('1,  2,  b3,  4,  5, [b6], 6,  [b7], 7 '): ['full minor melodic', 'chromatic minor (melodic/natural)', 'chromatic minor MN', 'MN minor'],
-    ScaleFactors('1,  2,   3,  4,  5, [b6], 6,  [b7], 7'): ['full major', 'chromatic major (natural/melodic)', 'chromatic major NM', 'NM major'],
-    ScaleFactors('1,  2,   3,  4,  5,  b6, [6],  b7, [7] '): ['full major melodic', 'chromatic major (melodic/natural)', 'chromatic major MN', 'MN major'],
-    # the missing third hybrid: 'rock scales', natural/dorian/mixo hybrids:
-    ScaleFactors('1,  2,  b3,  4,  5,  b6,  [6], b7'): ['rock minor', 'chromatic minor (natural/dorian)', 'chromatic minor ND', 'ND minor'],
-    ScaleFactors('1,  2,  b3,  4,  5, [b6],  6,  b7'): ['rock minor dorian', 'chromatic minor (dorian/natural)', 'chromatic minor DN', 'DN minor'],
-    ScaleFactors('1,  2,   3,  4,  5,   6, [b7],  7 '): ['rock major', 'chromatic major (natural/mixolydian)', 'chromatic major NX', 'NX major'],
-    ScaleFactors('1,  2,   3,  4,  5,   6,  b7 , [7]'): ['rock major mixolydian', 'chromatic major (mixolydian/natural)', 'chromatic major XN', 'XN major'],
-
-
-
-    # ScaleFactors('1,  2,   3,  4,  5,[b6],  6,[b7],  7'): ['full major'],
-    # ScaleFactors('1,  2,  b3,  4,  5,  b6, [6], b7, [7]'): ['full minor'],
-
-    # chromatic scale from major: (currently do not work with mode rotation)
-    # ScaleFactors('1, [b2], 2,  [b3], 3, 4, [b5], 5, [b6], 6, [b7], 7'): ['chromatic major'],
-    # ScaleFactors('1, [b2], 2,  b3, [3], 4, [b5], 5, b6, [6], b7, [7]'): ['chromatic minor'],
-
-    #### rare hexatonic and octatonic scales:
-    # hexatonic scales:
-    ScaleFactors('1,  2,  3, #4, #5, #6'): ['whole tone', 'whole-tone'],
-    ScaleFactors('1,  2,  3, b5,  6, b7'): ['prometheus'],
-    ScaleFactors('1, b2, b3, #4,  5, b7'): ['tritone'],
-
-    # octatonic scales: (these get parsed with IrregularInterval members)
-    ScaleFactors('1,  2, b3,  4, b5, b6,  6,  7'): ['diminished', 'whole-half', 'wholehalf', 'whole half'],
-    ScaleFactors('1, b2, b3, b4, b5,  5,  6, b7'): ['half-whole', 'halfwhole', 'half whole'],
-    ScaleFactors('1,  2,  3,  4,  5,  6, b7, 7'): ['bebop dominant', 'bebop dominant octatonic'],
-    ScaleFactors('1,  2,  3,  4,  5, #5,  6, 7'): ['bebop', 'bebop major', 'barry harris', 'major 6th diminished', 'bebop major octatonic', 'bebop octatonic', ],
-    ScaleFactors('1,  2, b3,  4,  5, #5,  6, 7'): ['bebop minor', 'bebop melodic minor', 'bebop minor octatonic', 'minor 6th diminished'],
-    ScaleFactors('1,  2, b3,  3,  4,  5,  6, 7'): ['bebop dorian', 'bebop dorian octatonic'],
-}
+base_scale_factor_names = {ScaleFactors(defn): names for defn,names in base_scale_defines.items()}
 
 base_scale_name_factors = unpack_and_reverse_dict(base_scale_factor_names)
 base_scale_names = set(base_scale_name_factors.keys())
 
-# while it's true that "melodic minor" can refer to a special scale that uses
-# the natural minor scale when descending, that is out-of-scope for now
 
-#     }
-# heptatonic_scale_name_factors = unpack_and_reverse_dict(heptatonic_scale_factor_names)
 
-# this dict maps base scale names to dicts that map scale degrees to the modes of that base scale
-base_scale_mode_names = {
-                    # the diatonic base scale and its modes:
-   'natural major': {1: ['ionian', 'bilawal'],
-                     2: ['dorian', 'kafi'],
-                     3: ['phrygian', 'bhairavi'],
-                     4: ['lydian', 'kalyan'],
-                     5: ['mixolydian', 'khamaj'],
-                     6: ['natural minor', 'minor', 'aeolian', 'asavari',],
-                     7: ['locrian']},
-
-                     # non-diatonic heptatonic base scales and their modes:
-   'melodic minor': {1: ['athenian'],
-                     2: ['cappadocian', 'phrygian ♯6', 'dorian ♭2'],
-                     3: ['asgardian', 'lydian augmented'],
-                     4: ['acoustic', 'pontikonisian', 'lydian dominant', 'overtone'],
-                     5: ['melodic major', 'olympian', 'aeolian dominant', 'mixolydian ♭6'],
-                     6: ['sisyphean', 'aeolocrian', 'half-diminished'],
-                     7: ['palamidian', 'altered dominant', 'super locrian']},
-  'harmonic minor': {1: [],
-                     2: ['locrian ♯6'],
-                     3: ['ionian ♯5'],
-                     4: ['ukrainian dorian', 'ukrainian minor'],
-                     5: ['phrygian dominant', 'spanish gypsy', 'egyptian'],
-                     6: ['lydian ♯2', 'maqam mustar'],
-                     7: ['altered diminished']},
-  'harmonic major': {1: [],
-                     2: ['blues heptatonic', 'dorian ♭5', 'locrian ♯2♯6'],
-                     3: ['phrygian ♭4', 'altered dominant ♯5'],
-                     4: ['lydian minor', 'lydian ♭3', 'melodic minor ♯4'],
-                     5: ['mixolydian ♭2'],
-                     6: ['lydian augmented ♯2'],
-                     7: ['locrian 𝄫7']},
-'neapolitan minor': {1: [],
-                     2: ['lydian ♯6'],
-                     3: ['mixolydian augmented'],
-                     4: ['romani minor', 'aeolian ♯4'],
-                     5: ['locrian dominant'],
-                     6: ['ionian ♯2'],
-                     7: ['ultralocrian', 'altered diminished 𝄫3']},
-'neapolitan major': {1: [],
-                     2: ['lydian augmented ♯6'],
-                     3: ['lydian augmented dominant'],
-                     4: ['lydian dominant ♭6'],
-                     5: ['major locrian'],
-                     6: ['half-diminished ♭4', 'altered dominant #2'],
-                     7: ['altered dominant 𝄫3']},
-'double harmonic':  {1: ['byzantine', 'arabic', 'gypsy major', 'flamenco', 'major phrygian', 'bhairav'],
-                     2: ['lydian ♯2 ♯6'],
-                     3: ['ultraphrygian'],
-                     4: ['hungarian minor', 'gypsy minor', 'egyptian minor', 'double harmonic minor'],
-                     5: ['oriental'],
-                     6: ['ionian ♯2 ♯5'],
-                     7: ['locrian 𝄫3 𝄫7']},
-
-                     # pentatonic base scales and their modes:
-'major pentatonic': {1: ['pentatonic', 'natural major pentatonic', 'ryo'],
-                     2: ['egyptian pentatonic'],
-                     3: ['blues minor pentatonic', 'minyo', 'man gong'],
-                     4: ['yo', 'ritsu', 'ritusen', 'major pentatonic II'],
-                     5: ['minor pentatonic', 'natural minor pentatonic']},
-       'hirajoshi': {
-                     2: ['iwato', 'sachs hirajoshi'],
-                     3: ['kumoi', 'kumoijoshi'],
-                     4: ['hon kumoi', 'hon kumoijoshi', 'sakura pentatonic', 'in', 'in sen'],
-                     5: ['amritavarshini', 'chinese', 'burrows hirajoshi']},
-
-                     # incidental/partial mode names:
-         'okinawan': {2: ['balinese']},
-'dorian pentatonic': {2: ['kokinjoshi'], 5: ['minor ♭5 pentatonic']},
-      'minor blues': {2: ['major blues']},
-  # 'chromatic major': {11: ['chromatic minor']},
-                 }
-
-# base_scale_names = list(base_scale_mode_names.keys())
-# #
-# base_scale_factor_names = {
-    # natural pentatonics and their modes:
-#     }
-# pentatonic_scale_name_factors = unpack_and_reverse_dict(pentatonic_scale_factor_names)
-#
-# chromatic_scale_factor_names = {
-    # note: while 'pentatonic' on its own redirects to major pentatonic,
-    # 'blues' on its own redirects to minor blues, by convention
-#     }
-# chromatic_scale_name_factors = unpack_and_reverse_dict(chromatic_scale_factor_names)
-#
-# # unusual scales with that ought not to be searched:
-# rare_scale_factor_names = {}
-
-# rare_scale_name_factors = unpack_and_reverse_dict(rare_scale_factor_names)
+#### imported dict 'base_scale_mode_names' maps
+#### base scale names to dicts that map
+#### scale degrees to the modes of that base scale
 
 base_mode_factor_names = {}
 # loop across base scale modes to build more factor mappings:
@@ -2632,35 +2460,9 @@ def is_valid_scale_name(name):
             return False
 
 
-# string replacements for scale searching:
-scale_name_replacements = {
-                        'major': ['maj', 'M', 'Δ', ],
-                        'minor': ['min', 'm'],
-                        'natural': ['nat'],
-                        'harmonic': ['harm', 'har', 'hic'],
-                        'melodic': ['melo', 'mel', 'mic'],
-                        'pentatonic': ['pent', '5tonic', '5ic'],
-                        'hexatonic': ['hex', '6tonic'],
-                        'octatonic': ['oct', '8tonic'],
-                        'mixolydian': ['mixo', 'mix'],
-                        'dorian': ['dori', 'dor'],
-                        'phrygian': ['phrygi', 'phryg'],
-                        'lydian': ['lydi', 'lyd'],
-                        'locrian': ['locri', 'loc'],
-                        'diminished': ['dim', 'dimin'],
-                        'dominant': ['dom', 'domin'],
-                        'augmented': ['aug', 'augm'],
-                        'suspended': ['sus', 'susp'],
-                        'neapolitan': ['naples', 'neapol', 'neapo'],
-                        # '#': ['sharp', 'sharpened', 'raised'],
-                        # 'b': ['flat', 'flattened', 'lowered'],
-                        '2nd': ['second'],
-                        '3rd': ['third'],
-                        '4th': ['fourth'],
-                        '5th': ['fifth'],
-                        '6th': ['sixth'],
-                        '7th': ['seventh'],
-                          }
+#from .defines.scales import scale_name_replacements
+
+
 replacement_scale_names = unpack_and_reverse_dict(scale_name_replacements, include_keys=True)
 
 # rex_patterns = []
@@ -2684,22 +2486,30 @@ hexatonic_base_scale_names = [n for n in base_scale_mode_names if len(all_scale_
 pentatonic_base_scale_names = [n for n in base_scale_mode_names if len(all_scale_name_factors[n]) == 5]
 
 # define rarities for heptatonic scales:
-heptatonic_scale_names_by_rarity = {
-    1: {'natural major', 'natural minor'}, #, },
-    2: {'harmonic major', 'harmonic minor', 'melodic minor',
-        'extended major', 'extended minor'}, # , 'minor blues', 'major blues'},
-    3: {'melodic major',
-        'phrygian', 'dorian',
-        'lydian', 'mixolydian',
-        'full major', 'full minor',},
-    4: {'neapolitan major', 'neapolitan minor',
-        'double harmonic', 'miyako-bushi', 'locrian'}}
+#heptatonic_scale_names_by_rarity = {
+    #1: {'natural major', 'natural minor'}, #, },
+    #2: {'harmonic major', 'harmonic minor', 'melodic minor',
+        #'extended major', 'extended minor'}, # , 'minor blues', 'major blues'},
+    #3: {'melodic major',
+        #'phrygian', 'dorian',
+        #'lydian', 'mixolydian',
+        #'full major', 'full minor',},
+    #4: {'neapolitan major', 'neapolitan minor',
+        #'double harmonic', 'miyako-bushi', 'locrian'}}
+
+#other_scale_names_by_rarity = {
+    #1: {'major pentatonic', 'minor pentatonic'},
+    #2: {'minor blues', 'major blues'},
+    #3: set(),
+    #4: {'hirajoshi', 'iwato', 'kumoi', 'yo'},
+#}
 
 # define rarities for non-heptatonics:
 canonical_scale_names_by_rarity = dict(heptatonic_scale_names_by_rarity)
-canonical_scale_names_by_rarity[1].update(['major pentatonic', 'minor pentatonic'])
-canonical_scale_names_by_rarity[2].update(['minor blues', 'major blues'])
-canonical_scale_names_by_rarity[4].update(['hirajoshi', 'iwato', 'kumoi', 'yo'])
+canonical_scale_names_by_rarity.update(other_scale_names_by_rarity)
+#canonical_scale_names_by_rarity[1].update(['major pentatonic', 'minor pentatonic'])
+#canonical_scale_names_by_rarity[2].update(['minor blues', 'major blues'])
+#canonical_scale_names_by_rarity[4].update(['hirajoshi', 'iwato', 'kumoi', 'yo'])
 
 common_scale_names = set()
 for r, names in canonical_scale_names_by_rarity.items():
@@ -2729,6 +2539,13 @@ HarmonicMajor = HarmonicMajorScale = Scale('harmonic major')
 MelodicMinor = MelodicMinorScale = Scale('melodic minor')
 MelodicMajor = MelodicMajorScale = Scale('melodic major')
 
+# 'exotic' scales:
+NeapolitanMajor = Scale('neapolitan major')
+NeapolitanMinor = Scale('neapolitan minor')
+DoubleHarmonic = ByzantineScale = ArabicScale = GypsyMajor = Scale('double harmonic')
+HungarianMinor = GypsyMinor = EgyptianMinor = Scale('hungarian minor')
+MiyakoBushi = Scale('miyako-bushi')
+
 RockMinor = RockMinorScale = Scale('rock minor')
 RockMajor = RockMajorScale = Scale('rock major')
 
@@ -2744,6 +2561,14 @@ melodic_scales = [MelodicMajor, MelodicMinor]
 
 diatonic_scales = [Ionian, Dorian, Phrygian, Lydian, Mixolydian, Aeolian, Locrian]
 diatonic_scale_factors = [sc.factors for sc in diatonic_scales] # for efficient diatonicity checks
+
+# scales associated broadly with a tonal quality:
+major_scales = [NaturalMajor, HarmonicMajor, MelodicMajor,
+                Mixolydian, Lydian, BluesMajor]
+
+minor_scales = [NaturalMinor, HarmonicMinor, MelodicMinor,
+                Dorian, Phrygian, BluesMinor,
+                NeapolitanMinor, NeapolitanMajor, DoubleHarmonic]
 
 extended_scales = [ExtendedMinor, ExtendedMajor, RockMajor, RockMinor, FullMinor, FullMajor]
 scale_extensions = {  MinorScale: ExtendedMinor,
@@ -2779,30 +2604,10 @@ MinorBlues = MinorBluesScale = MinBlues = Scale('minor blues')
 pentatonic_scales = [MajorPentatonic, MinorPentatonic]
 blues_scales = [MajorBlues, MinorBlues]
 
-# dict mapping parallel major/minor scales:
-# (hardcoded since these are mostly established by convention,
-# as all modes are technically parallel)
-parallel_scale_names = {
-                        # natural and melodic major/minor are classically parallel
-                        # since they are modes of each other:
-                        'natural major': 'natural minor',
-                        'melodic major': 'melodic minor',
-                        # their other modes are all technically parallel, but here
-                        # we map them to those of roughly opposite 'brightness':
-                        'mixolydian': 'dorian',
-                        'phrygian': 'lydian',
+# parallel_scale_names are hardcoded since they
+# are mostly established by definition
 
-                        # harmonic major and minor are NOT parallel, since they
-                        # have different notes
 
-                        # natural pentatonics and blues scales are straightforward:
-                        'major pentatonic': 'minor pentatonic',
-                        'minor blues': 'major blues',
-                        # and some other scales have only one named mode, which
-                        # is a natural parallel:
-                        'okinawan': 'balinese',
-                        'dorian pentatonic': 'kokinjoshi',
-                        }
 # and for other base scales, just pick the most consonant (named) mode:
 common_base_scale_names = base_scale_names.intersection(common_scale_names)
 
@@ -2830,225 +2635,6 @@ parallel_scales.update(reverse_dict(parallel_scales))
 
 
 
-def matching_scales(chords=None, intervals=None, major_roots=None, min_recall=0.85, min_precision=0.0,
-                    candidate_scales = [MajorScale, MinorScale,
-                                        HarmonicMinor, MelodicMinor, ExtendedMinor, FullMinor,
-                                        HarmonicMajor, MelodicMajor, ExtendedMajor, FullMajor,
-                                        Lydian, Mixolydian, # note! these are the scales corresponding to adjacent major keys on the circle of fifths
-                                        Dorian, Phrygian, # and these correspond to adjacent Co5 scales for minor keys
-                                        Locrian],  # just for completeness although it will rarely turn up in practice
-                    filter_redundancies = True,
-                    max_results=None, display=True, **kwargs):
-    """accepts either:
-          chords: a list of roman numeral chords, e.g. ["i", "V7", "VII"]
-                   or a string of the same, with clear separators, e.g.: "i - V7 - VII"
-                or a list of degree-chord pairs, of the form: [(root degree, AbstractChord), etc.]
-            or
-          intervals: an IntervalList (or object that casts to IntervalList)
-       and returns a list of matching Scales based on which intervals/factors correspond to those chords
-    if major_roots is True, interpret chords like III and VII as being rooted on their major intervals
-        (i.e. the major 3rd and major 7th), unless specified bIII and bVII etc.
-    if major_roots is False, interpret those chords as rooted on their minor intervals,
-        (i.e. the minor 3rd and 7th), unless specified #III and #VII.
-    if major_roots is None, we make a best guess - use the tonic's quality if there, or
-        assume major if not otherwise specified.
-
-    if filter_redundant is True, avoids displaying extended/full scales if their base form
-        is a better fit for the input intervals."""
-
-    # keep in mind: a raised 7th (Interval(11)) is usually more indicative of
-    # harmonic minor than it is of natural major, at least melodically
-
-    # check if first arg is an intervallist, in which case silently correct and treat it as one:
-    if isinstance(chords, IntervalList):
-        intervals = chords
-        chords = None
-
-    if chords is not None:
-        if isinstance(chords, str):
-            # assume a string of roman numerals:
-            split_numerals = auto_split(chords)
-            roman = True
-        elif isinstance(chords[0], str):
-            # assume a list of roman numerals
-            split_numerals = chords
-            roman = True
-        else:
-            # assume degree, chord pairs
-            assert len(chords[0]) == 2, "expected input to matching_scales to be roman numerals or list of (degree, abs_chord) pairs"
-            roman = False
-
-        if roman:
-            degrees, abs_chords = [], []
-            for num in split_numerals:
-                rn = RomanNumeral(num)
-                deg, ch = rn.degree, rn.chord
-                degrees.append(deg)
-                abs_chords.append(ch)
-        else:
-            degrees = [d for d,ch in chords]
-            abs_chords = [ch for d,ch in chords]
-
-        # determine if numeral degrees are relative to major or minor scale:
-        if roman and (major_roots is None):
-            # if any roots are flattened (e.g. bIII), we assume that those flats are relative to major scale:
-            contains_flats = True in [parsing.contains_flat(num) for num in split_numerals]
-            if contains_flats:
-                major_roots = True
-        if major_roots is None:
-            # otherwise, try and guess from tonic if present:
-            if 1 in degrees:
-                which_1 = [i for i,d in enumerate(degrees) if d==1][0]
-                tonic_chord = abs_chords[which_1]
-                major_roots = not tonic_chord.quality.minor_ish # assume major for maj/aug/ind tonic chords
-            else:
-                major_roots = True # assume major since not otherwise specified
-
-        if display: # expensively work out roman numerals of those pairs for table output
-            root_scale = MajorScale if major_roots else MinorScale
-            # ensure split numerals have proper superscripts etc. even if roman chords were given:
-            # split_numerals = [ch.in_scale(root_scale, degree=d).mod_numeral for d,ch in zip(degrees, abs_chords)]
-            scale_chords = [ch.in_scale(root_scale, degree=d) for d,ch in zip(degrees, abs_chords)]
-            simple_numerals = [sch.simple_numeral for sch in scale_chords]
-            mod_numerals = [sch.mod_numeral for sch in scale_chords]
-
-        # determine intervals to match against
-        # how far does each chord start from the scale tonic:
-        if major_roots:
-            root_intervals_from_tonic = [MajorScale._get_arbitrary_degree_interval(d) for d in degrees]
-            minor_assumed = False
-        else:
-            root_intervals_from_tonic = [MinorScale._get_arbitrary_degree_interval(d) for d in degrees]
-            minor_assumed = (3 in degrees or 6 in degrees or 7 in degrees)
-        # how far is each note in each chord from the scale tonic:
-        all_intervals_from_tonic = IntervalList()
-        for ch, root_iv in zip(abs_chords, root_intervals_from_tonic):
-            chord_intervals_from_tonic = ch.intervals + root_iv
-            all_intervals_from_tonic.extend(chord_intervals_from_tonic.flatten())
-
-        unique_intervals_from_tonic = IntervalList(all_intervals_from_tonic.flatten().unique())
-
-    elif intervals is not None:
-        # cast to IntervalList object if needed:
-        intervals = IntervalList(intervals) if not isinstance(intervals, IntervalList) else intervals
-        unique_intervals_from_tonic = intervals.unique()
-
-
-    # main matching loop
-    import numpy as np
-    candidate_interval_grid = np.zeros((len(candidate_scales), 12))
-    for i, cand in enumerate(candidate_scales):
-        grid_row = [1  if i in cand else 0  for i in range(12) ]
-        candidate_interval_grid[i] = grid_row
-    input_intervals_set = unique_intervals_from_tonic
-    input_interval_row = np.asarray([1  if i in input_intervals_set else 0  for i in range(12) ])
-
-    perfect_matches = []
-    candidate_scores = {}
-    for i, cand in enumerate(candidate_scales):
-        cand_interval_row = candidate_interval_grid[i]
-        difference = cand_interval_row - input_interval_row
-        # here 0s are matches, 1s are where input not in candidate, -1s are mismatches
-        # or to put another way: (0,-1) are retrieved, (0) are relevant
-        mismatches  = sum([d == -1 for d in difference])
-        # a 'perfect' match can be partial, it simply has no mismatches:
-        if mismatches == 0:
-            perfect_matches.append(cand)
-        # scores:
-        matches = sum([d == 0 for d in difference])
-        spares = sum([d == 1 for d in difference])
-        num_retrieved = matches + spares
-        num_relevant = matches
-        rec, prec = precision_recall_scores(num_retrieved, num_relevant, 12, 12)
-        # somewhere these became backwards relative to matching_keys etc...
-        score = {'precision': round(prec,3), 'recall': round(rec,3)}
-        candidate_scores[cand] = score
-
-    # filter out extensions that are less precise than their bases
-    if filter_redundancies:
-        redundant_scales = []
-        for base_scale, ext_scale in scale_extensions.items():
-            # (i.e. no need for extended minor if natural minor is a perfect fit,
-            # and likewise no need for full minor if extended minor is a perfect fit)
-            ### TBI: could this be generalised with Scale.is_subset type methods instead of hardcoding?
-            if base_scale in candidate_scores and ext_scale in candidate_scores:
-                base_prec, ext_prec = candidate_scores[base_scale]['precision'], candidate_scores[ext_scale]['precision']
-                if base_prec >= ext_prec:
-                    redundant_scales.append(ext_scale)
-        candidate_scores = {cand:score for cand,score in candidate_scores.items()
-                            if cand not in redundant_scales}
-
-
-    # filter scores by minimum precision:
-    if min_recall > 0 or min_precision > 0:
-        candidate_scores = {cand:score for cand,score in candidate_scores.items()
-                            if score['recall'] >= min_recall
-                            and score['precision'] >= min_precision}
-
-    sorted_cands = sorted(candidate_scores.keys(),
-                          key=lambda x: (-candidate_scores[x]['recall'],
-                                         -candidate_scores[x]['precision']))
-    sorted_scores = {cand:candidate_scores[cand] for cand in sorted_cands}
-
-    # return matches and scores
-    if not display:
-        return {cand: candidate_scores[cand] for cand in sorted_cands}
-    else:
-        from src.display import DataFrame
-
-
-        ilb, irb = _settings.BRACKETS['IntervalList']
-        out = _settings.DIACRITICS['interval_not_in_input']
-
-        # title: (including its own table for chords themselves)
-        input_factors_str = ' '.join(unique_intervals_from_tonic.as_factors)
-
-
-        if chords is not None:
-            title = (f'Matching scales for chords: {"-".join(mod_numerals)}  (scale factors: {input_factors_str})')
-            ### root intervals of each chord:
-            chords_df = DataFrame(['Degree', 'Numeral', '', 'Intervals from root', ''])
-            for ch, root_iv, num in zip(abs_chords, root_intervals_from_tonic, simple_numerals):
-                flat_intervals_from_tonic = (ch.intervals + root_iv).flatten(sort=False).as_factors
-                flat_intervals_str = ' '.join([f'{fiv:<2}' for fiv in flat_intervals_from_tonic])
-                chords_df.append([num, ch.short_name, ilb[0], flat_intervals_str, irb])
-            chords_df.show(header=False, header_char='-', title=title)
-            if (not major_roots) and (minor_assumed):
-                print(f'(assuming root degrees are relative to minor scale)')
-            print('') # newline
-
-        elif intervals is not None:
-            print(f'Matching scales for intervals: {intervals}')
-
-        # matches:
-
-
-        df = DataFrame(['Scale', ''] + ['']*12   + # one column per possible semitone
-                       ['', 'Miss.', '', 'Rec.', 'Prec.',
-                        'Likl.', 'Cons.'])
-        for cand, score in sorted_scores.items():
-            prec, rec = score['precision'], score['recall']
-            lik, cons = cand.likelihood, cand.consonance
-
-            # work out which interval factors go in which column:
-            semitone_ivs = [Interval(v) if v in cand.intervals else None for v in range(12)]
-            factor_ivs = [f'{iv.factor_name:>2}' if iv is not None else f' .' for iv in semitone_ivs]
-
-            # but mark the factors that aren't in the input:
-            cand_iv_in_input =  [(iv in unique_intervals_from_tonic or iv is None) for iv in semitone_ivs]
-            factor_ivs_marked = [fiv if cand_iv_in_input[i]    # don't underline in-input ivs
-                                 else fiv + out
-                                  for i,fiv in enumerate(factor_ivs)]
-
-            missing_ivs = [iv for iv in unique_intervals_from_tonic if iv not in cand.intervals]
-            missing_ivs_str = ','.join([f'{iv.factor_name:>2}' for iv in missing_ivs]) if len(missing_ivs) > 0 else ''
-
-            df_row = [f'{cand._marker} {cand.name:<}', ilb[0]] + factor_ivs_marked + [irb, missing_ivs_str, ' ',
-                                                                     f'{rec:.2f}', f'{prec:.2f}',
-                                                                     f'{lik:.2f}', f'{cons:.3f}']
-
-            df.append(df_row)
-        df.show(max_rows=max_results, margin=' ', **kwargs)
 
 if __name__ == '__main__':
     # test matching scales:
@@ -3057,7 +2643,7 @@ if __name__ == '__main__':
     matching_scales(degree_chord_pairs, major_roots=True)
 
 # cached scale attributes for performance:
-if _settings.PRE_CACHE_SCALES:
+if settings.PRE_CACHE_SCALES:
     temperament = tuning.get_temperament('CONSONANCE')
     cached_consonances.update({(temperament,c): c.get_consonance(raw=True) for c in common_base_scales})
     cached_pentatonics.update({c: c.pentatonic for c in common_base_scales})

@@ -6,7 +6,8 @@
 from .intervals import Interval, IntervalList
 from .parsing import fl, sh, nat, dfl, dsh
 from .util import log, rotate_list, check_all
-from . import parsing, tuning, _settings
+from .config import settings
+from . import parsing, tuning
 from . import conversion as conv
 
 from functools import cached_property
@@ -29,7 +30,7 @@ class Note:
             if True, this note will be displayed with sharps where applicable.
             if False, will be displayed with flats where applicable.
             if None (default), will infer sharp/flat preference from 'name' arg,
-                or else fall back on global default (defined in _settings module)
+                or else fall back on global default (defined in settings module)
         'case_sensitive':
             if True (default), requires note names to be capitalised and will
                 throw an error otherwise.
@@ -101,7 +102,7 @@ class Note:
                 elif parsing.is_flat_ish(name[1:]):  # len(name) == 2 and
                     prefer_sharps = False
                 else: # fallback on global default
-                    prefer_sharps = _settings.DEFAULT_SHARPS
+                    prefer_sharps = settings.DEFAULT_SHARPS
             else:
                 prefer_sharps = prefer_sharps
 
@@ -113,7 +114,7 @@ class Note:
             name = preferred_name(position, prefer_sharps=prefer_sharps)
         elif position is not None:
             if prefer_sharps is None:
-                prefer_sharps = _settings.DEFAULT_SHARPS # global default
+                prefer_sharps = settings.DEFAULT_SHARPS # global default
 
             # log(f'Initialising Note with position: {position}')
             name = preferred_name(position, prefer_sharps=prefer_sharps)
@@ -145,7 +146,7 @@ class Note:
                 return cached_notes[(name, prefer_sharps)]
             else:
                 note_obj = Note(name, prefer_sharps=prefer_sharps)
-                if _settings.DYNAMIC_CACHING:
+                if settings.DYNAMIC_CACHING:
                     log(f'Registering note with name {name} and prefer_sharps={prefer_sharps} to cache')
                     cached_notes[(name, prefer_sharps)] = note_obj
                 return note_obj
@@ -154,7 +155,7 @@ class Note:
                 return cached_notes[(position, prefer_sharps)]
             else:
                 note_obj = Note(position=position, prefer_sharps=prefer_sharps)
-                if _settings.DYNAMIC_CACHING:
+                if settings.DYNAMIC_CACHING:
                     log(f'Registering note with position {position} and prefer_sharps={prefer_sharps} to cache')
                     cached_notes[(position, prefer_sharps)] = note_obj
                 return note_obj
@@ -337,7 +338,7 @@ class Note:
         return str(self)
 
     # Note object unicode identifier:
-    _marker = _settings.MARKERS['Note']
+    _marker = settings.MARKERS['Note']
 
 
 
@@ -356,7 +357,7 @@ class OctaveNote(Note):
         value: an integer denoting the note's position on an 88-note piano keyboard,
                 where A0 is 1, C4 is 40, and C8 is 88. (the core internal representation)
         pitch: an integer or float corresponding to the note's frequency in Hz,
-                where the reference note A4 is 440 Hz by default (though changeable in _settings)"""
+                where the reference note A4 is 440 Hz by default (though changeable in settings)"""
 
         # set main object attributes from init args:
         self.chroma, self.value, self.prefer_sharps = self._parse_input(name, value, pitch, prefer_sharps)
@@ -371,7 +372,7 @@ class OctaveNote(Note):
     def get_pitch(self, temperament=None):
         """gets the pitch of this OctaveNote according to the specified tuning temperament,
         which must be one of: EQUAL, JUST, or RATIONAL.
-        by default, this uses the global tuning mode specified in _settings.TUNING_SYSTEM"""
+        by default, this uses the global tuning mode specified in settings.TUNING_SYSTEM"""
         if temperament is None:
             temperament = tuning.get_temperament('PLAYBACK')
         return conv.value_to_pitch(self.value, temperament)
@@ -413,7 +414,7 @@ class OctaveNote(Note):
                 elif parsing.is_flat_ish(name[1:-1]):  # len(name) == 2 and
                     prefer_sharps = False
                 else: # fallback on global default
-                    prefer_sharps = _settings.DEFAULT_SHARPS
+                    prefer_sharps = settings.DEFAULT_SHARPS
             else:
                 prefer_sharps = prefer_sharps
 
@@ -502,7 +503,7 @@ class OctaveNote(Note):
 
     ## polymorphic note getters:
     @staticmethod
-    def get_note_name(inp, prefer_sharps=_settings.DEFAULT_SHARPS):
+    def get_note_name(inp, prefer_sharps=settings.DEFAULT_SHARPS):
         """Takes an input as either value (int) or pitch (float),
         returns appropriate OctaveNote name, e.g. F#4"""
         ### parse input as either value or pitch, retrieve coresponding note name
@@ -608,7 +609,7 @@ class OctaveNote(Note):
         return str(self)
 
     # OctaveNote object unicode identifier:
-    _marker = _settings.MARKERS['OctaveNote']
+    _marker = settings.MARKERS['OctaveNote']
 
 
 class NoteList(list):
@@ -890,11 +891,11 @@ class NoteList(list):
         # return f'𝄃{super().__repr__()}𝄂'
         return str(self)
 
-    _brackets = _settings.BRACKETS['NoteList']
+    _brackets = settings.BRACKETS['NoteList']
 
 
 # get note name string from position in octave:
-def preferred_name(pos, prefer_sharps=_settings.DEFAULT_SHARPS):
+def preferred_name(pos, prefer_sharps=settings.DEFAULT_SHARPS):
     """Gets the note name for a specific position according to preferred sharp/flat notation,
     or just the natural note name if a a white note"""
     # if we've accidentally been given an Interval object for position, we quietly parse it:
@@ -925,8 +926,8 @@ MiddleC = OctaveNote('C4')
 # all chromatic pitch classes:
 chromatic_flat_notes = [C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B]
 chromatic_sharp_notes = [C, Csh, D, Dsh, E, F, Fsh, G, Gsh, A, Ash, B]
-# whichever is the default is determined by _settings default sharp preference:
-chromatic_notes = chromatic_sharp_notes if _settings.DEFAULT_SHARPS else chromatic_flat_notes
+# whichever is the default is determined by settings default sharp preference:
+chromatic_notes = chromatic_sharp_notes if settings.DEFAULT_SHARPS else chromatic_flat_notes
 
 # note cache by name for efficient init:
 cached_notes = {(n,s): Note(n, prefer_sharps=s) for n in parsing.common_note_names for s in [None, False, True]}

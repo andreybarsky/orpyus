@@ -3,9 +3,11 @@ from .notes import Note, OctaveNote, NoteList
 from .chords import AbstractChord, Chord, ChordList, most_likely_chord, matching_chords
 from .scales import Scale
 from .keys import Key, matching_keys
+from .matching import matching_chords, matching_keys
 from .util import log, reverse_dict
 from .display import Fretboard
-from . import parsing, _settings
+from .config import settings
+from . import parsing
 
 ### TBI: special cases for other stringed instruments?
 ### i.e. ukelele/banjo/mandolin tunings, with extensions for half capos etc.
@@ -19,14 +21,14 @@ class String(OctaveNote):
 tuning_note_names = {   # names/aliases for common tunings:
         'standard': ( 'E2',  'A2',  'D3',  'G3',  'B3',  'E4' ),
        'half-step': ( 'Eb2', 'Ab2', 'Db3', 'Gb3', 'Bb3', 'Eb4'), # the GnR tuning
-           'dropD': ( 'D2',  'A2',  'D3',  'G3',  'B3',  'E4' ),
-           'dropC': ( 'C2',  'G2',  'C3',  'F3',  'A3',  'D4' ),
-           'dropB': ( 'B1',  'Gb2', 'B2',  'E3',  'Ab3', 'Db4'),
-           'openE': ( 'E2',  'B2',  'E3',  'G#3', 'B3',  'E4' ),
+           'dropd': ( 'D2',  'A2',  'D3',  'G3',  'B3',  'E4' ),
+           'dropc': ( 'C2',  'G2',  'C3',  'F3',  'A3',  'D4' ),
+           'dropb': ( 'B1',  'Gb2', 'B2',  'E3',  'Ab3', 'Db4'),
+           'opene': ( 'E2',  'B2',  'E3',  'G#3', 'B3',  'E4' ),
           'celtic': ( 'D2',  'A2',  'D3',  'G3',  'A3',  'D4' ), # openDsus4, better known as DADGAD
-           'openD': ( 'D2',  'A2',  'D3',  'F#3', 'A3',  'D4' ),
-           'openC': ( 'C2',  'G2',  'C3',  'G3',  'C4',  'E4' ),
-           'openG': ( 'D2',  'G2',  'D3',  'G3',  'B3',  'D4' ),
+           'opend': ( 'D2',  'A2',  'D3',  'F#3', 'A3',  'D4' ),
+           'openc': ( 'C2',  'G2',  'C3',  'G3',  'C4',  'E4' ),
+           'openg': ( 'D2',  'G2',  'D3',  'G3',  'B3',  'D4' ),
                }
 
 # cast string names into OctaveNote objects:
@@ -46,7 +48,7 @@ class Guitar:
 
         # parse tuning string into internal list of OctaveNotes:
 
-        if tuning in tuning_strings.keys(): # interpret an  alias, like 'standard'
+        if tuning.lower() in tuning_strings.keys(): # interpret an  alias, like 'standard'
             # what each string is tuned to, before capo:
             self.tuned_strings = tuning_strings[tuning]
             # string describing the tuning, such as EADGBE or DADGAD
@@ -562,7 +564,7 @@ class Guitar:
     def __repr__(self):
         return str(self)
 
-    _brackets = _settings.BRACKETS['Guitar']
+    _brackets = settings.BRACKETS['Guitar']
 
 
 # some predefined common tunings:
