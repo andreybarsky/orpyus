@@ -8,7 +8,7 @@ from functools import cached_property
 
 
 #### interval qualities:
-from .config.def_chords import quality_aliases, modifier_aliases, chord_types, chord_tweaks
+from .config.def_chords import ChordDef, quality_aliases, modifier_aliases, chord_types, chord_tweaks
 
 # quality_aliases maps
 alias_qualities = unpack_and_reverse_dict(quality_aliases, include_keys=True)
@@ -280,6 +280,7 @@ class ChordModifier:
             make = alias.make
             modify = alias.modify
             verify = alias.verify
+            old_alias = alias
             alias = None
 
         if alias is not None:
@@ -404,6 +405,8 @@ class ChordModifier:
         # re-cast existing ChordModifier as input:
         if isinstance(alias, ChordModifier):
             return alias.params
+        elif isinstance(alias, ChordDef):
+            return [alias.remove, alias.add, alias.modify, alias.make, alias.verify]
         elif isinstance(alias, str):
             if alias in alias_modifiers:
                 alias = alias_modifiers[alias]
@@ -568,141 +571,6 @@ class ChordModifier:
     _brackets = settings.BRACKETS['ChordModifier']
 
 
-# chord 'types' are those used to characterise a chord in its completeness:
-
-#chord_types =  {'m': ChordModifier(make={3:-1}),
-                #'5': ChordModifier(remove=3, verify={5:0}),
-                #'dim': ChordModifier(make={3:-1, 5:-1}),         # dimininished chord (m3+m3)
-                #'aug': ChordModifier(modify={5:+1}, verify={3:0}),   # augmented chord (M3+M3)
-                #'6': ChordModifier(add=6),                         # 6 chord aka add6
-
-                #'7': ChordModifier(add={7:-1}), # dominant 7th
-                #'dim7': ChordModifier(make={3:-1, 5:-1}, add={7:-2}),
-                ## '7b5': ChordModifier(add={7: -1}, modify={5:-1}),
-
-                ## note: m7, m9 etc. are implicit concatenations of 'm' and '7', '9' etc.
-                ## and mmaj7 is an implicit concatenation of 'm' and 'maj7'
-
-                ## but maj7 is NOT a concatenation of 'maj' and '7', since '7' implies dominant:
-                #'maj7': ChordModifier(add={7: 0}),
-                ## 'maj7b5': ChordModifier(add={7: 0}, modify={5:-1}),
-
-                ## explicit concatenations: (for chords that ought to be recognised during chord name searching)
-                #'m6': ['m', '6'],
-                #'hdim7': ['dim', '7'],    # half diminished 7th (diminished triad with minor 7th), also called m7b5
-                #'9': ['7', '♮9'],          # i.e. dominant 9th
-                #'maj9': ['maj7', '♮9'],    # major 9th
-                #f'7{fl}9': ['7', '♭9'],        # dominant minor 9th, (i.e. dm9?)
-                #'dim9': ['dim7', '♮9'],    # diminished 9th
-                #'dmin9': ['dim7', '♭9'],   # diminished minor 9th
-                #'hdim9': ['hdim7', '♮9'],  # half diminished 9th
-                #'hdmin9': ['hdim7', '♭9'],   # half diminished minor 9th
-               #f'7{sh}9': ['7', '♯9'],        # dominant 7 sharp 9, i.e. Hendrix chord
-
-                #'11': ['9', '♮11'],        # dominant 11th
-                #'maj11': ['maj9', '♮11'],  # major 11th
-                #'dmin11': ['dmin9', '♮11'],  # diminished minor 11th
-                #'hdim11': ['hdim9', '♮11'],  # half-diminished 11th
-                #'hdmin11': ['hdmin9', '♮11'],  # half-diminished minor 11th
-
-                #'13': ['11', '♮13'],               # dominant 13th
-                #'maj13': ['maj11', '♯11', '♮13'],  # major 13th with a raised 11th
-               #f'maj13{nat}11': ['maj11', '♮13'],         # major 13th WITHOUT raised 11th
-                #'dmin13': ['dmin11', '♮13'],  # diminished minor 11th
-                #'hdim13': ['hdim11', '♮13'],  # half-diminished 11th
-                #'hdmin13': ['hdmin11', '♮13'],  # half-diminished minor 11th
-                #}
-
-
-## chord 'tweaks' are those that could conceivably tweak an existing chord type:
-## note that this dict order matters, since it affects the order in which chords get named: (e.g. add9sus4 instead of sus4add9)
-#chord_tweaks = {    'sus4': ChordModifier(remove=3, add=4, verify={2:False}),
-                    #'sus2': ChordModifier(remove=3, add=2, verify={4:False}),
-
-                    #'add4': ChordModifier(add=4, verify={9: False, 11:False}), # are these real? or just add11s
-
-                    #'add9': ChordModifier(add={9:0}, verify={7: False, 2:False}),
-                    #'add11': ChordModifier(add=11, verify={9: False, 4:False}),
-                    #'add13': ChordModifier(add=13, verify={11: False, 6:False, 5:0, 7:True}), # verify natural 5 is a kludge, see: Bbdim9add13/C
-
-                    #'(no5)': ChordModifier(remove=5), # , verify={3: True, 10:False}),    # we don't need verifiers on this because no5s are not registered anywhere, just treated as a valid input
-                 #f'({fl}5)': ChordModifier(make={5:-1}, verify={3:0}),
-                    #}
-
-# add degree alterations too:
-chord_alterations = {}
-for acc in [fl, sh]:
-   for deg in range(5,14):
-       acc_val = accidental_offsets[acc]
-       chord_alterations[f'{acc}{deg}'] = ChordModifier(make={deg:acc_val})
-
-# union of them all:
-chord_type_modifiers = {name: ChordModifier(chord_def) for name, chord_def in chord_types.items()}
-chord_tweak_modifiers = {name: ChordModifier(chord_def) for name, chord_def in chord_tweaks.items()}
-
-chord_lookup = {**chord_type_modifiers, **chord_tweaks, **chord_alterations}
-
-# import string replacements for chord searching:
-#modifier_aliases = { 'maj' : ['major', 'M', 'Δ', 'ᐞ'],
-                      #'m'  : ['minor', 'min', '-',],
-                      #'sus': ['suspended', 's', 'ˢ'],
-                      #'dim': ['diminished', 'o', '°',],
-                      #'aug': ['augmented', '+', '⁺'],
-                      ## special case: the chord 'half-dim' is implicitly a 7th, but 'hdim7' is clearer than 'hdim'
-                    #'hdim7': ['ø', 'ø7', 'hdim', 'half-diminished', 'half-dim', 'm7b5', 'm7♭5', 'tristan'],
-                     #'add' : ['added', 'ᵃ'],
-                    #'(no5)': ['no5', '(omit5)'],
-
-                     ## bit of a kludge; but 'domX' always refers to an 'X' chord,
-                     ## so we map 'dom' to nothing and it all works fine
-                         #'': ['dominant', 'dom'],
-
-                     ## another kludge: "maj7", "maj9" in particular need to be caught as
-                     ## explicit concatenations:
-                     #'maj7': ['maj7', 'add7'],
-                     ## (add7 is an awkward case because a maj7 shouldn't really be called that,
-                     ## but if you DO say 'add7' it implies a natural rather than a flat 7)
-                     #'maj9': ['maj9'],
-                    #'maj11': ['maj11'],
-                    #'maj13': ['maj13'],
-
-                        #'2': ['two', '2nd', 'second', '²'],
-                        #'3': ['three', '3rd', 'third', '³'],
-                        #'4': ['four', '4th', 'fourth', '⁴'],
-                        #'5': ['five', '5th', 'fifth', '(no3)', 'power', 'power chord', '⁵'],
-                        #'6': ['six', '6th', 'sixth', 'add6', '⁶'],
-                        #'7': ['seven', '7th', 'seventh', '⁷'],
-                        #'8': ['eight', '8th', 'eighth', '⁸'],
-                        #'9': ['nine', '9th', 'ninth', '⁹'],
-                       #'10': ['ten', '10th', 'tenth', '¹⁰'],
-                       #'11': ['eleven', '11th', 'eleventh', '¹¹'],
-                       #'12': ['twelve', '12th', 'twelfth', '¹²'],
-                       #'13': ['thirteen', '13th', 'thirteenth', '¹³'],
-
-                      ## special edge cases, otherwise 'dmin9' etc. doesn't parse correctly:
-                    #'hdim9': ['hdim9', 'ø9'],
-                   #'hdim11': ['hdim11', 'ø11'],
-                   #'hdim13': ['hdim13', 'ø13'],
-                   #'hdmin9': ['hdmin9', 'hdimm9', 'hdimmin9'],
-                  #'hdmin11': ['hdmin11', 'hdimm11', 'hdimmin11'],
-                  #'hdmin13': ['hdmin13', 'hdimm13', 'hdimmin13'],
-                    #'dmin9': ['dmin9', 'dimm9', 'dimmin9'],
-                   #'dmin11': ['dmin11', 'dimm11', 'dimmin11'],
-                   #'dmin13': ['dmin13', 'dimm13', 'dimmin13'],
-                  #f'7{fl}9': ['dm9', 'domin9', 'domm9'],
-                  #f'7{sh}9': ['hendrix', 'purple haze'],
-
-                    ## map all accidentals back onto preferred char
-                         #sh: ['#', '♯', 'sh', 'sharpened', 'sharped', 'raised'],
-                         #fl: ['b', '♭', 'fl', 'flattened', 'flatted', 'lowered'],
-                        #dsh: ['𝄪', '♯♯', '##', 'dsh'],
-                        #dfl: ['𝄫', '♭♭', 'bb', 'dfl'],
-                        #nat: ['♮', 'N', 'with', 'include', 'nat', 'natural'],
-                    #}
-
-alias_modifiers = unpack_and_reverse_dict(modifier_aliases)
-
-
 
 def parse_chord_modifiers(mod_str, aliases=modifier_aliases, verbose=False, allow_note_names=False, catch_duplicates=False):
     """given a string of modifiers that typically follows a chord root,
@@ -856,6 +724,155 @@ def cast_alterations(name):
         mod = ChordModifier(make={degree: acc_value})
         modifiers.append(mod)
     return modifiers
+
+
+# chord 'types' are those used to characterise a chord in its completeness:
+
+#chord_types =  {'m': ChordModifier(make={3:-1}),
+                #'5': ChordModifier(remove=3, verify={5:0}),
+                #'dim': ChordModifier(make={3:-1, 5:-1}),         # dimininished chord (m3+m3)
+                #'aug': ChordModifier(modify={5:+1}, verify={3:0}),   # augmented chord (M3+M3)
+                #'6': ChordModifier(add=6),                         # 6 chord aka add6
+
+                #'7': ChordModifier(add={7:-1}), # dominant 7th
+                #'dim7': ChordModifier(make={3:-1, 5:-1}, add={7:-2}),
+                ## '7b5': ChordModifier(add={7: -1}, modify={5:-1}),
+
+                ## note: m7, m9 etc. are implicit concatenations of 'm' and '7', '9' etc.
+                ## and mmaj7 is an implicit concatenation of 'm' and 'maj7'
+
+                ## but maj7 is NOT a concatenation of 'maj' and '7', since '7' implies dominant:
+                #'maj7': ChordModifier(add={7: 0}),
+                ## 'maj7b5': ChordModifier(add={7: 0}, modify={5:-1}),
+
+                ## explicit concatenations: (for chords that ought to be recognised during chord name searching)
+                #'m6': ['m', '6'],
+                #'hdim7': ['dim', '7'],    # half diminished 7th (diminished triad with minor 7th), also called m7b5
+                #'9': ['7', '♮9'],          # i.e. dominant 9th
+                #'maj9': ['maj7', '♮9'],    # major 9th
+                #f'7{fl}9': ['7', '♭9'],        # dominant minor 9th, (i.e. dm9?)
+                #'dim9': ['dim7', '♮9'],    # diminished 9th
+                #'dmin9': ['dim7', '♭9'],   # diminished minor 9th
+                #'hdim9': ['hdim7', '♮9'],  # half diminished 9th
+                #'hdmin9': ['hdim7', '♭9'],   # half diminished minor 9th
+               #f'7{sh}9': ['7', '♯9'],        # dominant 7 sharp 9, i.e. Hendrix chord
+
+                #'11': ['9', '♮11'],        # dominant 11th
+                #'maj11': ['maj9', '♮11'],  # major 11th
+                #'dmin11': ['dmin9', '♮11'],  # diminished minor 11th
+                #'hdim11': ['hdim9', '♮11'],  # half-diminished 11th
+                #'hdmin11': ['hdmin9', '♮11'],  # half-diminished minor 11th
+
+                #'13': ['11', '♮13'],               # dominant 13th
+                #'maj13': ['maj11', '♯11', '♮13'],  # major 13th with a raised 11th
+               #f'maj13{nat}11': ['maj11', '♮13'],         # major 13th WITHOUT raised 11th
+                #'dmin13': ['dmin11', '♮13'],  # diminished minor 11th
+                #'hdim13': ['hdim11', '♮13'],  # half-diminished 11th
+                #'hdmin13': ['hdmin11', '♮13'],  # half-diminished minor 11th
+                #}
+
+
+## chord 'tweaks' are those that could conceivably tweak an existing chord type:
+## note that this dict order matters, since it affects the order in which chords get named: (e.g. add9sus4 instead of sus4add9)
+#chord_tweaks = {    'sus4': ChordModifier(remove=3, add=4, verify={2:False}),
+                    #'sus2': ChordModifier(remove=3, add=2, verify={4:False}),
+
+                    #'add4': ChordModifier(add=4, verify={9: False, 11:False}), # are these real? or just add11s
+
+                    #'add9': ChordModifier(add={9:0}, verify={7: False, 2:False}),
+                    #'add11': ChordModifier(add=11, verify={9: False, 4:False}),
+                    #'add13': ChordModifier(add=13, verify={11: False, 6:False, 5:0, 7:True}), # verify natural 5 is a kludge, see: Bbdim9add13/C
+
+                    #'(no5)': ChordModifier(remove=5), # , verify={3: True, 10:False}),    # we don't need verifiers on this because no5s are not registered anywhere, just treated as a valid input
+                 #f'({fl}5)': ChordModifier(make={5:-1}, verify={3:0}),
+                    #}
+
+# string replacement aliases for chord types:
+alias_modifiers = unpack_and_reverse_dict(modifier_aliases)
+
+#chord_lookup = {}
+
+# add degree alterations too:
+chord_alterations = {}
+for acc in [fl, sh]:
+   for deg in range(5,14):
+       acc_val = accidental_offsets[acc]
+       chord_alterations[f'{acc}{deg}'] = ChordModifier(make={deg:acc_val})
+
+# union of them all:
+chord_type_modifiers = {name: ChordModifier(chord_def)
+                                if not isinstance(chord_def, (list, tuple)) # parse lists of chord defs (explicit concatenations) as a separate case
+                                else [ChordModifier(chord_def_part) for chord_def_part in chord_def]
+                            for name, chord_def in chord_types.items()}
+chord_tweak_modifiers = {name: ChordModifier(chord_def)
+                                if not isinstance(chord_def, (list, tuple))
+                                else [ChordModifier(chord_def_part) for chord_def_part in chord_def]
+                            for name, chord_def in chord_tweaks.items()}
+
+chord_lookup = {**chord_type_modifiers, **chord_tweaks, **chord_alterations}
+
+# import string replacements for chord searching:
+#modifier_aliases = { 'maj' : ['major', 'M', 'Δ', 'ᐞ'],
+                      #'m'  : ['minor', 'min', '-',],
+                      #'sus': ['suspended', 's', 'ˢ'],
+                      #'dim': ['diminished', 'o', '°',],
+                      #'aug': ['augmented', '+', '⁺'],
+                      ## special case: the chord 'half-dim' is implicitly a 7th, but 'hdim7' is clearer than 'hdim'
+                    #'hdim7': ['ø', 'ø7', 'hdim', 'half-diminished', 'half-dim', 'm7b5', 'm7♭5', 'tristan'],
+                     #'add' : ['added', 'ᵃ'],
+                    #'(no5)': ['no5', '(omit5)'],
+
+                     ## bit of a kludge; but 'domX' always refers to an 'X' chord,
+                     ## so we map 'dom' to nothing and it all works fine
+                         #'': ['dominant', 'dom'],
+
+                     ## another kludge: "maj7", "maj9" in particular need to be caught as
+                     ## explicit concatenations:
+                     #'maj7': ['maj7', 'add7'],
+                     ## (add7 is an awkward case because a maj7 shouldn't really be called that,
+                     ## but if you DO say 'add7' it implies a natural rather than a flat 7)
+                     #'maj9': ['maj9'],
+                    #'maj11': ['maj11'],
+                    #'maj13': ['maj13'],
+
+                        #'2': ['two', '2nd', 'second', '²'],
+                        #'3': ['three', '3rd', 'third', '³'],
+                        #'4': ['four', '4th', 'fourth', '⁴'],
+                        #'5': ['five', '5th', 'fifth', '(no3)', 'power', 'power chord', '⁵'],
+                        #'6': ['six', '6th', 'sixth', 'add6', '⁶'],
+                        #'7': ['seven', '7th', 'seventh', '⁷'],
+                        #'8': ['eight', '8th', 'eighth', '⁸'],
+                        #'9': ['nine', '9th', 'ninth', '⁹'],
+                       #'10': ['ten', '10th', 'tenth', '¹⁰'],
+                       #'11': ['eleven', '11th', 'eleventh', '¹¹'],
+                       #'12': ['twelve', '12th', 'twelfth', '¹²'],
+                       #'13': ['thirteen', '13th', 'thirteenth', '¹³'],
+
+                      ## special edge cases, otherwise 'dmin9' etc. doesn't parse correctly:
+                    #'hdim9': ['hdim9', 'ø9'],
+                   #'hdim11': ['hdim11', 'ø11'],
+                   #'hdim13': ['hdim13', 'ø13'],
+                   #'hdmin9': ['hdmin9', 'hdimm9', 'hdimmin9'],
+                  #'hdmin11': ['hdmin11', 'hdimm11', 'hdimmin11'],
+                  #'hdmin13': ['hdmin13', 'hdimm13', 'hdimmin13'],
+                    #'dmin9': ['dmin9', 'dimm9', 'dimmin9'],
+                   #'dmin11': ['dmin11', 'dimm11', 'dimmin11'],
+                   #'dmin13': ['dmin13', 'dimm13', 'dimmin13'],
+                  #f'7{fl}9': ['dm9', 'domin9', 'domm9'],
+                  #f'7{sh}9': ['hendrix', 'purple haze'],
+
+                    ## map all accidentals back onto preferred char
+                         #sh: ['#', '♯', 'sh', 'sharpened', 'sharped', 'raised'],
+                         #fl: ['b', '♭', 'fl', 'flattened', 'flatted', 'lowered'],
+                        #dsh: ['𝄪', '♯♯', '##', 'dsh'],
+                        #dfl: ['𝄫', '♭♭', 'bb', 'dfl'],
+                        #nat: ['♮', 'N', 'with', 'include', 'nat', 'natural'],
+                    #}
+
+
+
+
+
 
 # pre-initialised modifiers used in progressions etc:
 minor_mod = ChordModifier('minor')

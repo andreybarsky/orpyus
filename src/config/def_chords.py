@@ -169,7 +169,7 @@ modifier_aliases = {
  f'7{sh}9': ['hendrix', 'purple haze'],
 
 # map all accidentals back onto their preferred char
-# (as determined in .._settings)
+# (as determined in settings)
         sh: ['#', '♯', 'sh', 'sharpened', 'sharped', 'raised'],
         fl: ['b', '♭', 'fl', 'flattened', 'flatted', 'lowered'],
        dsh: ['𝄪', '♯♯', '##', 'dsh'],
