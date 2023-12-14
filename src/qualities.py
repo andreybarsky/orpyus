@@ -792,24 +792,43 @@ alias_modifiers = unpack_and_reverse_dict(modifier_aliases)
 
 #chord_lookup = {}
 
-# add degree alterations too:
 chord_alterations = {}
 for acc in [fl, sh]:
    for deg in range(5,14):
        acc_val = accidental_offsets[acc]
        chord_alterations[f'{acc}{deg}'] = ChordModifier(make={deg:acc_val})
 
-# union of them all:
-chord_type_modifiers = {name: ChordModifier(chord_def)
-                                if not isinstance(chord_def, (list, tuple)) # parse lists of chord defs (explicit concatenations) as a separate case
-                                else [ChordModifier(chord_def_part) for chord_def_part in chord_def]
-                            for name, chord_def in chord_types.items()}
-chord_tweak_modifiers = {name: ChordModifier(chord_def)
-                                if not isinstance(chord_def, (list, tuple))
-                                else [ChordModifier(chord_def_part) for chord_def_part in chord_def]
-                            for name, chord_def in chord_tweaks.items()}
 
-chord_lookup = {**chord_type_modifiers, **chord_tweaks, **chord_alterations}
+# import named chord types from def_chords file in settings:
+chord_type_modifiers = {}
+chord_tweak_modifiers = {}
+chord_lookup = {} # master dict of all chord names to their modifiers
+for chord_mod_dict, chord_def_dict in zip([chord_type_modifiers, chord_tweak_modifiers], [chord_types, chord_tweaks]):
+    for name, chord_def in chord_def_dict.items():
+        # unpack explicit concatenations into lists of modifiers:
+        if isinstance(chord_def, (list, tuple)):
+            chord_mod = [ChordModifier(chord_def_part) for chord_def_part in chord_def]
+        else:
+            # just cast ChordDef dataclass to full ChordModifier object
+            chord_mod = ChordModifier(chord_def)
+        chord_mod_dict[name] = chord_mod
+        chord_lookup[name] = chord_mod
+
+# add degree alterations too:
+
+chord_lookup.update(chord_alterations)
+
+## union of them all:
+#chord_type_modifiers = {name: ChordModifier(chord_def)
+                                #if not isinstance(chord_def, (list, tuple)) # parse lists of chord defs (explicit concatenations) as a separate case
+                                #else [ChordModifier(chord_def_part) for chord_def_part in chord_def]
+                            #for name, chord_def in chord_types.items()}
+#chord_tweak_modifiers = {name: ChordModifier(chord_def)
+                                #if not isinstance(chord_def, (list, tuple))
+                                #else [ChordModifier(chord_def_part) for chord_def_part in chord_def]
+                            #for name, chord_def in chord_tweaks.items()}
+
+#chord_lookup = {**chord_type_modifiers, **chord_tweaks, **chord_alterations}
 
 # import string replacements for chord searching:
 #modifier_aliases = { 'maj' : ['major', 'M', 'Δ', 'ᐞ'],
