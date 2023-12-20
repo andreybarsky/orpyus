@@ -7,12 +7,13 @@ if PROFILE_INIT:
     profiler.enable()
 from src.intervals import *
 from src.notes import Note, OctaveNote, NoteList
-from src.chords import AbstractChord, Chord, ChordList, matching_chords
+from src.chords import AbstractChord, Chord, ChordList
 from src.numerals import RomanNumeral, Roman, RN
 from src.scales import Scale, ScaleFactors, ScaleDegree, ScaleChord
 from src.keys import Key, KeyChord
 from src.progressions import Progression, ChordProgression
 from src.guitar import Guitar, standard
+from src.matching import matching_chords, matching_scales, matching_keys
 
 # individual test modules:
 from src.test import test_util, test_parsing, test_qualities, test_intervals, test_notes

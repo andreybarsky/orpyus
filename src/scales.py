@@ -2342,7 +2342,7 @@ def infer_scale(degree_qualities):
 
 
 # import scale definitions as strings:
-from def_scales import base_scale_defines, base_scale_mode_names, scale_name_replacements, parallel_scale_names, heptatonic_scale_names_by_rarity, other_scale_names_by_rarity
+from .config.def_scales import base_scale_defines, base_scale_mode_names, scale_name_replacements, parallel_scale_names, heptatonic_scale_names_by_rarity, other_scale_names_by_rarity
 
 ## 'standard' scales are: naturals, harmonic majors/minors, and melodic minor, the most commonly used in pop music
 #standard_scale_names = {'natural major', 'natural minor', 'harmonic major', 'harmonic minor', 'melodic minor'}
@@ -2506,7 +2506,9 @@ pentatonic_base_scale_names = [n for n in base_scale_mode_names if len(all_scale
 
 # define rarities for non-heptatonics:
 canonical_scale_names_by_rarity = dict(heptatonic_scale_names_by_rarity)
-canonical_scale_names_by_rarity.update(other_scale_names_by_rarity)
+for r, names in other_scale_names_by_rarity.items():
+    canonical_scale_names_by_rarity[r].update(names)
+#canonical_scale_names_by_rarity.update(other_scale_names_by_rarity)
 #canonical_scale_names_by_rarity[1].update(['major pentatonic', 'minor pentatonic'])
 #canonical_scale_names_by_rarity[2].update(['minor blues', 'major blues'])
 #canonical_scale_names_by_rarity[4].update(['hirajoshi', 'iwato', 'kumoi', 'yo'])
@@ -2554,6 +2556,14 @@ FullMinor = FullMinorScale = Scale('full minor')
 ExtendedMajor = ExtendedMajorScale = Scale('extended major')
 FullMajor = FullMajorScale = Scale('full major')
 
+MajorPentatonic = MajorPentatonicScale = MajorPent = MajPent = Scale('major pentatonic')
+MinorPentatonic = MinorPentatonicScale = MinorPent = MinPent = Scale('minor pentatonic')
+MajorBlues = MajorBluesScale = MajBlues = BluesMajor = Scale('major blues')
+MinorBlues = MinorBluesScale = MinBlues = BluesMinor = Scale('minor blues')
+
+pentatonic_scales = [MajorPentatonic, MinorPentatonic]
+blues_scales = [MajorBlues, MinorBlues]
+
 # pre-packaged scale lists:
 natural_scales = [MajorScale, MinorScale]
 harmonic_scales = [HarmonicMajor, HarmonicMinor]
@@ -2596,13 +2606,6 @@ scale_contractions = {ExtendedMinor: NaturalMinor,
 searchable_heptatonics = diatonic_scales + harmonic_scales + melodic_scales
 extended_searchable_heptatonics = searchable_heptatonics + extended_scales
 
-MajorPentatonic = MajorPentatonicScale = MajorPent = MajPent = Scale('major pentatonic')
-MinorPentatonic = MinorPentatonicScale = MinorPent = MinPent = Scale('minor pentatonic')
-MajorBlues = MajorBluesScale = MajBlues = Scale('major blues')
-MinorBlues = MinorBluesScale = MinBlues = Scale('minor blues')
-
-pentatonic_scales = [MajorPentatonic, MinorPentatonic]
-blues_scales = [MajorBlues, MinorBlues]
 
 # parallel_scale_names are hardcoded since they
 # are mostly established by definition

@@ -1,4 +1,4 @@
-from ._settings import A4_PITCH, NOTE_RANGE, PLAYBACK_TEMPERAMENT, CONSONANCE_TEMPERAMENT
+from .config.settings import A4_PITCH, NOTE_RANGE, PLAYBACK_TEMPERAMENT, CONSONANCE_TEMPERAMENT
 from .util import log, euclidean_gcd
 import math
 

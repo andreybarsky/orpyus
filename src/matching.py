@@ -6,14 +6,35 @@ from .scales import *
 from .keys import *
 from .progressions import *
 from .qualities import Major, Minor
+from .config import settings
 
 from dataclasses import dataclass
 
 # tonal quality distributions for major and minor tonalities:
-major_qualdist = {0: 10, 1: -4,  2: 7,  3: -5,  4: 7,  5: 8,  6: -1,
-                  7:  9,  8: 0,  9: 5,  10: 0,  11: 5,}
-minor_qualdist = {0: 10, 1: -3,  2: 6,  3: 7,  4: -9,  5: 8,  6: -2,
-                  7:  7,  8: 5,  9: 0,  10: 5,  11: 0,}
+major_qualdist = {0: 10,
+                  1: -6,
+                  2:  3,
+                  3: -4,
+                  4:  9,
+                  5:  6,
+                  6:  -1,
+                  7:  7,
+                  8:  0,
+                  9:  2,
+                  10: 0,
+                  11: 2,}
+minor_qualdist = {0: 10,
+                  1: -4,
+                  2:  3,
+                  3:  8,
+                  4: -2,
+                  5:  5,
+                  6: -1,
+                  7:  6,
+                  8:  2,
+                  9:  0,
+                  10: 2,
+                  11: 0,}
                 # or whatever
 
 # specific scales to search once we have established a tonality:
@@ -92,11 +113,14 @@ def match_qualdist_to_intervals(ivs: IntervalList, weight_counts=True,
     # now: ivs is a dict of intervals to weights
     # so we can now iterate through each qualdist to check for matches:
     scores = []
-    for qualdist in major_qualdist, minor_qualdist:
+    for qualname, qualdist in zip(['major', 'minor'], [major_qualdist, minor_qualdist]):
         # take dot product of qualdist and (weighted) input intervals
-        scores.append(sum([prior * weighted_ivs[iv]
+        weighted = [prior * weighted_ivs[iv]
                            if iv in weighted_ivs else 0
-                           for iv, prior in qualdist.items()]))
+                           for iv, prior in qualdist.items()]
+        if verbose:
+            print(f'{qualname}: {list(enumerate(weighted))}')
+        scores.append(sum(weighted))
     major_score, minor_score = scores
     if verbose:
         print(f'{major_score=}')
@@ -528,7 +552,7 @@ def fuzzy_matching_chords(note_list, display=True,
             input_sharps += 1
     if input_sharps == input_flats:
         # tiebreak on global default:
-        prefer_sharps = _settings.DEFAULT_SHARPS
+        prefer_sharps = settings.DEFAULT_SHARPS
         log(f'Decided to prefer sharps: {prefer_sharps}')
     else:
         prefer_sharps = input_sharps > input_flats

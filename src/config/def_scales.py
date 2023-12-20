@@ -16,7 +16,7 @@ base_scale_defines = { # base scales are defined here, modes and subscales are a
     # '1,  2,  3,  4,  5, b6, b7': ['melodic major'],   # is a mode
     '1,  2, b3,  4,  5,  6,  7': ['melodic minor', 'jazz minor', 'melodic minor ascending'], # (ascending)
     # while it's true that "melodic minor" can refer to a special scale that uses
-# the natural minor scale when descending, that is out-of-scope for now
+    # the natural minor scale when descending, that is out-of-scope for now
 
     '1, b2, b3,  4,  5,  6,  7': ['neapolitan major', 'phrygian melodic minor'],
     '1, b2, b3,  4,  5, b6,  7': ['neapolitan minor', 'phrygian harmonic minor'],

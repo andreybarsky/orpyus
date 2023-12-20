@@ -56,13 +56,7 @@ def unit_test():
     compare(Scale('blues minor').factors.chromatic.as_intervals[0], Scale('minor blues').chromatic_intervals[0])
 
 
-    ### matching_scales:
-    compare(list(matching_scales('I iii V7', display=False, candidate_scales=[MajorScale, MinorScale])), [Scale('major')])
-    # compare(matching_scales('i bIII V7', display=False), [Scale('extended minor'), Scale('full minor')])
 
-    # test input by pairs vs input by numerals:
-    degree_chord_pairs = [(1, AbstractChord('min')), (5, AbstractChord('7')), (7, AbstractChord('maj'))]
-    compare(matching_scales(degree_chord_pairs, display=False), matching_scales('i V7 VII', display=False))
 
 
     # test scalechord parsing:

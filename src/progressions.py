@@ -11,7 +11,7 @@ from .parsing import auto_split, superscript, fl, sh, nat # roman_numerals, nume
 from .numerals import RomanNumeral
 from . import parsing, notes, scales
 from .config import settings, def_progressions
-from def_progressions import common_progressions
+from .config.def_progressions import common_progression_defines
 
 from collections import Counter
 
@@ -79,6 +79,12 @@ class Progression:
                 chords = None
 
         if isinstance(numerals, str):
+
+            # catch the special case of: we've been given a progression by name
+            if numerals in common_progression_strs_by_name:
+                # translate name to string of numerals:
+                numerals = common_progression_strs_by_name[numerals]
+
             original_numerals = numerals
             # remove all diacritics:
             numerals = ''.join([c for c in numerals if c not in settings.DIACRITICS.values()])
@@ -1526,6 +1532,13 @@ def propose_root_motions(start, direction):
     ... # TBI
 
 
+common_progression_strs_by_name = {} # to avoid unassigned variable errors in upcoming Progression init
+
+common_progressions = {Progression(numerals):name for numerals, name in common_progression_defines.items()}
+
+# get the reverse mappings too:
+common_progression_strs_by_name = reverse_dict(common_progression_defines)
+common_progressions_by_name = reverse_dict(common_progressions)
 
 
 simple_progressions = {p.simplify(): name for p,name in common_progressions.items()}
@@ -1547,12 +1560,10 @@ for prog_dict, rot_dict in zip([common_progressions, simple_progressions], [rota
 # rotated_simple_progressions = {p.simplify(): name for p,name in rotated_common_progressions.items()}
 
 # import named progressions as strings of roman numerals:
-from def_progressions import common_progressions as common_progression_defines
-# and cast them to Progression objects:
-common_progressions = {Progression(chords):name for chords, name in common_progression_defines.items()}
+#from .config.def_progressions import common_progressions as common_progression_defines
+## and cast them to Progression objects:
+#common_progressions = {Progression(chords):name for chords, name in common_progression_defines.items()}
 
-# get the reverse mapping too:
-common_progressions_by_name = reverse_dict(common_progressions)
 
 # guitar-playable variants of the common progressions:
 def guitar_progressions():

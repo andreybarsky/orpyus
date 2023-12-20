@@ -1,5 +1,5 @@
 from .parsing import is_accidental
-from ._settings import A4_PITCH
+from .config.settings import A4_PITCH
 from . import tuning
 import math
 

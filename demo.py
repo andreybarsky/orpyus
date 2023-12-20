@@ -7,7 +7,7 @@ import ipdb, time
 # time how long init takes for debugging purposes:
 init_start_time = time.time()
 
-from src import util, parsing, tuning, conversion, display, _settings
+from src import util, parsing, tuning, conversion, display
 from src.qualities import *
 from src.intervals import *
 from src.notes import *
@@ -19,6 +19,7 @@ from src.progressions import *
 from src.harmony import *
 from src.audio import *
 from src.rhythm import *
+from src.config.settings import *
 #from src.test.test_matching import * # for song progressions
 
 init_end_time = time.time()

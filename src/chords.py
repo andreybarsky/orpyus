@@ -3,7 +3,7 @@ from .intervals import Interval, IntervalList, P5, default_degree_intervals
 from .util import log, precision_recall, rotate_list, check_all, all_equal, sign, reverse_dict, unpack_and_reverse_dict, reduce_aliases
 from .qualities import Quality, ChordModifier, parse_chord_modifiers
 from .parsing import sh, fl, nat
-from . import notes, parsing, qualities, tuning,
+from . import notes, parsing, qualities, tuning
 from .config import settings, def_chords
 #from .config.def_chords import chord_names_by_rarity
 
@@ -1736,7 +1736,7 @@ cache_initialised = False # flag that avoids certain behaviours during library i
 
 # import base rarity definitions for common chord names:
 #from .defines.def_chords import chord_names_by_rarity
-from def_chords import chord_names_by_rarity
+from .config.def_chords import chord_names_by_rarity
 
 
 # and calculate the rarities of more complex, modified chords
@@ -1786,7 +1786,7 @@ for rarity, chord_names in chord_names_by_rarity.items():
             base_chord = AbstractChord(chord_name)
             # now: add chord tweaks to each base chord as well, increasing rarity accordingly
             for tweak_name in ordered_tweak_names:
-                tweak = qualities.chord_tweaks[tweak_name] # fetch ChordModifier object by name
+                tweak = qualities.chord_tweak_modifiers[tweak_name] # fetch ChordModifier object by name
                 # add a tweak if it does not already exist by name and is valid on this base chord:
                 if tweak.valid_on(base_chord.factors):
                     # (we check if base chord is major because the tweaks on their own apply to major chords,
@@ -1808,7 +1808,7 @@ for rarity, chord_names in chord_names_by_rarity.items():
 
                             # finally: do the same again, but one level deeper!
                             for tweak_name2 in ordered_tweak_names:
-                                tweak2 = qualities.chord_tweaks[tweak_name] # fetch ChordModifier object by name
+                                tweak2 = qualities.chord_tweak_modifiers[tweak_name] # fetch ChordModifier object by name
                                 # do not apply the same tweak twice, and do so only if valid:
                                 if (tweak2 is not tweak) and tweak2.valid_on(altered_factors):
                                     if not ((tweak2 in ind_tweaks) and (base_chord.quality.minor)):

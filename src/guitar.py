@@ -1,8 +1,8 @@
 from . import notes as notes
 from .notes import Note, OctaveNote, NoteList
-from .chords import AbstractChord, Chord, ChordList, most_likely_chord, matching_chords
+from .chords import AbstractChord, Chord, ChordList, most_likely_chord
 from .scales import Scale
-from .keys import Key, matching_keys
+from .keys import Key
 from .matching import matching_chords, matching_keys
 from .util import log, reverse_dict
 from .display import Fretboard

@@ -1,4 +1,4 @@
-from ..chords import Chord, AbstractChord, ChordFactors, Interval, matching_chords, most_likely_chord
+from ..chords import Chord, AbstractChord, ChordFactors, Interval, most_likely_chord
 from .testing_tools import compare
 
 def unit_test():
@@ -43,7 +43,8 @@ def unit_test():
     compare('C' in Chord('Am'), True)
 
     # test chord matching by notes:
-    print(matching_chords('CEA'))
+    # (should be in test_matching module)
+    #print(matching_chords('CEA'))
 
     # test chord abstraction:
     compare(Chord('Cmaj7sus2').abstract(), AbstractChord('maj7sus2'))
@@ -57,7 +58,6 @@ def unit_test():
     compare(AbstractChord(intervals=[0, 4, 9]), AbstractChord('m/1'))
 
     # test recursive init for non-existent bass note inversions:
-    ### WARNING: this test temporarily commented out while awaiting chord init refactor (and re_parse_slash_chord function)
     compare(Chord('D/C#'), Chord('Dmaj7/C#'))
     compare(Chord('Amaj7/B'), Chord('Amaj9/B'))
 

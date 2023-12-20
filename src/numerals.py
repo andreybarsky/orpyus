@@ -1,5 +1,6 @@
 from .chords import AbstractChord
-from . import parsing, _settings
+from . import parsing
+from .config import settings
 from .util import reduce_aliases
 from .qualities import Quality, Major, Minor, Ind, minor_mod, parse_chord_modifiers, ChordModifier
 
@@ -457,7 +458,7 @@ class RomanNumeral:
         lb, rb = self._brackets
         return lb + str(self) + rb
 
-    _brackets = _settings.BRACKETS['RomanNumeral']
+    _brackets = settings.BRACKETS['RomanNumeral']
 
 
 

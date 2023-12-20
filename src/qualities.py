@@ -807,9 +807,9 @@ for chord_mod_dict, chord_def_dict in zip([chord_type_modifiers, chord_tweak_mod
     for name, chord_def in chord_def_dict.items():
         # unpack explicit concatenations into lists of modifiers:
         if isinstance(chord_def, (list, tuple)):
-            chord_mod = [ChordModifier(chord_def_part) for chord_def_part in chord_def]
+            chord_mod = chord_def # just a list of strings
         else:
-            # just cast ChordDef dataclass to full ChordModifier object
+            # cast ChordDef dataclass to full ChordModifier object
             chord_mod = ChordModifier(chord_def)
         chord_mod_dict[name] = chord_mod
         chord_lookup[name] = chord_mod

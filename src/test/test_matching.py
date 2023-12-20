@@ -2,9 +2,10 @@
 ###
 
 from ..qualities import Major, Minor
-from ..matching import matching_chords, matching_keys, match_qualdist_to_intervals
+from ..matching import matching_chords, matching_scales, matching_keys, match_qualdist_to_intervals
 from ..progressions import *
 from .testing_tools import compare
+from ..scales import MajorScale, MinorScale
 
 def unit_test():
 
@@ -33,7 +34,20 @@ def unit_test():
     compare(matching_chords('FD#A#', display=False), [Chord('A#sus4'), Chord('D#sus2')])
 
 
-    # first, the chord progressions of some songs I'm practicing
+
+    # then scale matching
+
+    compare(list(matching_scales('I iii V7', display=False, candidate_scales=[MajorScale, MinorScale])), [Scale('major')])
+    # compare(matching_scales('i bIII V7', display=False), [Scale('extended minor'), Scale('full minor')])
+
+    # test input by pairs vs input by numerals:
+    degree_chord_pairs = [(1, AbstractChord('min')), (5, AbstractChord('7')), (7, AbstractChord('maj'))]
+    compare(matching_scales(degree_chord_pairs, display=False), matching_scales('i V7 VII', display=False))
+
+
+    # then chord progressions
+
+    # these are the chord progressions of some songs I'm practicing
     # and checking that they auto-detect the correct key
     house_of_the_rising_sun = ChordProgression('Am C D F Am E Am E')
     house_of_the_rising_sun2 = (house_of_the_rising_sun + ['Am', 'C', 'D', 'F', 'Am', 'C', 'E', 'E'])
