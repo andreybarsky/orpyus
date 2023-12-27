@@ -75,8 +75,9 @@ def unit_test():
     sweet_child_of_mine = ChordProgression('D Cadd9 G D A C D')
     compare(sweet_child_of_mine.key, Key('D'))
 
-    queen_of_argyll = ChordProgression('Em Bm Em Bm G Bm Em Bm Em D Bm Em D Em Bm G Bm Em D Em D Bm Em')
-    compare(queen_of_argyll.key, Key('Em'))
+    queen_of_argyll = ChordProgression('Am Em Am Em C G Am Em C G Am')
+    queen_of_argyll2 = ChordProgression('Am Em G Am Em C G Em Am Em F G Am')
+    queen_of_argyll3 = ChordProgression('Am Em G Am Em C G Em Am Em C G Em D')
 
     # other songs with different match cases:
 

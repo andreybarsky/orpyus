@@ -194,14 +194,14 @@ class Progression:
         if roots is None:
             df = DataFrame(['Function', '', 'Deg1', '', 'Deg2', '',
                              # 'Chd1', '', 'Chd2', '',
-                             'Distance', '', 'Cadence'])
+                             'Distance', '', 'Cadence', '', 'CadScore'])
         else:
             df = DataFrame(['Function', '', 'Deg1', '', 'Deg2', '',
                              'Chd1', '', 'Chd2', '',
-                             'Distance', '', 'Cadence'])
-        # sloppy for now: should be rolled into a dataframe from the Display module
+                             'Distance', '', 'Cadence', '', 'CadScore'])
         num1s, num2s, c1s, c2s, mvs, cads = [], [], [], [], [], []
-        clean_numerals = self.as_numerals(marks=False, diacritics=False, sep='@').split('@')
+        #clean_numerals = self.as_numerals(marks=False, diacritics=False, sep='@').split('@')
+        clean_numerals = self.numerals
         for i in range(len(self)-1):
             f = f'[{self.root_movements[i].function_char}]'
             arrow = self.root_movements[i]._movement_marker
@@ -210,14 +210,17 @@ class Progression:
             dist = str(self.root_movements[i].direction_str)
             cadence = self.root_movements[i].cadence
             cadence = cadence if (cadence != False) else ''
+            score = self.root_movements[i].cadence_score
+            # blank if 0:
+            score = score if score > 0 else ''
             if roots is None:
                 df.append([f, '  ', n1, arrow, n2, '  ',
                             # ch1, arrow, ch2, ' ',
-                            dist, '  ', cadence])
+                            dist, '  ', cadence, ' ', score])
             else:
                 df.append([f, '  ', n1, arrow, n2, '  ',
                             ch1, arrow, ch2, ' ',
-                            dist, '  ', cadence])
+                            dist, '  ', cadence, ' ', score])
 
         if display:
             # construct dataframe object for human viewing
@@ -449,12 +452,13 @@ def most_grammatical_progression(progressions, add_resolution=True, return_score
             # add a tonic on the end to see how it resolves
             p = p.pad_with_tonic()
         for j, movement in enumerate(p.root_movements):
-            development = (j / len(p.root_movements))**1.5 # upweight cadences toward the end
+            development = .5 + (j / len(p.root_movements))*.5 # upweight cadences toward the end
             if movement.cadence:
                 cadence_counts[i] += 1
                 cadence_scores[i] += movement.cadence_score * development
         # normalise by progression length: (to compensate for added implied resolutions)
         cadence_scores[i] = round( cadence_scores[i] / len(p),  3)
+
     # take argmax of cadence count/score:
 
 
@@ -466,7 +470,7 @@ def most_grammatical_progression(progressions, add_resolution=True, return_score
                 p.pad_with_tonic().analysis
             else:
                 p.analysis
-        log(f'cadence score:{c})\n')
+        log(f'cadence score:{c})\n', force=verbose)
 
 
 
@@ -966,7 +970,8 @@ class ChordProgression(Progression): # , ChordList):
             return None
 
     def find_key(self, chords=None,
-                candidate_scales = scales.natural_scales + scales.extended_scales,
+                #candidate_scales = scales.natural_scales + scales.extended_scales,
+                candidate_scales = scales.major_scales + scales.minor_scales,
                 contract_extended_scales = True,
                 pad_with_tonic=False, verbose=False):
         """wraps around matching_keys but additionally uses cadence information to distinguish between competing candidates"""
@@ -1254,6 +1259,8 @@ class RootMotion(DegreeMotion):
             return 'plagal half cadence'
         elif self.deceptive_cadence:
             return 'deceptive cadence'
+        elif self.leading_tone_cadence:
+            return 'leading tone cadence'
         else:
             return False
 
@@ -1263,15 +1270,15 @@ class RootMotion(DegreeMotion):
         if self.authentic_cadence:
             return 1
         elif self.leading_tone_cadence:
-            return 0.5
+            return 0.6
         elif self.authentic_half_cadence:
-            return 0.1
+            return 0.2
         elif self.plagal_cadence:
-            return 0.8
+            return 0.7
         elif self.plagal_half_cadence:
             return 0.1
         elif self.deceptive_cadence:
-            return 0.05
+            return 0.1
         else:
             return 0
 

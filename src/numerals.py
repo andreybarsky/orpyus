@@ -467,7 +467,16 @@ RN = Roman = RomanNumeral # convenience alias
 class NumeralList(list):
     def __init__(self, *items):
         valid_numerals = []
-        for *
+        if len(items) == 1:
+            if isinstance(items[0], str):
+                # been passed a single string as input, split it into a list:
+                items = auto_split(items)
+            elif isinstance(items[0], (list, tuple)):
+                # been passed an iterable as single input, unpack it:
+                items = items[0]
+
+        for item in items:
+            ...
 
         # initialise as list:
         super().__init__(valid_numerals)
