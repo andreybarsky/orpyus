@@ -463,3 +463,13 @@ class RomanNumeral:
 
 
 RN = Roman = RomanNumeral # convenience alias
+
+class NumeralList(list):
+    def __init__(self, *items):
+        valid_numerals = []
+        for *
+
+        # initialise as list:
+        super().__init__(valid_numerals)
+
+Numerals = NumeralList

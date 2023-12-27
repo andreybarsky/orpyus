@@ -186,7 +186,44 @@ def chords_tonality(chords, chord_factor_weights = {1: 2, 3: 1.5}, weight_counts
 ### SCALE MATCHING
 
 
-def matching_scales(chords=None, intervals=None, major_roots=None, min_recall=0.85, min_precision=0.0,
+def matching_scales(chords=None, intervals=None,
+                    min_recall = 0.85, min_precision=0.0,
+                    max_results=None, display=True, **kwargs):
+
+    # uses tonality matching logic in loop over possible tonics
+
+    if isinstance(chords, IntervalList):
+        # quietly reparse intervals that are (mistakenly) passed as first input
+        intervals = chords
+        chords = None
+
+    if chords is not None:
+        if isinstance(chords, str):
+            # assume a string of roman numerals:
+            split_numerals = auto_split(chords)
+            roman = True
+        elif isinstance(chords[0], str):
+            # assume a list of roman numerals
+            split_numerals = chords
+            roman = True
+        else:
+            # assume degree, chord pairs
+            assert len(chords[0]) == 2, "expected input to matching_scales to be roman numerals or list of (degree, abs_chord) pairs"
+            roman = False
+
+        if roman:
+            degrees, abs_chords = [], []
+            for num in split_numerals:
+                rn = RomanNumeral(num)
+                deg, ch = rn.degree, rn.chord
+                degrees.append(deg)
+                abs_chords.append(ch)
+        else:
+            degrees = [d for d,ch in chords]
+            abs_chords = [ch for d,ch in chords]
+
+
+def old_matching_scales(chords=None, intervals=None, major_roots=None, min_recall=0.85, min_precision=0.0,
                     candidate_scales = [MajorScale, MinorScale,
                                         HarmonicMinor, MelodicMinor, ExtendedMinor, FullMinor,
                                         HarmonicMajor, MelodicMajor, ExtendedMajor, FullMajor,
@@ -353,8 +390,8 @@ def matching_scales(chords=None, intervals=None, major_roots=None, min_recall=0.
         from src.display import DataFrame
 
 
-        ilb, irb = _settings.BRACKETS['IntervalList']
-        out = _settings.DIACRITICS['interval_not_in_input']
+        ilb, irb = settings.BRACKETS['IntervalList']
+        out = settings.DIACRITICS['interval_not_in_input']
 
         # title: (including its own table for chords themselves)
         input_factors_str = ' '.join(unique_intervals_from_tonic.as_factors)
