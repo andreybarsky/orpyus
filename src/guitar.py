@@ -479,9 +479,11 @@ class Guitar:
         if 'fret_size' not in kwargs:
             kwargs['fret_size'] = 6
         print(f'{progression} on tuning:{self.name}')
-        for i, (numeral, chord) in enumerate(zip(progression.as_numerals(sep=None), progression.chords)):
+        #for i, (numeral, chord) in enumerate(zip(progression.as_numerals(sep=None), progression.chords)):
+        for i, chord in enumerate(progression.chords):
             # title=f'\n{chord.simple_numeral}: {chord.chord_name}'
             # title = f'\n{i+1}: {chord}'
+            #chord = progression.chords[i]
             title = f'\n  {chord}'
             self.show_chord(chord, title=title, max_fret=max_fret, **kwargs)
 

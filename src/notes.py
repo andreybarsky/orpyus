@@ -498,7 +498,6 @@ class OctaveNote(Note):
         associated with this OctaveNote"""
         return Note.from_cache(self.chroma)
 
-
     #### utility methods for name-value-pitch conversion
 
     ## polymorphic note getters:

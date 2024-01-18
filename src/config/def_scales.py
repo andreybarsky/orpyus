@@ -21,7 +21,7 @@ base_scale_defines = { # base scales are defined here, modes and subscales are a
     '1, b2, b3,  4,  5,  6,  7': ['neapolitan major', 'phrygian melodic minor'],
     '1, b2, b3,  4,  5, b6,  7': ['neapolitan minor', 'phrygian harmonic minor'],
     '1, b2,  3,  4,  5, b6,  7': ['double harmonic', 'double harmonic major'],
-    '1, b2,bb3,  4,  5, b6,bb7': ['miyako-bushi'],
+    '1, b2,bb3,  4,  5, b6,bb7': ['miyako-bushi', 'miyako bushi', 'miyakobushi'],
 
     #### pentatonic scales:
     '1,  2,  3,  5,  6': ['major pentatonic', 'pentatonic', 'natural major pentatonic', 'ryo'], # mode 1
