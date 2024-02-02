@@ -15,50 +15,11 @@ import math
 
 
 class Note:
-    """a base class that represents notes of both types:
-        Chromas, i.e. abstract pitch classes, for example 'C'
-        Pitches, notes played in a specific octave, for example 'C4'.
-    both are examples of Notes, and all Notes are either a Chroma or a Pitch.
-    this Note base class is never initialised on its own without returning a Chroma or a Pitch.
-    instead, calling Note(x) will return either a Chroma or a Pitch depending on the form of the input x."""
-
-    def __new__(cls, *args, **kwargs):
-
-        if cls.__name__ == 'Note':
-            # this __new__ method only overwrites default object behaviour when called for Note,
-            # not when it is called for subclasses of Note: i.e. Chroma or Pitch.
-            if len(kwargs) == 0:
-                assert len(args) == 1, "Note init accepts only a single positional arg"
-                inp = args[0]
-            else:
-                assert len(kwargs) == 1, "Note init accepts only a single keyword arg"
-                assert len(args) == 0, "Note init cannot include both positional and keyword args"
-
-            if isinstance(inp, Note):
-                # if we've been passed an existing Note subtype to re-initialise, just return it
-                return inp
-
-            # string input is ambiguous and may return a chroma or a pitch:
-            elif isinstance(inp, str):
-                if not begins_with_valid_note_name(inp):
-                    raise ValueError(f'{inp} does not begin with a valid note name')
-
-                # interpret input as a Pitch if it ends in a number (which we take as the octave)
-                if inp[-1].isnumeric():
-                    return Pitch(inp)
-                # otherwise it must be an abstract chroma name:
-                else:
-                    return Chroma(inp)
-        else:
-
-
-
-class Chroma:
     """a note/chroma/pitch-class defined in the abstract,
     i.e. not associated with a specific note inside an octave,
     such as: C or D#"""
     def __init__(self, name=None, position=None, prefer_sharps=None, case_sensitive=True, strip_octave=False):
-        """a Chroma can be initialised in one of two ways:
+        """a Note can be initialised in one of two ways:
             1. by passing to 'name' a valid note name, such as C or D# or Ebb
             2. by passing to 'position' an integer between 0 and 11 (inclusive),
                 denoting a semitone offset from C.
@@ -406,21 +367,21 @@ class OctaveNote(Note):
         self.reference_pitch = self.get_pitch(temperament='EQUAL') # reference (12-TET) pitch calculated by formula
 
     @property
-    def freq(self):
-        return self.get_freq()
-    def get_freq(self, temperament=None):
-        """gets the frequency (in Hz) of this OctaveNote according to the specified tuning temperament,
+    def pitch(self):
+        return self.get_pitch()
+    def get_pitch(self, temperament=None):
+        """gets the pitch of this OctaveNote according to the specified tuning temperament,
         which must be one of: EQUAL, JUST, or RATIONAL.
         by default, this uses the global tuning mode specified in settings.TUNING_SYSTEM"""
         if temperament is None:
             temperament = tuning.get_temperament('PLAYBACK')
-        return conv.value_to_freq(self.value, temperament)
+        return conv.value_to_pitch(self.value, temperament)
 
     #### main input/arg-parsing private method:
     @staticmethod
-    def _parse_input(name, value, freq, prefer_sharps):
-        """parses name, value, freq input args (and sharp preference)
-        returns correct chroma, value, and freq"""
+    def _parse_input(name, value, pitch, prefer_sharps):
+        """parses name, value, pitch input args (and sharp preference)
+        returns correct chroma, value, and pitch"""
         # check that exactly one of our input args has been provided:
         assert ((name is not None) + (value is not None) + (pitch is not None) == 1), "Argument to init must include exactly one of: name, value, or pitch"
 
@@ -439,10 +400,10 @@ class OctaveNote(Note):
             name = None
         elif type(name) == float:
             log(f'Positional name arg passed to OctaveNote.__init__ as float instead of str, so initialising instead by pitch')
-            freq = name
+            pitch = name
             name = None
 
-        ### the following block defines: chroma, value, and freq
+        ### the following block defines: chroma, value, and pitch
         if name is not None:
             # log(f'Initialising OctaveNote with name: {name}')
             # detect if sharp or flat:
@@ -460,18 +421,18 @@ class OctaveNote(Note):
             chroma, octave = parsing.parse_octavenote_name(name)
             position = parsing.note_positions[chroma]
             value = conv.oct_pos_to_value(octave, position)
-            # freq = conv.value_to_pitch(value)
+            # pitch = conv.value_to_pitch(value)
         if value is not None:
             # log(f'Initialising OctaveNote with value: {value}')
             value = value
             octave, position = conv.oct_pos(value)
             chroma = preferred_name(position, prefer_sharps=prefer_sharps)
-            # freq = conv.value_to_freq(value)
-        if freq is not None:
-            # log(f'Initialising OctaveNote with freq: {freq}')
-            freq = float(freq)
-            assert freq > 0, "Freq must be greater than 0"
-            value = conv.freq_to_value(freq, nearest=True)
+            # pitch = conv.value_to_pitch(value)
+        if pitch is not None:
+            # log(f'Initialising OctaveNote with pitch: {pitch}')
+            pitch = float(pitch)
+            assert pitch > 0, "Pitch must be greater than 0"
+            value = conv.pitch_to_value(pitch, nearest=True)
             octave, position = conv.oct_pos(value)
             chroma = preferred_name(position, prefer_sharps=prefer_sharps)
         return chroma, value, prefer_sharps
@@ -537,18 +498,19 @@ class OctaveNote(Note):
         associated with this OctaveNote"""
         return Note.from_cache(self.chroma)
 
-    #### utility methods for name-value-freq conversion
+
+    #### utility methods for name-value-pitch conversion
 
     ## polymorphic note getters:
     @staticmethod
     def get_note_name(inp, prefer_sharps=settings.DEFAULT_SHARPS):
-        """Takes an input as either value (int) or freq (float),
+        """Takes an input as either value (int) or pitch (float),
         returns appropriate OctaveNote name, e.g. F#4"""
-        ### parse input as either value or freq, retrieve coresponding note name
+        ### parse input as either value or pitch, retrieve coresponding note name
         if type(inp) == int:
             return conv.value_to_name(inp, prefer_sharps=prefer_sharps)
         elif type(inp) == float:
-            return conv.freq_to_name(inp, prefer_sharps=prefer_sharps)
+            return conv.pitch_to_name(inp, prefer_sharps=prefer_sharps)
         elif type(inp) == str:
             # cast string to int then try again
             try:
@@ -570,7 +532,7 @@ class OctaveNote(Note):
 
     @staticmethod
     def get_note_value(inp):
-        """Takes an input as either name (string, e.g.: 'F#4') or freq (float, e.g.: 370.0),
+        """Takes an input as either name (string, e.g.: 'F#4') or pitch (float, e.g.: 370.0),
         or (oct, pos) pair
         returns appropriate OctaveNote value, e.g. 46"""
         if type(inp) == str:
@@ -581,25 +543,25 @@ class OctaveNote(Note):
             oct, pos = inp
             return conv.oct_pos_to_value(oct, pos)
         elif type(inp) == float:
-            return conv.freq_to_value(inp)
+            return conv.pitch_to_value(inp)
         else:
             raise TypeError('Can only get_note_value from string, float, or (oct,pos) pair')
 
     @staticmethod
-    def get_pitch_freq(inp):
-        ### parse input as either name or value, retrieve corresponding pitch frequency
+    def get_note_pitch(inp):
+        ### parse input as either name or value, retrieve corresponding note pitch
         if type(inp) == str:
-            return conv.name_to_freq(inp)
+            return conv.name_to_pitch(inp)
         elif type(inp) == int:
-            return conv.value_to_freq(inp)
+            return conv.value_to_pitch(inp)
         elif type(inp) in (tuple, list):
             # inverse oct-pos
-            assert len(inp) == 2, "Received iterable to get_pitch_freq, expected an (oct,pos) pair but got {len(inp)} values instead"
+            assert len(inp) == 2, "Received iterable to get_note_pitch, expected an (oct,pos) pair but got {len(inp)} values instead"
             oct, pos = inp
             value = conv.oct_pos_to_value(oct, pos)
-            return conv.value_to_freq(value)
+            return conv.value_to_pitch(value)
         else:
-            raise TypeError('Can only get_pitch_freq from string, int, or (oct,pos) pair')
+            raise TypeError('Can only get_note_pitch from string, int, or (oct,pos) pair')
 
     def next(self, chroma):
         """returns an OctaveNote object of a specified chroma
@@ -620,12 +582,12 @@ class OctaveNote(Note):
         """Outputs a sine wave corresponding to this note,
         by default with exponential volume increase and falloff"""
         from .audio import synth_wave
-        # get this pitch's frequency by desired temperament system: (default from settings)
-        tuned_freq = self.get_freq(temperament=temperament)
-        # wave = sine_wave(freq=self.freq, duration=duration)
+        # get this note's pitch by desired temperament system: (default from settings)
+        tuned_pitch = self.get_pitch(temperament=temperament)
+        # wave = sine_wave(freq=self.pitch, duration=duration)
         # use karplus-strong wave table synthesis for guitar-string timbre:
-        wave = synth_wave(freq=tuned_freq, duration=duration, type=type, falloff=falloff, cache=cache)
-        # log(f'Adding note {self} with freq {tuned_freq} (temperament={temperament})', force=True, depth=6)
+        wave = synth_wave(freq=tuned_pitch, duration=duration, type=type, falloff=falloff, cache=cache)
+        # log(f'Adding note {self} with pitch {tuned_pitch} (temperament={temperament})', force=True, depth=6)
         return wave
 
     def play(self, duration=2, type='KS', falloff=True, block=False, temperament=None):
@@ -838,7 +800,7 @@ class NoteList(list):
                 auto_octave = True
                 # cast abstract first note to octavenote:
                 octavenotes.append(self[0].in_octave(start_octave))
-                # auto_octave will let us adjust freq down later
+                # auto_octave will let us adjust pitch down later
         else:
             # cast abstract first note to octavenote:
             if not isinstance(self[0], OctaveNote):
