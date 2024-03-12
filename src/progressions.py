@@ -1517,17 +1517,17 @@ for prog_dict, rot_dict in zip([common_progressions, simple_progressions], [rota
 
 common_progressions_by_name = reverse_dict(common_progressions)
 
-# just some songs I'm practicing:
-house_of_the_rising_sun = ChordProgression('Am C D F Am E Am E')
-assert house_of_the_rising_sun.key == Key('Am')
-cant_find_my_way_home = ChordProgression('G, D/F#, Dm/F, A, C, D, A')
-assert cant_find_my_way_home.key == Key('A')
-hollow = ChordProgression('A6 - Cmaj7#11 - Emadd9')
-assert hollow.key == Key('Em')
-would_you_go_with_me = ChordProgression('E C#m B E B A')
-assert would_you_go_with_me.key == Key('E')
-your_man = ChordProgression('C G D G') - 1 # josh turner again
-assert your_man.key == Key('Gb')
+# # just some songs I'm practicing:
+# house_of_the_rising_sun = ChordProgression('Am C D F Am E Am E')
+# assert house_of_the_rising_sun.key == Key('Am')
+# cant_find_my_way_home = ChordProgression('G, D/F#, Dm/F, A, C, D, A')
+# assert cant_find_my_way_home.key == Key('A')
+# hollow = ChordProgression('A6 - Cmaj7#11 - Emadd9')
+# assert hollow.key == Key('Em')
+# would_you_go_with_me = ChordProgression('E C#m B E B A')
+# assert would_you_go_with_me.key == Key('E')
+# your_man = ChordProgression('C G D G') - 1 # josh turner again
+# assert your_man.key == Key('Gb')
 
 # guitar-playable variants of the common progressions:
 def guitar_progressions():

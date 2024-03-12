@@ -318,7 +318,7 @@ class Key(Scale):
         root_note = self.degree_notes[degree]
         chords = [a.on_bass(root_note) for a in abs_chords]
         if display:
-            from src.display import chord_table
+            from .display import chord_table
             title = f"Valid chords built on degree {degree} of {self}"
             print(title)
             chord_table(chords,
@@ -763,7 +763,8 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_
                   scale_chord_weights = {1: 3, 4: 2, 5: 2},
                   # (by default, upweight roots and thirds, downweight fifths)
                   sort_order=['recall', 'likelihood', 'consonance', 'precision', 'length'],
-                  candidate_scales=scales.extended_searchable_heptatonics,
+                  candidate_scales=scales.searchable_heptatonics,
+                       # extended_searchable_heptatonics display is currently broken (shows 8th and 9th degrees)
                   display=True, max_results=None, verbose=log.verbose, **kwargs):
     """Accepts either a list of chords or a list of notes.
     exact: if True, only returns matches with perfect precision.
@@ -999,7 +1000,7 @@ def matching_keys(chords=None, notes=None, tonic=None, tonic_guess=None, assume_
     if not display:
         return sorted_scores
     else:
-        from src.display import DataFrame, chord_table
+        from .display import DataFrame, chord_table
 
         # title:
         if chords is not None:

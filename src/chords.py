@@ -516,7 +516,7 @@ class AbstractChord:
     def in_scale(self, scale, degree=None, factor=None):
         """constructs a ScaleChord from this AbstractChord on a desired degree or
             factor of a desired Scale"""
-        from src.scales import ScaleChord
+        from .scales import ScaleChord
         return ScaleChord(factors=self.factors, inversion=self.inversion, scale=scale, degree=degree, factor=factor)
 
     def on_bass(self, bass_note):
@@ -578,7 +578,9 @@ class AbstractChord:
         elif self.__class__.__name__ == 'Chord':
             if root is None and notes is None:
                 root = self.root
-            return self.__class__(*args, root=root, notes=notes, assigned_name=self.assigned_name, **kwargs)
+            return self.__class__(*args, root=root, notes=notes, **kwargs)
+            # removed name assignment - should give a new name to chords with e.g. subtracted notes
+            # assigned_name=self.assigned_name, **kwargs)
         elif self.__class__.__name__ == 'ScaleChord':
             if scale is None:
                 scale = self.scale
@@ -1217,7 +1219,7 @@ class Chord(AbstractChord):
     def in_key(self, key, degree=None, factor=None):
         """constructs a KeyChord from this Chord on a desired degree or
             factor of a desired Key"""
-        from src.keys import KeyChord
+        from .keys import KeyChord
         return KeyChord(root=self.root, factors=self.factors, inversion=self.inversion,
                         key=key, degree=degree, factor=factor, assigned_name = self.assigned_name)
 
@@ -1861,7 +1863,7 @@ class ChordList(list):
         return NoteList([ch.root for ch in self])
 
     def root_degrees_in(self, key):
-        from src.keys import Key
+        from .keys import Key
         if isinstance(key, str):
             key = Key(key)
         assert isinstance(key, Key), f"key input to ChordList.root_degrees_in must be a Key or string that casts to Key, but got: {type(key)})"
@@ -1886,7 +1888,7 @@ class ChordList(list):
     def as_numerals_in(self, key, sep=' ', modifiers=True, marks=False, diacritics=False, *args, **kwargs):
         """returns this ChordList's representation in roman numeral form
         with respect to a desired Key"""
-        from src.keys import Key
+        from .keys import Key
         if not isinstance(key, Key):
             key = Key(key)
 
@@ -1904,12 +1906,12 @@ class ChordList(list):
 
     @property
     def progression(self):
-        from src.progressions import ChordProgression
+        from .progressions import ChordProgression
         return ChordProgression(self)
 
     def matching_keys(self, *args, **kwargs):
         """just a wrapper around keys.matching_keys of this ChordList"""
-        from src.keys import matching_keys
+        from .keys import matching_keys
         return matching_keys(chords=self, *args, **kwargs)
 
     def play(self, chord_delay=1, note_delay=0, duration=2.5, octave=None, falloff=True, block=False, type='fast', **kwargs):
@@ -2006,7 +2008,7 @@ def matching_chords(notes, display=True, return_scores=False,
 
     # otherwise, we have found at least one perfect match, so display the results:
     if display:
-        from src.display import DataFrame
+        from .display import DataFrame
         # print result as nice dataframe instead of returning a dict
         title = [f"Chord matches for notes: {notes}"]
         title = ' '.join(title)
@@ -2118,7 +2120,7 @@ def fuzzy_matching_chords(note_list, display=True,
                           reverse=True)[:max_results]
 
     if display:
-        from src.display import DataFrame
+        from .display import DataFrame
         # print result as nice dataframe instead of returning a dict
         title = [f"Chord matches for notes: {note_list}"]
         if assume_root:

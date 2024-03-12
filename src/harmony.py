@@ -282,4 +282,4 @@ special_movements_functions =   {('VII', 'III'): ('ST', 'TP'), # sole function o
 # # MajorHarmonicModel = HarmonicModel(NaturalMajor, degree_functions)
 #
 
-p = Progression('I visus4 IV')
+# p = Progression('I visus4 IV')
