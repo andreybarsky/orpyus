@@ -74,7 +74,7 @@ class Guitar:
         """how many semitones up/down must the strings of a standard guitar be tuned to get this tuning?"""
         distances = []
         for i, s in enumerate(self.open_strings):
-            distances.append(s - tunings['standard'][i])
+            distances.append(s - tuning_strings['standard'][i])
         return distances
 
     def tuning_is_natural(self):
@@ -446,7 +446,7 @@ class Guitar:
 
 
     def show_progression(self, progression, **kwargs):
-        from src.progressions import Progression
+        from .progressions import Progression
         # try casting to Progression type if it is not one:
         if type(progression) != Progression:
             progression = Progression(Progression)
@@ -463,7 +463,7 @@ class Guitar:
             self.show_chord(c, fret_labels=False, show_index=False, min_fret=4, max_fret=16, fret_size=6, intervals_only=True, title=title, **kwargs)
 
     def show_chord_progression(self, progression, end_fret=13, **kwargs):
-        from src.progressions import ChordProgression
+        from .progressions import ChordProgression
         # try casting to ChordProgression type if it is not one:
         if type(progression) != ChordProgression:
             progression = ChordProgression(progression)
@@ -480,7 +480,7 @@ class Guitar:
         """wrapper around the show_note, show_chord, show_key etc. methods.
             accepts an arbitrary object and calls the relevant method to show it,
             with some string-parsing logic to try and understand intent"""
-        from src.progressions import Progression, ChordProgression
+        from .progressions import Progression, ChordProgression
 
         # we will go down this list and see if the supplied object matches any of these classes:
         classes = [ Chord, AbstractChord,
