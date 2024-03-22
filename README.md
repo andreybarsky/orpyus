@@ -7,9 +7,6 @@ Full documentation is forthcoming - for now, try some of the examples below.
 
 ## Dependencies
 The main package only requires Python 3.8+ - I've deliberately tried to avoid external imports where possible to make it lightweight and cross-platform - but the optional `audio` module depends on `numpy` and `sounddevice`, which will be installed as part of the setup process below.
-For the audio module you may also need to install:
-
-
 
 This library has only been tested on Ubuntu Linux so far, but should in principle run fine anywhere - please let me know if you have success (or encounter problems) running it on Windows or Mac.
 
