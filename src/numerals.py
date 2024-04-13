@@ -19,7 +19,7 @@ class RomanNumeral:
     - inversions are allowed, as a slash followed by an integer, such as: V/1 (maj5, first inversion)
     - secondary chords are allowed, as a slash followed by a numeral, such as: V/V (maj5 of the dominant key)
     - both inversions AND secondary chords at the same time, such as: V/1/V or V/V/1
-    - chord modifiers can be used after the primary chord, such as: V7 or IVsus4 """
+    - chord modifiers can be used after the primary chord, such as: V7 or IVsus4/V """
 
     # this class uses singleton instances of each individual numeral type
     # which are stored in this class attribute dict:
