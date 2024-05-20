@@ -505,8 +505,14 @@ class HarmonicDataModel(HarmonicModel):
     def rate(self, progression, exponent=0.5, simplify=True):
         """calculates the probability of a given (abstract) Progression
         according to the continuations defined by this model
-        and returns a float value"""
+        and returns a float value.
+            if simplify=True, reduces candidate chords to basic triad forms."""
 
+        if isinstance(progression, ChordProgression):
+            # abstract this chordprogression, then rate it
+            original = progression
+            progression = progression.abstract()
+            log(f'abstracting {original} to {progression} for harmonic rating')
         assert type(progression) is Progression, "harmonic model can only rate an abstract Progression"
 
         pairwise_scores = []
