@@ -19,7 +19,7 @@ from src.progressions import *
 from src.harmony import *
 from src.audio import *
 from src.rhythm import *
-from src.test.test_matching import * # for song progressions
+# from src.test.test_matching import * # for song progressions
 
 init_end_time = time.time()
 init_time = init_end_time - init_start_time
