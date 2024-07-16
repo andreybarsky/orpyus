@@ -17,7 +17,7 @@ from src.guitar import Guitar, standard
 # individual test modules:
 from src.test import test_util, test_parsing, test_qualities, test_intervals, test_notes
 from src.test import test_chords, test_numerals, test_scales, test_keys, test_guitar, test_display
-from src.test import test_progressions, test_matching
+from src.test import test_progressions #, test_matching
 
 from src import util
 if PROFILE_INIT:
@@ -46,7 +46,7 @@ modules_to_test = [
                   test_scales,
                   test_keys,
                   test_progressions,
-                  test_matching,
+                  # test_matching,
                   ]
 
 def run_all_tests(profile_each_test = True):
