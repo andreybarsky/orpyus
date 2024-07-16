@@ -1,4 +1,4 @@
-from ..progressions import common_progressions
+from src.progressions import common_progressions
 
 # guitar-playable variants of the common progressions:
 for prog, name in common_progressions.items():
