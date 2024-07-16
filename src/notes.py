@@ -289,7 +289,7 @@ class Note:
         1) a string denoting a Chord modifier, like 'major' or 'minor' or 'dom7'
         2) an iterable of semitone intervals relative to this Note as root
         in the exact same way as Chord.__init__ (we pass this arg there directly)"""
-        from src.chords import Chord
+        from .chords import Chord
         if modifier is None:
             if intervals is None:
                 # major by default:
@@ -830,7 +830,7 @@ class NoteList(list):
     def matching_keys(self, *args, **kwargs):
         """wrapper for keys.matching_keys function: displays or returns
         a listing of the possible keys that fit these (unordered) notes"""
-        from src.keys import matching_keys
+        from .keys import matching_keys
         return matching_keys(notes=self, *args, **kwargs)
 
     def _waves(self, duration, octave, type, falloff=False, temperament=None):

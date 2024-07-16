@@ -37,6 +37,11 @@ Chord('Cmaj7')
 If that seems to run correctly, you should be able to import the rest of the modules and try the examples below.
 (I recommend using interactively with something like IPython, some of the output looks nicer)
 
+Note: If you want to use the audio module you may also need to install:
+```
+sudo apt-get install libportaudio2
+```
+
 ## Examples
 ```
 # import some useful classes and functions for the examples:
@@ -157,23 +162,15 @@ Progression('I-vi-IV-V')
 
 # a Progression is implicitly in a Scale, and will try to guess that scale (between major and minor) if not specified
 # but can also be specified explicitly with the 'scale' keyword arg, even if some chords conflict with the scale:
-Progression('III VII I', scale='major')  
-    # notice that the above is outputted with annotations: [III] [VII] I, 
-    # indicating that chords III and VII are not in the major scale
 Progression('III VII I', scale='minor')  
-    # and that this one is outputted with annotations: III VII [I],
+    # notice that the above is outputted with annotations:  III VII I̲
     # indicating that the I chord is not in the minor scale
-
-# also notice the output of the following:
-Progression('ii V i')
-    # which is displayed 'iiͫ  Vͪ  i', in the (auto-detected) natural minor scale
-    # where the 'h' diacritic indicates that the V chord is not in natural minor, but is in *harmonic* minor
-    # and the 'm' diacritic indicates that the ii chord is in neither natural or harmonic minor, but is in *melodic* minor
 
 # Progressions can also be initialised from integers, which makes the 'scale' keyword arg mandatory:
 Progression(1,6,4,5, scale='major')
 # higher-order chords (sevenths, ninths etc.) can be produced using the 'order' keyword arg:
-Progression(1,6,4,5, scale='major', order=4)    # gives tetrads built over degrees 1,6,4,5 of the major scale
+Progression(1,6,4,5, scale='major', order=4)    # gives tetrads built over degrees 1,6,4,5 of the major scale,
+                                                # displayed as as: Iᐞ⁷ vi⁷ IVᐞ⁷ V⁷
 
 # Progression scales are not limited to natural major or minor, but can be any exotic mode:
 Progression(1,6,4,5, scale='phrygian dominant')
@@ -223,7 +220,7 @@ g = Guitar()
 # or by specifying arbitrary tuning as input:
 g2 = Guitar('DADGBEb')
 # alternative tunings can show how far each string is tuned from standard:
-g2.distance_from_standard()
+g2.distance_from_standard
 
 # calling a Guitar object with fretting notation displays the resulting notes, chord, and fret diagram:
 g('x32013')

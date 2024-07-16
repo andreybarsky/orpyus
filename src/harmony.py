@@ -587,7 +587,11 @@ default_harmonic_models = {NaturalMajor: common_major_model,
 # # MajorHarmonicModel = HarmonicModel(NaturalMajor, degree_functions)
 #
 
+<<<<<<< HEAD
 
 # attempt autocompletion:
 p = Progression('I V')
 common_major_model.complete(p)
+=======
+# p = Progression('I visus4 IV')
+>>>>>>> de5a4a7366a9a99f3e647bada8b520a540284966

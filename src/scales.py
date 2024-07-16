@@ -964,7 +964,7 @@ class Scale:
     def progression(self, *degrees, order=3):
         """given a list of numeric integer degrees,
         produces a Progression with this scale's chords on those degrees"""
-        from src.progressions import Progression
+        from .progressions import Progression
         if len(degrees) == 1: # unpack single list arg
             degrees = degrees[0]
         scale_chords = self.get_chords(degrees=degrees, order=order)
@@ -1971,6 +1971,7 @@ class ScaleChord(AbstractChord):
 
         elif numeral is not None:
             assert degree is None
+            ...  # TBI
 
 
     @property
@@ -2129,7 +2130,7 @@ class ScaleChord(AbstractChord):
     def on_root(self, root_note):
         """constructs a KeyChord object from this ScaleChord with respect to a
             desired root"""
-        from src.keys import Key, KeyChord
+        from .keys import Key, KeyChord
         if not isinstance(root_note, notes.Note):
             root_note = notes.Note(root_note)
         tonic_note = root_note - self.root_interval_from_tonic
@@ -2139,7 +2140,7 @@ class ScaleChord(AbstractChord):
 
     def on_bass(self, bass_note):
         """constructs an inverted KeyChord object from this inverted ScaleChord with respect to a desired bass"""
-        from src.keys import Key, KeyChord
+        from .keys import Key, KeyChord
         if self.inversion == 0:
             # bass is root, so on_bass is equivalent to on_root:
             return self.on_root(bass_note)
@@ -2989,7 +2990,7 @@ def matching_scales(chords=None, intervals=None, major_roots=None, min_recall=0.
     if not display:
         return {cand: candidate_scores[cand] for cand in sorted_cands}
     else:
-        from src.display import DataFrame
+        from .display import DataFrame
 
 
         ilb, irb = _settings.BRACKETS['IntervalList']
@@ -3046,9 +3047,9 @@ def matching_scales(chords=None, intervals=None, major_roots=None, min_recall=0.
         df.show(max_rows=max_results, margin=' ', **kwargs)
 
 
-print('')
-degree_chord_pairs = [(1, AbstractChord('min')), (5, AbstractChord('7')), (7, AbstractChord('maj'))]
-matching_scales(degree_chord_pairs, major_roots=True)
+# print('')
+# degree_chord_pairs = [(1, AbstractChord('min')), (5, AbstractChord('7')), (7, AbstractChord('maj'))]
+# matching_scales(degree_chord_pairs, major_roots=True)
 
 # cached scale attributes for performance:
 if _settings.PRE_CACHE_SCALES:
