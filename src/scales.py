@@ -4,7 +4,7 @@ from .util import *
 from .chords import Factors, AbstractChord, Chord, ChordFactors, ChordList, chord_names_by_rarity, chord_names_to_intervals, chord_names_to_factors
 from .qualities import ChordModifier, Quality, Maj, Min, Dim, minor_mod, dim_mod, parse_chord_modifiers
 from .numerals import RomanNumeral
-from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental, sh, fl
+from .parsing import num_suffixes, numerals_roman, is_alteration, offset_accidentals, auto_split, contains_accidental, sh, fl, begins_with_roman_numeral
 from .display import chord_table
 from . import notes, parsing
 from .config import settings, def_scales
@@ -685,6 +685,10 @@ class Scale:
         to produce tertian chords specifically (or their nearest equivalents),
             see Scale.get_tertian_chord """
 
+        if isinstance(i, str) and begins_with_roman_numeral(i):
+            rn = RomanNumeral(i)
+            return rn.in_scale(self)
+
         # retrive from cache if already initialised:
         if linked and (self, i, order) in cached_scale_chords:
             return cached_scale_chords[(self, i, order)]
@@ -961,15 +965,16 @@ class Scale:
     def secondary_dominant_triad(self):
         return self.get_secondary_dominant(order=3)
 
-
-
-
     def progression(self, *degrees, order=3):
         """given a list of numeric integer degrees,
         produces a Progression with this scale's chords on those degrees"""
         from src.progressions import Progression
         if len(degrees) == 1: # unpack single list arg
             degrees = degrees[0]
+            if isinstance(degrees, str) and begins_with_roman_numeral(degrees):
+                ### assume we are given a string specifying an abstract progression
+                return Progression(degrees, scale=self)
+        # otherwise, assume we have integer degrees of the scale:
         scale_chords = self.get_chords(degrees=degrees, order=order)
         return Progression(scale_chords)
 
@@ -1848,8 +1853,13 @@ class ScaleChord(AbstractChord):
         'VII' or 'bIII'. if so, scale is auto-detected, though can be manually overwritten
         (e.g. with ScaleChord('V', scale='minor'))"""
 
-        # initialise everything else as AbstractChord: (if not being inherited by KeyChord)
 
+
+        # re-cast scale arg:
+        if scale is not None and not isinstance(scale, Scale):
+            scale = Scale(scale)
+
+        # initialise everything else as AbstractChord: (if not being inherited by KeyChord)
         init_by_numeral = False # control flow flag
         if len(args) == 1 and isinstance(args[0], str):
             # if initialised with a single string, this could be a roman numeral:
@@ -1887,11 +1897,22 @@ class ScaleChord(AbstractChord):
                     # cast scale arg to Scale object
                     scale = Scale(scale)
 
+                # catch if redundant flat degree is given to a scale that doesn't need it,
+                # e.g. a bIII in minor:
+                if isinstance(degree, float) and degree not in scale.fractional_degree_intervals:
+                    degree = rn.natural_degree
+
                 # finally, initialise ScaleChord using detected chord modifiers/inversion:
                 AbstractChord.__init__(self, modifiers=modifiers, inversion=inversion)
-
+        elif isinstance(degree, float):
+            if degree not in scale.fractional_degree_intervals:
+                degree = ceil(degree)
+                ### ... TBI: this corrects bIII in the minor scale, but not #IV in lydian!
 
         if not init_by_numeral: # i.e. if we have not already been initialised from a single string
+            if len(args)==1 and isinstance(args[0], (int, float, ScaleDegree)):
+                degree = args[0]
+                args = (a for a in args if a != degree) # initialise abstractchord without degree
 
             if _init_abs: # initialise abstract chord from supplied args
                 AbstractChord.__init__(self, *args, **kwargs)
@@ -2122,7 +2143,10 @@ class ScaleChord(AbstractChord):
             scale_key = self.scale.on_tonic(key_tonic)
             if scale_key != key:
                 raise Exception(f'Scale verification failed: ScaleChord {self} is in scale {self.scale}, which differs from desired key {key}')
-        root_note = key.degree_notes[self.scale_degree]
+        if self.scale_degree in key.degree_notes:
+            root_note = key.degree_notes[self.scale_degree]
+        else:
+            root_note = key.fractional_degree_notes[self.scale_degree]
         return KeyChord(root=root_note, factors=self.factors, inversion=self.inversion,
                         key=key, degree=self.scale_degree, assigned_name=self.assigned_name)
 
@@ -2301,8 +2325,8 @@ def infer_chord_scale(degree, quality, return_evidence=False):
     elif quality.major:
         if degree in {4,5}:
             major_evidence = 1
-        elif degree in {2,3,6}:
-                        # 2.5, 5.5, 6.5}: # i.e. bIII, bVI, bVII degrees
+        elif degree in {2,3,6,
+                        2.5,5.5,6.5}: # i.e. bIII, bVI, bVII degrees
             minor_evidence = 1
     elif quality.minor:
         if degree in {4,5}:

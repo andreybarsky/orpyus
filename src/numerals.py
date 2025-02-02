@@ -1,8 +1,9 @@
 from .chords import AbstractChord
 from . import parsing
 from .config import settings
-from .util import reduce_aliases
+from .util import reduce_aliases, log
 from .qualities import Quality, Major, Minor, Ind, minor_mod, parse_chord_modifiers, ChordModifier
+from .intervals import Interval
 
 from math import ceil
 from functools import cached_property
@@ -15,11 +16,18 @@ class RomanNumeral:
     starts with a roman numeral, for example 'I' or 'iii' or 'VII',
     and can additionally have any or all of the following properties:
     - case is distinguished, so that III is parsed as maj3 and iii as m3
-    - leading accidentals are allowed, so that bIII is parsed as maj2.5
+    - leading accidentals are allowed, so that bIII is parsed as maj2.5 (equivalent to m3)
     - inversions are allowed, as a slash followed by an integer, such as: V/1 (maj5, first inversion)
     - secondary chords are allowed, as a slash followed by a numeral, such as: V/V (maj5 of the dominant key)
     - both inversions AND secondary chords at the same time, such as: V/1/V or V/V/1
-    - chord modifiers can be used after the primary chord, such as: V7 or IVsus4/V """
+    - chord modifiers can be used after the primary chord, such as: V7 or IVsus4/V
+
+    note that RomanNumerals do not point at an interval-from-root, but at a scale degree.
+        (that is, a iii in the key of C is Em, but a iii in Cm is E♭m)
+    and that flat/sharp numerals are considered relative to 'default' major degrees,
+        so that a iii in Cm is E♭m, and so is a ♭iii
+        and a IV in C lydian is F♯, and so is a ♯IV
+    """
 
     # this class uses singleton instances of each individual numeral type
     # which are stored in this class attribute dict:
@@ -331,6 +339,36 @@ class RomanNumeral:
         """returns the AbstractChord associated with this numeral's modifiers"""
         return AbstractChord.from_cache(modifiers=self.modifiers)
 
+    def in_scale(self, scale=None):
+        """interprets this numeral with respect to a scale and returns
+        the corresponding ScaleChord"""
+
+        base_chord = AbstractChord.from_cache(modifiers=self.modifiers,
+                                              inversion=self.inversion)
+
+        # if scale is not given, guess it:
+        if scale is None:
+            from .scales import infer_chord_scale
+            scale = infer_chord_scale(self.degree, self.quality)
+
+        # catch a special case: have we been given flat degrees (like bVI) in a minor key,
+        # which cannot be found because e.g. the minor VI is already flat?
+        base_degree = self.degree
+        if isinstance(self.degree, float) and self.degree not in scale.fractional_degree_intervals:
+            log(f'Tried to get altered root from: {self} but that altered root is already in scale')
+            base_degree = self.natural_degree
+
+        # call chord constructor from scale (using integer, so this doesn't get livelocked)
+        return base_chord.in_scale(scale, degree=base_degree)
+
+
+    def in_key(self, key):
+        from .keys import Key
+        if not isinstance(key, Key):
+            key = Key(key)
+        scale_chord = self.in_scale(key.scale)
+        return scale_chord.on_tonic(key.tonic)
+
     @cached_property
     def prefix(self):
         """returns the prefix for this numeral, which consists of the accidental
@@ -364,7 +402,7 @@ class RomanNumeral:
     @cached_property
     def suffix(self):
         """returns the abbreviated suffix for the chord type corresponding to this numeral.
-        for example, the numeral viidim's suffix is °."""
+        for example, the numeral viidim's suffix is: ° """
         relevant_mods = [mod for mod in self.modifiers if mod != minor_mod]
         if len(relevant_mods) == 0:
             return '' # empty suffix

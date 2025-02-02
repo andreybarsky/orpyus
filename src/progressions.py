@@ -1357,8 +1357,8 @@ class ScaleChordMotion:
 
         self.start_chord, self.end_chord = ch1, ch2
 
-        self.start_chord_relative_intervals = (self.start_chord.intervals + self.start_chord.root_interval_from_tonic).flatten()
-        self.end_chord_relative_intervals = (self.end_chord.intervals + self.end_chord.root_interval_from_tonic).flatten()
+        self.start_chord_relative_intervals = (self.start_chord.intervals + self.start_chord.root_interval_from_tonic).flatten(sort=False)
+        self.end_chord_relative_intervals = (self.end_chord.intervals + self.end_chord.root_interval_from_tonic).flatten(sort=False)
 
         self.degree_distance_values, self.interval_distance_values = self.build_tables()
 
@@ -1370,7 +1370,7 @@ class ScaleChordMotion:
                                         columns=[f'{iv.short_name}' for iv in self.end_chord_relative_intervals],
                                         index=[f'{iv.short_name:<2}  ' for iv in self.start_chord_relative_intervals])
 
-
+        self.tonic_chord = self.scale.chord(1)
 
     def build_tables(self):
         import numpy as np
@@ -1397,20 +1397,31 @@ class ScaleChordMotion:
     def tension(self):
         """how much tension between the two chords, measured by the number of
         1s and 2s in their distances"""
-        tension_score = len(self.end_chord) # normalising factor; so that tonic chord itself has 0 tension
-        num_rows, num_cols = len(self.start_chord), len(self.end_chord)
-        distances = self.interval_df
-        for r in range(num_rows):
-            row = distances.iloc[r]
-            abs_semitones = [abs(v) for v in row]
-            min_abs = min(abs_semitones)
-            num_0s = len([v for v in abs_semitones if v==0])
-            num_1s = len([v for v in abs_semitones if v==1])
-            num_2s = len([v for v in abs_semitones if v==2])
-            tension_score += num_1s
-            tension_score += (num_2s /2)
-            tension_score -= num_0s # every 0 _decreases_ tension
-        return tension_score
+        return chord_tension(self)
+
+    @property
+    def resolution(self):
+        """how strongly this chord motion resolves within the scale, measured
+        by the negative tension between the end chord and the scale tonic chord"""
+        end_to_tonic = chord_motion(self.end_chord, self.tonic_chord)
+        return -chord_tension(end_to_tonic)
+
+        # tension_score = len(self.end_chord) # normalising factor; so that tonic chord itself has 0 tension
+        # num_rows, num_cols = len(self.start_chord), len(self.end_chord)
+        # distances = self.interval_distances
+        # for r in range(num_rows):
+        #     row = distances.iloc[r]
+        #     abs_semitones = [abs(v) for v in row]
+        #     min_abs = min(abs_semitones)
+        #     num_0s = len([v for v in abs_semitones if v==0])
+        #     num_1s = len([v for v in abs_semitones if v==1])
+        #     num_2s = len([v for v in abs_semitones if v==2])
+        #     tension_score += num_1s
+        #     tension_score += (num_2s /2)
+        #     tension_score -= num_0s # every 0 _decreases_ tension
+        # return tension_score
+
+
 
     def play(self, key='C', *args, **kwargs):
         ch1, ch2 = self.start_chord.in_key(key), self.end_chord.in_key(key)
@@ -1436,6 +1447,7 @@ class KeyChordMotion(ScaleChordMotion):
             assert isinstance(ch1, KeyChord) and isinstance(ch2, KeyChord), "KeyChordMotion must either be supplied KeyChords as input, or Chords plus a 'key' arg"
             assert ch1.key == ch2.key, "Keys of start and end KeyChords must be the same to initialise a KeyChordMotion"
             key = ch1.key
+            valid_chords = [ch1, ch2]
         else:
             if not isinstance(key, Key):
                 key = Key(key)
@@ -1461,8 +1473,8 @@ class KeyChordMotion(ScaleChordMotion):
         self.start_chord, self.end_chord = ch1, ch2
         self.scale = self.key.scale
 
-        self.start_chord_relative_intervals = (self.start_chord.intervals + self.start_chord.root_interval_from_tonic).flatten()
-        self.end_chord_relative_intervals = (self.end_chord.intervals + self.end_chord.root_interval_from_tonic).flatten()
+        self.start_chord_relative_intervals = (self.start_chord.intervals + self.start_chord.root_interval_from_tonic).flatten(sort=False)
+        self.end_chord_relative_intervals = (self.end_chord.intervals + self.end_chord.root_interval_from_tonic).flatten(sort=False)
 
         self.degree_distance_values, self.interval_distance_values = self.build_tables()
 
@@ -1474,6 +1486,7 @@ class KeyChordMotion(ScaleChordMotion):
                                         columns=[f'{nt.chroma}' for nt in self.end_chord.notes],
                                         index=[f'{nt.chroma:<2}  ' for nt in self.start_chord.notes])
 
+        self.tonic_chord = self.key.chord(1) # here, a KeyChord rather than a ScaleChord
 
     def __repr__(self):
         lines = [f'{self.start_chord.compact_name}{self._arrow}{self.end_chord.compact_name} (in {self.key.name})',
@@ -1519,6 +1532,25 @@ def chord_motion(start_chord, end_chord, scale=None):
         return KeyChordMotion(start_chord, end_chord, key=scale)
     else:
         raise TypeError(f'Cannot make a ChordMotion object from incompatible types: {type(start_chord)} and {type(end_chord)}')
+
+def chord_tension(motion):
+    """how much tension between the two chords, measured by the number of
+    1s and 2s in their distances"""
+    tension_score = len(motion.end_chord) # normalising factor; so that tonic chord itself has 0 tension
+    num_rows, num_cols = len(motion.start_chord), len(motion.end_chord)
+    distances = motion.interval_distances
+    for r in range(num_rows):
+        row = distances.iloc[r]
+        abs_semitones = [abs(v) for v in row]
+        min_abs = min(abs_semitones)
+        num_0s = len([v for v in abs_semitones if v==0])
+        num_1s = len([v for v in abs_semitones if v==1])
+        num_2s = len([v for v in abs_semitones if v==2])
+        tension_score += num_1s
+        tension_score += (num_2s /2)
+        tension_score -= num_0s # every 0 _decreases_ tension
+    return tension_score
+
 
 def tonic_tension(scale_chord, scale=None):
     """the tonic tension of a ScaleChord is how strongly it wants to resolve back

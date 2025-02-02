@@ -1,6 +1,8 @@
 from .testing_tools import compare
 from ..numerals import RomanNumeral
 from ..qualities import Major, Minor
+from ..scales import ScaleChord
+from ..keys import Key, KeyChord
 
 def unit_test():
     compare(RomanNumeral('III').natural_degree, 3)
@@ -26,3 +28,9 @@ def unit_test():
     # test operators:
     compare(RomanNumeral('bIII')+1, RomanNumeral('bIV'))
     compare(RomanNumeral('V7')-2 , RomanNumeral('III7'))
+
+    # test scalechord initialisation and scale detection:
+    compare(RomanNumeral('III').in_scale(), ScaleChord(3, scale='minor'))
+    compare(RomanNumeral('bIII').in_scale(), ScaleChord(3, scale='minor'))
+    compare(RomanNumeral('III').in_key('Cm'), Key('Cm').chord(3))
+    compare(RomanNumeral('bIII').in_key('Cm'), Key('Cm').chord(3))

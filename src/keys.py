@@ -1,9 +1,10 @@
 from . import notes, scales, parsing
-from .parsing import fl, sh, nat, dfl, dsh
+from .parsing import fl, sh, nat, dfl, dsh, begins_with_roman_numeral
 from .intervals import Interval, IntervalList
 from .notes import Note, NoteList, chromatic_notes
 from .scales import Scale, ScaleFactors, ScaleDegree, ScaleChord, common_scales, scale_extensions, scale_contractions
 from .chords import Chord, AbstractChord, ChordList
+from .numerals import RomanNumeral
 from .util import ModDict, check_all, precision_recall, reverse_dict, unpack_and_reverse_dict, log
 from .config import settings
 
@@ -289,9 +290,16 @@ class Key(Scale):
     def leading_tone(self):
         return self.factor_notes[7]
 
-    def get_chord(self, degree, order=3, linked=True):
+    def get_chord(self, degree, order=None, linked=True):
         """overwrites Scale.get_chord, returns a Chord object instead of an AbstractChord.
         if linked, returns a KeyChord instead of a ScaleChord."""
+        if linked and isinstance(degree, str) and begins_with_roman_numeral(degree):
+            # interpret degree arg as a roman numeral scale degree:
+            rn = RomanNumeral(degree)
+            return rn.in_key(self, order=order)
+        # otherwise, assume a default order of 3 and construct a chord that way:
+        if order is None:
+            order = 3
         abstract_chord = Scale.get_chord(self, degree, order)
         root_interval = self.get_interval_from_degree(degree)
         root_note = self.tonic + root_interval
@@ -630,11 +638,17 @@ class Key(Scale):
     def progression(self, *degrees, order=3):
         """accepts a sequence of (integer) degrees,
             and produces a ChordProgression in this key rooted on those degrees.
+        if given an abstract progression as roman numerals,
+            interprets those with respect to this key instead.
         alternatively, accepts anything that would initialise a ChordList,
             and produces a ChordProgression of those chords in this key."""
         from .progressions import Progression, ChordProgression
         if len(degrees) == 1: # unpack single list arg
             degrees = degrees[0]
+            if isinstance(degrees, str) and begins_with_roman_numeral(degrees):
+                # assume this is a string of roman numerals
+                prog = self.scale.progression(degrees)
+                return prog.on_tonic(self.tonic)
         # use list of integers:
         if check_all(degrees, 'isinstance', int):
             # use superclass progression method and place on tonic:
