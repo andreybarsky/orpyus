@@ -581,6 +581,7 @@ class AbstractChord:
         """constructs a ScaleChord from this AbstractChord on a desired degree or
             factor of a desired Scale"""
         from src.scales import ScaleChord
+        assert degree is not None or factor is not None, "ScaleChord construction from AbstractChord requires a scale degree or factor to root on"
         return ScaleChord(factors=self.factors, inversion=self.inversion, scale=scale, degree=degree, factor=factor)
 
     def on_bass(self, bass_note):

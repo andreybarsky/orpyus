@@ -1110,21 +1110,22 @@ class DegreeMotion:
             2. 'start' should be an integer, 'direction' should be either "D" or "S",
                 and degree should be one of 2, 3, or 5.
 
-            scale can optionally be provided, which matters only for the
-            intervallic distance (not the scale-degree distance) involved
-            in this movement. otherwise those attributes are left un-set."""
+            scale can optionally be provided, and assumes major scale if not given."""
 
         if scale is not None:
             if isinstance(scale, str):
                 # instantiate Scale object if it is not already instantiated
                 scale = Scale(scale)
             assert isinstance(scale, Scale), f"DegreeMotion expected a Scale object, or string that casts to Scale, but got: {type(scale)}"
+        else:
+            scale = NaturalMajor
         self.scale = scale
 
         # if end is not None:
         if isinstance(start, int) and isinstance(end, int):
             # regular integer degree movement
-            assert (start in range(1,scale.factors.max_degree+1)) and (end in range(1,scale.factors.max_degree+1))
+            if scale is not None:
+                assert (start in range(1,scale.factors.max_degree+1)) and (end in range(1,scale.factors.max_degree+1))
             # cast ScaleDegrees to ints:
             start, end = int(start), int(end)
             self.fractional = False
@@ -1160,6 +1161,8 @@ class DegreeMotion:
         # signed/directional shortest distance up or down:
         self.distance = self.up if self.up == self.magnitude else -self.down
 
+        self.descending_fifth = self.down == 4
+        self.ascending_fifth = self.down == 3
 
     def _set_interval_distances(self, scale_obj):
         if not self.fractional:
@@ -1178,6 +1181,10 @@ class DegreeMotion:
             self.iv_down = 12-(self.end_iv - self.start_iv)
         else:
             self.iv_up = self.iv_down = 0
+
+        self.consonance_up = Interval(self.iv_up).consonance
+        self.consonance_down = Interval(self.iv_down).consonance
+        self.consonance = self.consonance_up if self.up == self.magnitude else self.consonance_down
 
     @property
     def direction_str(self):

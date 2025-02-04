@@ -62,6 +62,9 @@ def obtain_tuning(harmonic_ratios):
             if old_gcd > new_gcd:
                 # new is better, so overwrite it
                 reals_to_ratios[real] = ratio
+    # trivial case:
+    reals_to_ratios[1.0] = (1,1)
+
     harmonic_reals = sorted(reals_to_ratios.keys())
     harmonic_ratios = [reals_to_ratios[re] for re in harmonic_reals]
 
@@ -80,6 +83,7 @@ def obtain_tuning(harmonic_ratios):
         log(f'\nSearching for number close to desired step interval: {step:.3f}')
         # find the next real that is higher than this step:
         real = harmonic_reals[real_idx]
+        prev_real = 1.0
         while real < step:
             prev_real = real
             real_idx += 1
@@ -109,10 +113,12 @@ equal_approximation_ratios, equal_approximation_steps = obtain_tuning(equal_harm
 
 # five-limit tuning:
 limit5_reals = []
-power_range = (-5,5)
-for power2 in range(*power_range):
-    for power3 in range(*power_range):
-        for power5 in range(*power_range):
+power2_range = (-5, 6)
+power3_range = (-2, 3)
+power5_range = (-1, 2)
+for power2 in range(*power2_range):
+    for power3 in range(*power3_range):
+        for power5 in range(*power5_range):
             limit5_real = 2**power2 * 3**power3 * 5**power5
             if 1 <= limit5_real <= 2:
                 limit5_reals.append(round(limit5_real,8))

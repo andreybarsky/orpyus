@@ -234,10 +234,25 @@ class Scale:
         non_scale_intervals = [Interval.from_cache(v) for v in range(1,12) if v not in self.interval_degrees]
         fractional_interval_degrees = {}
         for iv in non_scale_intervals:
-            if (iv-1).mod in self.interval_degrees and (iv+1).mod in self.interval_degrees:
-                degree_below = int(self.interval_degrees[iv-1])
+            if (iv-1).mod in self.interval_degrees: # and (iv+1).mod in self.interval_degrees:
+                # if this could be a sharp or a flat, make it a sharp:
+                degree_below = int(self.interval_degrees[iv.mod-1])
                 frac_degree = round(degree_below + 0.5, 1)
                 fractional_interval_degrees[iv] = frac_degree
+            # elif (iv-1).mod in self.interval_degrees:
+            #     # make it a sharp whatever:
+            #     degree_below = int(self.interval_degrees[iv-1])
+            #     frac_degree = round((degree_below).mod + 0.5, 1)
+            #     fractional_interval_degrees[iv] = frac_degree
+            elif (iv+1).mod in self.interval_degrees:
+                # flat whatever:
+                degree_above = int(self.interval_degrees[iv.mod+1])
+                frac_degree = round(degree_above - 0.5, 1)
+                fractional_interval_degrees[iv] = frac_degree
+            else:
+                # some really strange scale that i don't know how to handle:
+                raise Exception(f'Cannot assign a fractional degree to interval: {iv} in scale: {self}')
+
         return ModDict(fractional_interval_degrees, index=0, max_key=11, raise_values=True, raise_by=7)
 
     @cached_property
@@ -2596,12 +2611,12 @@ melodic_scales = [MelodicMajor, MelodicMinor]
 diatonic_scales = [Ionian, Dorian, Phrygian, Lydian, Mixolydian, Aeolian, Locrian]
 diatonic_scale_factors = [sc.factors for sc in diatonic_scales] # for efficient diatonicity checks
 
-# scales associated broadly with a tonal quality:
+# diatonic scales associated broadly with a tonal quality:
 major_scales = [NaturalMajor, HarmonicMajor, MelodicMajor,
-                Mixolydian, Lydian, BluesMajor]
+                Mixolydian, Lydian] #, BluesMajor]
 
 minor_scales = [NaturalMinor, HarmonicMinor, MelodicMinor,
-                Dorian, Phrygian, BluesMinor,
+                Dorian, Phrygian, #BluesMinor,
                 NeapolitanMinor, NeapolitanMajor, DoubleHarmonic]
 
 extended_scales = [ExtendedMinor, ExtendedMajor, RockMajor, RockMinor, FullMinor, FullMajor]

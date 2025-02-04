@@ -143,6 +143,11 @@ class Interval:
     def ratio(self):
         return self.get_ratio()
 
+    @property
+    def cents(self):
+        """just the ratio expressed in logarithmic cents"""
+        num, den = self.ratio
+        return 1200 * math.log(num/den, 2)
 
 
     def get_consonance(self, temperament=None):
