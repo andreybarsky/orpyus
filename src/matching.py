@@ -11,31 +11,43 @@ from .config import settings
 from dataclasses import dataclass
 
 # tonal quality distributions for major and minor tonalities:
-major_qualdist = {0: 10,
-                  1: -6,
-                  2:  3,
-                  3: -4,
-                  4:  9,
-                  5:  6,
-                  6:  -1,
-                  7:  7,
-                  8:  0,
-                  9:  2,
-                  10: 0,
-                  11: 2,}
-minor_qualdist = {0: 10,
-                  1: -4,
-                  2:  3,
-                  3:  8,
-                  4: -2,
-                  5:  5,
-                  6: -1,
-                  7:  6,
-                  8:  2,
-                  9:  0,
-                  10: 2,
-                  11: 0,}
+# major_qualdist = {0: 10,
+#                   1: -6,
+#                   2:  3,
+#                   3: -4,
+#                   4:  9,
+#                   5:  6,
+#                   6:  -1,
+#                   7:  7,
+#                   8:  0,
+#                   9:  2,
+#                   10: 0,
+#                   11: 2,}
+# minor_qualdist = {0: 10,
+#                   1: -4,
+#                   2:  3,
+#                   3:  8,
+#                   4: -2,
+#                   5:  5,
+#                   6: -1,
+#                   7:  6,
+#                   8:  2,
+#                   9:  0,
+#                   10: 2,
+#                   11: 2,}
                 # or whatever
+
+# tonal distributions calculated from progression mining: (with T=10)
+major_tonal_dist = [0,     0.002, 0.349, 0.002,
+                    0.286, 0,     0.002, 0,
+                    0.002, 0.259, 0.004, 0.095]
+
+
+minor_tonal_dist = [0,     0.012, 0.222, 0.545,
+                    0.013, 0,     0.011, 0,
+                    0.049, 0.015, 0.1,   0.033]
+
+
 
 # specific scales to search once we have established a tonality:
 major_scales = [NaturalMajor, HarmonicMajor, MelodicMajor,
@@ -53,9 +65,9 @@ class Tonality:
     @property
     def distribution(self):
         if self.quality.major:
-            return major_qualdist
+            return major_tonal_dist
         elif self.quality.minor:
-            return minor_qualdist
+            return minor_tonal_dist
         else:
             raise Exception('Tonality should be either major or minor')
 
@@ -69,7 +81,7 @@ class Tonality:
         at each point."""
         return [prior * weighted_ivs[iv]
                     if iv in weighted_ivs else 0
-                    for iv, prior in self.distribution.items()]
+                    for iv, prior in enumerate(self.distribution)]
 
     def __repr__(self):
         lb, rb = self.quality._brackets
@@ -79,8 +91,9 @@ class Tonality:
     def __hash__(self):
         return hash((self.tonic, self.quality))
 
-def match_qualdist_to_intervals(ivs: IntervalList, weight_counts=True,
-                                return_scores=False, verbose=True):
+def match_tonal_dist_to_intervals(ivs: IntervalList, weight_counts=True,
+                                return_scores=False, verbose=True,
+                                dists = (major_tonal_dist, minor_tonal_dist)):
     """accepts a set of intervals with respect to some implicit tonic,
     and returns match stats for major and minor tonalities.
 
@@ -91,6 +104,8 @@ def match_qualdist_to_intervals(ivs: IntervalList, weight_counts=True,
         otherwise, all intervals are weighted equally.
     if return_scores is True, returns the major and minor scores respectively.
         otherwise, return the Quality itself."""
+
+    major_tonal_dist, minor_tonal_dist = dists
     if isinstance(ivs, dict):
         weighted_ivs = ivs
         # is already a dict of intervals to weights
@@ -113,13 +128,14 @@ def match_qualdist_to_intervals(ivs: IntervalList, weight_counts=True,
     # now: ivs is a dict of intervals to weights
     # so we can now iterate through each qualdist to check for matches:
     scores = []
-    for qualname, qualdist in zip(['major', 'minor'], [major_qualdist, minor_qualdist]):
+    for qual_name, tonal_dist in zip(['major', 'minor'], [major_tonal_dist, minor_tonal_dist]):
         # take dot product of qualdist and (weighted) input intervals
         weighted = [prior * weighted_ivs[iv]
                            if iv in weighted_ivs else 0
-                           for iv, prior in qualdist.items()]
+                           for iv, prior in enumerate(tonal_dist)]
         if verbose:
-            print(f'{qualname}: {list(enumerate(weighted))}')
+            named_weights = {Interval(v).short_name: weight for v,weight in enumerate(weighted)}
+            print(f'{qual_name}: {named_weights}')
         scores.append(sum(weighted))
     major_score, minor_score = scores
     if verbose:

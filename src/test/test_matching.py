@@ -2,7 +2,7 @@
 ###
 
 from ..qualities import Major, Minor
-from ..matching import matching_chords, matching_scales, matching_keys, match_qualdist_to_intervals
+from ..matching import matching_chords, matching_scales, matching_keys, match_tonal_dist_to_intervals
 from ..progressions import *
 from .testing_tools import compare
 from ..scales import MajorScale, MinorScale
@@ -10,21 +10,21 @@ from ..scales import MajorScale, MinorScale
 def unit_test():
 
     ### first: check that quality distributions map on to what they should
-    compare(match_qualdist_to_intervals(Scale('harmonic major').intervals), Major)
-    compare(match_qualdist_to_intervals(Scale('melodic major').intervals), Major)
-    compare(match_qualdist_to_intervals(Scale('lydian').intervals), Major)
-    compare(match_qualdist_to_intervals(Scale('mixolydian').intervals), Major)
+    compare(match_tonal_dist_to_intervals(Scale('harmonic major').intervals), Major)
+    compare(match_tonal_dist_to_intervals(Scale('melodic major').intervals), Major)
+    compare(match_tonal_dist_to_intervals(Scale('lydian').intervals), Major)
+    compare(match_tonal_dist_to_intervals(Scale('mixolydian').intervals), Major)
 
-    compare(match_qualdist_to_intervals(Scale('double harmonic').intervals), Major)
+    compare(match_tonal_dist_to_intervals(Scale('double harmonic').intervals), Major)
 
 
-    compare(match_qualdist_to_intervals(Scale('harmonic minor').intervals), Minor)
-    compare(match_qualdist_to_intervals(Scale('melodic minor').intervals), Minor)
-    compare(match_qualdist_to_intervals(Scale('dorian').intervals), Minor)
-    compare(match_qualdist_to_intervals(Scale('phrygian').intervals), Minor)
-    compare(match_qualdist_to_intervals(Scale('neapolitan major').intervals), Minor) # supposedly!
-    compare(match_qualdist_to_intervals(Scale('neapolitan minor').intervals), Minor)
-    compare(match_qualdist_to_intervals(Scale('hungarian minor').intervals), Minor)
+    compare(match_tonal_dist_to_intervals(Scale('harmonic minor').intervals), Minor)
+    compare(match_tonal_dist_to_intervals(Scale('melodic minor').intervals), Minor)
+    compare(match_tonal_dist_to_intervals(Scale('dorian').intervals), Minor)
+    compare(match_tonal_dist_to_intervals(Scale('phrygian').intervals), Minor)
+    compare(match_tonal_dist_to_intervals(Scale('neapolitan major').intervals), Minor) # supposedly!
+    compare(match_tonal_dist_to_intervals(Scale('neapolitan minor').intervals), Minor)
+    compare(match_tonal_dist_to_intervals(Scale('hungarian minor').intervals), Minor)
 
 
 

@@ -337,6 +337,18 @@ class Progression:
         # built on the same degrees:
         return (self.chords == other.chords) and (self.root_degrees == other.root_degrees)
 
+    def __contains__(self, item):
+        """a progression can contain RomanNumerals or AbstractChords"""
+        if isinstance(item, RomanNumeral):
+            own_numerals = [ch.numeral for ch in self.chords]
+            return (item in own_numerals)
+        elif type(item) == AbstractChord:
+            own_abs_chords = [ch.abstract() for ch in self.chords]
+            return item in own_abs_chords
+        else:
+            raise TypeError(f"Progression.__contains__  undefined for type: {type(item)}")
+
+
     def __add__(self, other):
         """Addition defined over Progressions:
             1. Progression + roman numeral returns a new Progression with that numeral appended to it"""
@@ -580,6 +592,9 @@ class ChordProgression(Progression): # , ChordList):
             return item in self.chords
         elif isinstance(item, Note):
             return item in self.chords.note_counts()
+        else:
+            # check for RomanNumerals or AbstractChords by parent class method:
+            return Progression.contains(self, item)
 
     def __eq__(self, other):
         if isinstance(other, Progression):
@@ -1044,7 +1059,7 @@ class ChordProgression(Progression): # , ChordList):
             candidate_keys = [k for k, scores in match_tuples]
 
             log(f'Testing {len(candidate_keys)} candidate keys for grammaticity of this progression in those keys')
-            candidate_progressions = [Progression(chords.as_numerals_in(k), scale=k.scale).in_key(k) for k in candidate_keys]
+            candidate_progressions = [Progression(chords.as_numerals_in(k, as_string=True), scale=k.scale).in_key(k) for k in candidate_keys]
             log(f'Candidate keys: {", ".join([str(p.key) for p in candidate_progressions])}')
             # get a dict of key: cadence_score pairs for key candidates
             key_cadence_scores = most_grammatical_progression(candidate_progressions, add_resolution=pad_with_tonic, return_scores=True, verbose=verbose)

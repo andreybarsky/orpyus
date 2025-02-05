@@ -139,16 +139,24 @@ class Interval:
             gcd = euclidean_gcd(left, right)
             return (left // gcd, right // gcd)
 
-    @property
+    @cached_property
     def ratio(self):
         return self.get_ratio()
 
-    @property
+    @cached_property
     def cents(self):
         """just the ratio expressed in logarithmic cents"""
         num, den = self.ratio
         return 1200 * math.log(num/den, 2)
 
+    @cached_property
+    def odd_limit(self):
+        num, den = self.ratio
+        highest = 1
+        for odd in range(1,150,2):
+            if (num % odd == 0) or (den % odd) == 0:
+                highest = odd
+        return highest
 
     def get_consonance(self, temperament=None):
         """consonance of an interval according to a specified intonation system,
@@ -174,7 +182,8 @@ class Interval:
             if settings.DYNAMIC_CACHING:
                 cached_consonances[(temperament, self.value)] = consonance
             return consonance
-    @property
+
+    @cached_property
     def consonance(self):
         return self.get_consonance()
 

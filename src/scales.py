@@ -1939,6 +1939,9 @@ class ScaleChord(AbstractChord):
         self._parse_degree(degree, factor) # assigns attributes: self.scale_degree,
                                            # scale_factor, root_in_scale, notes_in_scale
 
+        # store the roman numeral for this chord:
+        self.numeral = self.get_numeral(marks=False, diacritics=False)
+
     def _parse_degree(self, degree, factor):
         if degree is not None:
             assert factor is None, f"ScaleChord received clashing factor/degree args"
@@ -2012,19 +2015,19 @@ class ScaleChord(AbstractChord):
             assert degree is None
 
 
-    @property
-    def numeral(self):
-        return self.get_numeral()
+    # @property
+    # def numeral(self):
+    #     return self.get_numeral()
 
     @property
     def simple_numeral(self):
-        return self.get_numeral(modifiers=False, marks=False, diacritics=False)
+        return self.get_numeral(modifiers=False, as_string=True, marks=False, diacritics=False)
 
     @property
     def mod_numeral(self):
-        return self.get_numeral(modifiers=True, marks=False, diacritics=False)
+        return self.get_numeral(modifiers=True, as_string=True, marks=False, diacritics=False)
 
-    def get_numeral(self, modifiers=True, marks=settings.DEFAULT_PROGRESSION_MARKERS, diacritics=settings.DEFAULT_PROGRESSION_DIACRITICS):
+    def get_numeral(self, modifiers=True, as_string=False, marks=settings.DEFAULT_PROGRESSION_MARKERS, diacritics=settings.DEFAULT_PROGRESSION_DIACRITICS):
         """returns the roman numeral associated with this ScaleChord
         with respect to its Scale and its degree within it"""
 
@@ -2131,7 +2134,12 @@ class ScaleChord(AbstractChord):
         full_name = root_prefix + numeral + chord_suffix + inv_string
         if marks:
             full_name = rel_mark + full_name
-        return full_name
+
+        if as_string:
+            return full_name
+        else:
+            # cast to Numeral object:
+            return RomanNumeral(full_name)
 
     @property
     def root_interval_from_tonic(self):

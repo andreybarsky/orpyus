@@ -2073,7 +2073,7 @@ class ChordList(list):
         # root_degrees = [key.interval_degrees[iv]  if iv in key.interval_degrees  else None for iv in root_intervals_from_tonic]
         return root_degrees
 
-    def as_numerals_in(self, key, sep=' ', modifiers=True, marks=False, diacritics=False, *args, **kwargs):
+    def as_numerals_in(self, key, as_string=False, sep=' ', modifiers=True, marks=False, diacritics=False, *args, **kwargs):
         """returns this ChordList's representation in roman numeral form
         with respect to a desired Key"""
         from src.keys import Key
@@ -2083,13 +2083,13 @@ class ChordList(list):
         root_degrees = self.root_degrees_in(key)
         scale_chords = [ch.in_scale(key.scale, degree=root_degrees[i]) for i,ch in enumerate(self)]
 
-        numerals = [ch.get_numeral(modifiers=modifiers, marks=marks, diacritics=diacritics, *args, **kwargs) for ch in scale_chords]
+        numerals = [ch.get_numeral(modifiers=modifiers, as_string=as_string, marks=marks, diacritics=diacritics, *args, **kwargs) for ch in scale_chords]
 
-        if sep is not None:
+        if as_string:
             roman_chords_str = sep.join(numerals)
             return roman_chords_str
         else:
-            # just return the raw list, instead of a sep-connected string
+            # return raw list of RomanNumeral objects
             return numerals
 
     @property
