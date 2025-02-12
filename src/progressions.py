@@ -1,6 +1,6 @@
 ### this progressions module is incomplete, very WIP at the moment
 
-from .intervals import Interval
+from .intervals import Interval, IntervalList
 from .notes import Note, NoteList
 from .chords import Chord, AbstractChord, ChordList
 from .qualities import Major, Minor, Perfect, Diminished, parse_chord_modifiers, ChordModifier, modifier_aliases, minor_mod, dim_mod
@@ -185,7 +185,12 @@ class Progression:
         assert check_all(self.chords, 'isinstance', ScaleChord) # sanity check: progression chords are always ScaleChords
 
 
-
+    def get_intervals_from_tonic(self):
+        """get the intervals from tonic of the chords in this progression"""
+        all_intervals = IntervalList([])
+        for ch in self.chords:
+            all_intervals.extend(ch.intervals_from_tonic)
+        return all_intervals
 
     def analyse(self, display=False, ret=True, roots=None):
         """shows the harmonic functions of the chords in this progression"""
@@ -1596,6 +1601,9 @@ def propose_root_motions(start, direction):
 common_progression_strs_by_name = {} # to avoid unassigned variable errors in upcoming Progression init
 
 common_progressions = {Progression(numerals):name for numerals, name in common_progression_defines.items()}
+
+common_major_progressions = {prog:name for prog,name in common_progressions.items() if prog.scale.quality.major}
+common_minor_progressions = {prog:name for prog,name in common_progressions.items() if prog.scale.quality.minor}
 
 # get the reverse mappings too:
 common_progression_strs_by_name = reverse_dict(common_progression_defines)

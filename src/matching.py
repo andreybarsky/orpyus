@@ -4,44 +4,18 @@
 from .chords import *
 from .scales import *
 from .keys import *
+from .numerals import *
 from .progressions import *
 from .qualities import Major, Minor
 from .config import settings
 
 from dataclasses import dataclass
 
-# tonal quality distributions for major and minor tonalities:
-# major_qualdist = {0: 10,
-#                   1: -6,
-#                   2:  3,
-#                   3: -4,
-#                   4:  9,
-#                   5:  6,
-#                   6:  -1,
-#                   7:  7,
-#                   8:  0,
-#                   9:  2,
-#                   10: 0,
-#                   11: 2,}
-# minor_qualdist = {0: 10,
-#                   1: -4,
-#                   2:  3,
-#                   3:  8,
-#                   4: -2,
-#                   5:  5,
-#                   6: -1,
-#                   7:  6,
-#                   8:  2,
-#                   9:  0,
-#                   10: 2,
-#                   11: 2,}
-                # or whatever
-
-# tonal distributions calculated from progression mining: (with T=10)
+# tonal quality distributions for major and minor tonalities
+# calculated from progression mining: (with T=10)
 major_tonal_dist = [0,     0.002, 0.349, 0.002,
                     0.286, 0,     0.002, 0,
                     0.002, 0.259, 0.004, 0.095]
-
 
 minor_tonal_dist = [0,     0.012, 0.222, 0.545,
                     0.013, 0,     0.011, 0,
@@ -51,16 +25,26 @@ minor_tonal_dist = [0,     0.012, 0.222, 0.545,
 
 # specific scales to search once we have established a tonality:
 major_scales = [NaturalMajor, HarmonicMajor, MelodicMajor,
-                Mixolydian, Lydian, BluesMajor]
+                Mixolydian, Lydian, #BluesMajor,
+                ]
 
 minor_scales = [NaturalMinor, HarmonicMinor, MelodicMinor,
-                Dorian, Phrygian, BluesMinor,
+                Dorian, Phrygian, #BluesMinor,
                 NeapolitanMinor, NeapolitanMajor, DoubleHarmonic]
 
 @dataclass
 class Tonality:
     tonic: Note
     quality: Quality
+
+    @property
+    def scales(self):
+        if self.quality.major:
+            return major_scales
+        elif self.quality.minor:
+            return minor_scales
+        else:
+            return []
 
     @property
     def distribution(self):
@@ -117,8 +101,8 @@ def match_tonal_dist_to_intervals(ivs: IntervalList, weight_counts=True,
 
         # ensure intervals are flattened to 0-12 range:
         if max(ivs) >= 12:
-            ivs = ivs.flatten(duplicates=True)
-
+            ivs = ivs.flatten(duplicates=weight_counts)
+            # discard duplicates here if not weighting counts
         # weight by occurrence frequency if desired:
         if weight_counts:
             weighted_ivs = Counter(ivs)
@@ -134,13 +118,13 @@ def match_tonal_dist_to_intervals(ivs: IntervalList, weight_counts=True,
                            if iv in weighted_ivs else 0
                            for iv, prior in enumerate(tonal_dist)]
         if verbose:
-            named_weights = {Interval(v).short_name: weight for v,weight in enumerate(weighted)}
+            named_weights = {Interval(v).short_name: round(weight,3) for v,weight in enumerate(weighted)}
             print(f'{qual_name}: {named_weights}')
         scores.append(sum(weighted))
     major_score, minor_score = scores
     if verbose:
-        print(f'{major_score=}')
-        print(f'{minor_score=}')
+        print(f'major score: {major_score:.3f}')
+        print(f'minor score: {minor_score:.3f}')
     if return_scores:
         return major_score, minor_score
     else:
@@ -203,10 +187,14 @@ def chords_tonality(chords, chord_factor_weights = {1: 2, 3: 1.5}, weight_counts
 
 
 def matching_scales(chords=None, intervals=None,
+                    weight_counts = True,
                     min_recall = 0.85, min_precision=0.0,
                     max_results=None, display=True, **kwargs):
+    """given a set of intervals with respect to an implicit tonic,
+    calculate first the tonality and then the likely scales within
+    that tonality that have high likelihood for the intervals given"""
 
-    # uses tonality matching logic in loop over possible tonics
+    # uses tonality matching logic in loop over possible tonics?
 
     if isinstance(chords, IntervalList):
         # quietly reparse intervals that are (mistakenly) passed as first input
@@ -214,29 +202,77 @@ def matching_scales(chords=None, intervals=None,
         chords = None
 
     if chords is not None:
+        print(f'matching_scales received input: {chords}')
         if isinstance(chords, str):
-            # assume a string of roman numerals:
-            split_numerals = auto_split(chords)
-            roman = True
+            if begins_with_roman_numeral(chords):
+                # assume a string of roman numerals relative to major scale:
+                # split_numerals = auto_split(chords)
+                rnl = NumeralList(chords)
+                intervals = rnl.get_intervals_from_tonic()
+                roman = True
+                # chord_list = ChordList(split_numerals)
+            else:
+                # assume string of rooted chords, but we don't have tonic information
+                raise Exception(f'matching_scales must have a tonic to work from, but received chord string: {chords}')
+                # chord_list = ChordList(chords)
         elif isinstance(chords[0], str):
-            # assume a list of roman numerals
-            split_numerals = chords
-            roman = True
+            if begins_with_roman_numeral(chords[0]):
+                # assume a list of roman numerals
+                rnl = NumeralList(chords)
+                intervals = rnl.get_intervals_from_tonic()
+                roman = True
+                # chord_list = ChordList(split_numerals)
+            else:
+                raise Exception(f'matching_scales must have a tonic to work from, but received chord list: {chords}')
+                # chord_list = ChordList(chords)
+        elif isinstance(chords, ChordList):
+            assert isinstance(chords[0], ScaleChord), f"matching_scales must have a tonic to work from, but received non-ScaleChords of type: {type(chords[0])}"
+            intervals = IntervalList([])
+            for ch in chords:
+                intervals.extend(ch.intervals_from_tonic)
+            # # assume degree, chord pairs
+            # assert len(chords[0]) == 2, "expected input to matching_scales to be roman numerals or list of (degree, abs_chord) pairs"
+            # assert
+            # roman = False
+        elif isinstance(chords, (Progression, NumeralList)):
+            intervals = chords.get_intervals_from_tonic()
         else:
-            # assume degree, chord pairs
-            assert len(chords[0]) == 2, "expected input to matching_scales to be roman numerals or list of (degree, abs_chord) pairs"
-            roman = False
+            raise Exception(f'matching_scales received unexpected input: {chords}')
 
-        if roman:
-            degrees, abs_chords = [], []
-            for num in split_numerals:
-                rn = RomanNumeral(num)
-                deg, ch = rn.degree, rn.chord
-                degrees.append(deg)
-                abs_chords.append(ch)
-        else:
-            degrees = [d for d,ch in chords]
-            abs_chords = [ch for d,ch in chords]
+        print(f'  parsed as: {intervals}')
+
+
+    elif intervals is not None:
+        # hope we have been given a straight IntervalList, but re-parse anyway
+        intervals = IntervalList(intervals)
+        print(f'matching_scales received input: {intervals}')
+
+
+    assert isinstance(intervals, IntervalList)
+    assert isinstance(intervals[0], Interval)
+
+
+    # now find tonality:
+    print(f'matching to tonal distribution:')
+    major_score, minor_score = match_tonal_dist_to_intervals(intervals,
+                                return_scores=True, weight_counts=weight_counts,
+                                verbose=True)
+
+
+
+        # if roman:
+        #     degrees, abs_chords = [], []
+        #     chord_list = ChordList()
+        #     for num in split_numerals:
+        #         rn = RomanNumeral(num)
+        #         deg, ch = rn.degree, rn.chord
+        #         chord_list.append(ch.in_scale('major', degree=deg))
+        #         degrees.append(deg)
+        #         abs_chords.append(ch)
+        #         ### WIP
+        # else:
+        #     degrees = [d for d,ch in chords]
+        #     abs_chords = [ch for d,ch in chords]
 
 
 def old_matching_scales(chords=None, intervals=None, major_roots=None, min_recall=0.85, min_precision=0.0,

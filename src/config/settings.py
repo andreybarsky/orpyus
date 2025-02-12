@@ -65,6 +65,7 @@ BRACKETS = {  # class-identifying brackets used for different music objects:
      'ChordProgression': ['𝄆 ', ' 𝄇'],    # ['╟', '╢'],
                'Guitar': ['〚', ' 〛'],
          'RomanNumeral': ['<', '>'],
+          'NumeralList': ['<𝄃 ', ' 𝄂>'],
 
              # brackets used in chord, key display methods:
   'chromatic_intervals': ['[', ']'],  # displayed around chromatic intervals / scale factors

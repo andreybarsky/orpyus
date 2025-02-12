@@ -3,7 +3,8 @@ from . import parsing
 from .config import settings
 from .util import reduce_aliases, log
 from .qualities import Quality, Major, Minor, Ind, minor_mod, parse_chord_modifiers, ChordModifier
-from .intervals import Interval
+from .intervals import Interval, IntervalList
+from .parsing import auto_split
 
 from math import ceil
 from functools import cached_property
@@ -339,6 +340,15 @@ class RomanNumeral:
         """returns the AbstractChord associated with this numeral's modifiers"""
         return AbstractChord.from_cache(modifiers=self.modifiers)
 
+    def get_intervals_from_tonic(self, scale='major'):
+        """returns the intervals from tonic corresponding to the
+        chord that this RomanNumeral represents and its position
+        in the scale (assuming major numerals by default)"""
+
+        scale_chord = self.in_scale(scale)
+        chord_intervals = scale_chord.intervals_from_tonic
+        return chord_intervals
+
     def in_scale(self, scale=None):
         """interprets this numeral with respect to a scale and returns
         the corresponding ScaleChord"""
@@ -508,15 +518,46 @@ class NumeralList(list):
         if len(items) == 1:
             if isinstance(items[0], str):
                 # been passed a single string as input, split it into a list:
-                items = auto_split(items)
+                items = auto_split(items[0])
             elif isinstance(items[0], (list, tuple)):
                 # been passed an iterable as single input, unpack it:
                 items = items[0]
 
+        # now 'items' is guaranteed to be a list of numerals or numeral strings
+        valid_numerals = []
         for item in items:
-            ...
+            if not isinstance(item, RomanNumeral):
+                item = RomanNumeral(item)
+            valid_numerals.append(item)
 
         # initialise as list:
         super().__init__(valid_numerals)
+
+    # outer brackets for this container class:
+    _brackets = settings.BRACKETS['NumeralList']
+
+
+    def __str__(self, brackets=True):
+        # return f'𝄃{super().__repr__()}𝄂'
+        numeral_names = [str(rn) for rn in self]
+        if brackets:
+            lb, rb = self._brackets
+        else:
+            lb = rb = ''
+        sep_char = ' - '
+        return f'{lb}{sep_char.join(numeral_names)}{rb}'
+
+    def __repr__(self):
+        return str(self)
+
+    def get_intervals_from_tonic(self, scale='major', **kwargs):
+        """returns the intervals of the chords in this NumeralList
+        relative to the tonic of their scale (implied major by default),
+        as an IntervalList (but with optional kwargs
+        passed to IntervalList constructor)"""
+        all_intervals = IntervalList([])
+        for rn in self:
+            all_intervals.extend(rn.get_intervals_from_tonic(scale=scale))
+        return all_intervals
 
 Numerals = NumeralList

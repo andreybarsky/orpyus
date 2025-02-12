@@ -2102,9 +2102,14 @@ class ChordList(list):
         from src.matching import matching_keys
         return matching_keys(chords=self, *args, **kwargs)
 
-    def play(self, chord_delay=1, note_delay=0, duration=2.5, octave=None, falloff=True, block=False, type='fast', **kwargs):
+    def play(self, resolve=False, chord_delay=1, note_delay=0, duration=2.5, octave=None, falloff=True, block=False, type='fast', **kwargs):
         """play this chordlist as audio"""
-        chord_waves = [c._melody_wave(duration=duration, delay=note_delay, octave=octave, type=type, **kwargs) for c in self]
+        if resolve:
+            # add first chord to the end again:
+            chords = [ch for ch in self] + [self[0]]
+        else:
+            chords = [ch for ch in self]
+        chord_waves = [ch._melody_wave(duration=duration, delay=note_delay, octave=octave, type=type, **kwargs) for ch in chords]
         from .audio import arrange_melody, play_wave, play_melody
         play_melody(chord_waves, delay=chord_delay, falloff=falloff, block=block)
         # prog_wave = arrange_melody(chord_waves, delay=delay, **kwargs)

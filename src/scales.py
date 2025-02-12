@@ -2099,11 +2099,14 @@ class ScaleChord(AbstractChord):
         elif self.quality.minor_ish:
             uppercase = False
         else:
-            # chords of ambiguous quality (sus chords etc) use their respective scale triad quality:
-            if self.scale.chord(self.scale_degree).quality.minor_ish:
-                uppercase = False
-            else:
-                uppercase = True # falling back on uppercase if even the scale triad is ambiguous:
+            # # chords of ambiguous quality (sus chords etc) use their respective scale triad quality:
+            # if self.scale.chord(self.scale_degree).quality.minor_ish:
+            #     uppercase = False
+            # else:
+            #     uppercase = True # falling back on uppercase if even the scale triad is ambiguous:
+            ### actually, chords of ambiguous quality just use uppercase:
+            uppercase = True
+
 
         if uppercase:
             numeral = parsing.numerals_roman[root_factor].upper()

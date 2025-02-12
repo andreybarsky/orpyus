@@ -485,8 +485,9 @@ def parse_alteration(alteration):
 
 ##### multi-purpose string splitting/parsing:
 
-### TBI: allow split by blacklist instead of whitelist??
-def auto_split(inp, allow='', allow_numerals=True, allow_letters=True, allow_accidentals=False, disallow=None):
+def auto_split(inp, allow='', allow_digits=True, allow_letters=True,
+                    allow_accidentals=True, allow_numerals=True,
+                disallow=None):
     """takes a string 'inp' and automatically separates it by the first char found that is
         not in the whitelist iterable 'allow'.
         alternatively, if 'disallow' is not None and is set to a string or list of chars,
@@ -498,12 +499,24 @@ def auto_split(inp, allow='', allow_numerals=True, allow_letters=True, allow_acc
 
     if disallow is None:
         whitelist = set(allow)
-        if allow_numerals:
+        if allow_digits:
             whitelist.update(string.digits)
         if allow_letters:
             whitelist.update(string.ascii_letters)
         if allow_accidentals:
             whitelist.update('#♯𝄪b♭𝄫')
+        if allow_numerals:
+            # add every single character that occurs
+            # in valid numeral aliases:
+            numerals_chars = []
+            for numeral_str in progression_aliases.keys():
+                numerals_chars.extend(numeral_str)
+            # as well as the modifier marks used to denote
+            # chord modifications in roman numerals:
+            for mod_str in modifier_marks.values():
+                numerals_chars.extend(mod_str)
+            whitelist.update(set(numerals_chars))
+
         blacklist = None
     else:
         blacklist = disallow
