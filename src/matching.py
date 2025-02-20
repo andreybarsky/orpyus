@@ -30,12 +30,13 @@ major_scales = [NaturalMajor, HarmonicMajor, MelodicMajor,
 
 minor_scales = [NaturalMinor, HarmonicMinor, MelodicMinor,
                 Dorian, Phrygian, #BluesMinor,
-                NeapolitanMinor, NeapolitanMajor, DoubleHarmonic]
+                NeapolitanMinor, NeapolitanMajor, # arguably?
+                DoubleHarmonic]
 
 @dataclass
 class Tonality:
-    tonic: Note
     quality: Quality
+    tonic: Note = None # optional tonic note
 
     @property
     def scales(self):
@@ -47,6 +48,11 @@ class Tonality:
             return []
 
     @property
+    def keys(self):
+        assert self.tonic is not None
+        return [sc.on_tonic(self.tonic) for sc in self.scales]
+
+    @property
     def distribution(self):
         if self.quality.major:
             return major_tonal_dist
@@ -55,6 +61,7 @@ class Tonality:
         else:
             raise Exception('Tonality should be either major or minor')
 
+    # useful interval matching accessors:
     def __truediv__(self, weighted_ivs: dict[Interval, float]):
         """ '/' operator: compute dot product with intervals and return score
         proportional to how those intervals match this tonality."""
@@ -202,6 +209,8 @@ def matching_scales(chords=None, intervals=None,
         chords = None
 
     if chords is not None:
+        ### parse chord input into intervals:
+        ### (assuming chords are rooted in an implied scale)
         print(f'matching_scales received input: {chords}')
         if isinstance(chords, str):
             if begins_with_roman_numeral(chords):
@@ -257,6 +266,10 @@ def matching_scales(chords=None, intervals=None,
     major_score, minor_score = match_tonal_dist_to_intervals(intervals,
                                 return_scores=True, weight_counts=weight_counts,
                                 verbose=True)
+
+
+    tonal_dist = major_tonal_dist if major_score >= minor_score else minor_tonal_dist
+
 
 
 

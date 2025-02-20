@@ -1,14 +1,15 @@
 from ..progressions import *
 from ..chords import Chord, AbstractChord, ChordList
 from ..scales import MajorScale
+from ..numerals import NumeralList, RomanNumeral
 # from ..numerals import RomanNumeral
 from .testing_tools import compare
 
 def unit_test():
 
     # test chordlist to numerals:
-    compare(ChordList('Em11', 'Csus4', 'G7', 'Dmin9').as_numerals_in('G', modifiers=False, sep=' ', diacritics=False), 'vi IV I v')
-    compare(ChordList('Em11', 'Csus4', 'G7', 'Dmin9').as_numerals_in('G', modifiers=True, sep=' ', diacritics=False), 'vi¹¹ IVˢ⁴ I⁷ v⁹')
+    compare(ChordList('Em11', 'Csus4', 'G7', 'Dmin9').as_numerals_in('G', modifiers=False, sep=' ', diacritics=False), NumeralList('vi IV I v'))
+    compare(ChordList('Em11', 'Csus4', 'G7', 'Dmin9').as_numerals_in('G', modifiers=True, sep=' ', diacritics=False), NumeralList('vi¹¹ IVˢ⁴ I⁷ v⁹'))
 
     ### progression init by string or scalechords:
     compare(MajorScale.progression([2,5,1]), Progression(MajorScale.chords([2,5,1])))

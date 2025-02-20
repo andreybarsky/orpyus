@@ -220,6 +220,8 @@ progression_aliases.update(accidental_progression_aliases)
 # kludge: we have to specifically ignore 'dim' when reading roman numerals,
 # because it is the only modifier that contains a roman numeral ('i')
 progression_aliases['dim'] = 'dim'
+# also 'dmin':
+progression_aliases['dmin'] = 'dmin'
 
 #####  CURSED MUSIC THEORY  #####
 
