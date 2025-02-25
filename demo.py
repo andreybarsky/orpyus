@@ -2,7 +2,7 @@
 ### it's intended to be used interactively without the need to install the package properly, e.g.
 ### e.g.:  $ ipython -i demo.py
 
-import ipdb, time
+import pdb, time
 
 # time how long init takes for debugging purposes:
 init_start_time = time.time()

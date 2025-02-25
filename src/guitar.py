@@ -23,10 +23,10 @@ tuning_note_names = {   # names/aliases for common tunings:
            'dropC': ( 'C2',  'G2',  'C3',  'F3',  'A3',  'D4' ),
            'dropB': ( 'B1',  'Gb2', 'B2',  'E3',  'Ab3', 'Db4'),
            'openE': ( 'E2',  'B2',  'E3',  'G#3', 'B3',  'E4' ),
-          'celtic': ( 'D2',  'A2',  'D3',  'G3',  'A3',  'D4' ), # openDsus4, better known as DADGAD
            'openD': ( 'D2',  'A2',  'D3',  'F#3', 'A3',  'D4' ),
            'openC': ( 'C2',  'G2',  'C3',  'G3',  'C4',  'E4' ),
            'openG': ( 'D2',  'G2',  'D3',  'G3',  'B3',  'D4' ),
+           'celtic': ( 'D2',  'A2',  'D3',  'G3',  'A3',  'D4' ), # openDsus4 aka DADGAD
                }
 
 # cast string names into OctaveNote objects:
@@ -584,3 +584,30 @@ standard_open_chord_names = {
                 'G', 'G7', 'Gmaj7',
                             }
 standard_open_chords = set([Chord.from_cache(c) for c in standard_open_chord_names])
+
+
+
+
+
+string_mapping = {i: 6-i for i in range(1,7)}
+
+def play_alvez(notation, delay=0.4, **kwargs):
+    # unpack {string}{fret} components:
+    string_frets = []
+    for part in notation.split(' '):
+        string, fret = part
+        string_id, fret_num = string_mapping[int(string)], int(fret)
+        string_frets.append((string_id, fret_num))
+
+    # apply frets as offsets to specified guitar tuning to obtain pitched notes:
+    lick = NoteList([standard.tuned_strings[s] + f for s,f in string_frets],
+                    strip_octave=False)
+
+    # play pitched notes as audio wave:
+    lick.play(delay=delay, **kwargs)
+
+# alvez {string}{fret} notation:
+# low string is 6, high string is 1
+lick1 = '40 53 52 50'
+lick2 = '64 23 21 20 32'
+lick3 = '42 32 30 42 32 30'
