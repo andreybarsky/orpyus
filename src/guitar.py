@@ -591,7 +591,7 @@ standard_open_chords = set([Chord.from_cache(c) for c in standard_open_chord_nam
 
 string_mapping = {i: 6-i for i in range(1,7)}
 
-def play_alvez(notation, delay=0.4, **kwargs):
+def play_alves(notation, delay=0.4, **kwargs):
     # unpack {string}{fret} components:
     string_frets = []
     for part in notation.split(' '):
@@ -606,8 +606,11 @@ def play_alvez(notation, delay=0.4, **kwargs):
     # play pitched notes as audio wave:
     lick.play(delay=delay, **kwargs)
 
-# alvez {string}{fret} notation:
+# alves {string}{fret} notation:
 # low string is 6, high string is 1
 lick1 = '40 53 52 50'
 lick2 = '64 23 21 20 32'
 lick3 = '42 32 30 42 32 30'
+
+for lick in [lick1, lick2, lick3]:
+    play_alves(lick)
