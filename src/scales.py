@@ -1297,6 +1297,7 @@ class Scale:
     def fretboard(self):
         # just a quick accessor for guitar.show in standard tuning
         return self.show()
+    diagram = fretboard
 
     ### naming/display methods:
     def roman_numeral(self, degree):
