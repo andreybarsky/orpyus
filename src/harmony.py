@@ -378,6 +378,12 @@ class HarmonicDataModel(HarmonicModel):
             if progression.scale != self.scale:
                 print(f'== WARNING: Progression scale ({progression.scale}) does not match model scale {self.scale} == ')
 
+        # if isinstance(progression, ChordProgression):
+        #     original_key = progression.key
+        #     progression = progression.abstract()
+        # else:
+        #     original_key = None
+
         possible_continuation_weights = Counter() # dict linking suggestions to logits
         explanations = {} # dict linking suggestions to counters of attributions
 
@@ -399,6 +405,7 @@ class HarmonicDataModel(HarmonicModel):
                     ante_numerals = [ch.simple_numeral for ch in ante_chords]
                 else:
                     ante_numerals = [ch.mod_numeral for ch in ante_chords]
+                breakpoint()
                 log(f'  {ante_len} : {ante_numerals}')
 
                 # find matches in dataset:

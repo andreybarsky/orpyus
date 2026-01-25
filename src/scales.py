@@ -2027,7 +2027,7 @@ class ScaleChord(AbstractChord):
     def mod_numeral(self):
         return self.get_numeral(modifiers=True, as_string=True, marks=False, diacritics=False)
 
-    def get_numeral(self, modifiers=True, as_string=False, marks=settings.DEFAULT_PROGRESSION_MARKERS, diacritics=settings.DEFAULT_PROGRESSION_DIACRITICS):
+    def get_numeral(self, modifiers=True, as_string=True, marks=settings.DEFAULT_PROGRESSION_MARKERS, diacritics=settings.DEFAULT_PROGRESSION_DIACRITICS):
         """returns the roman numeral associated with this ScaleChord
         with respect to its Scale and its degree within it"""
 

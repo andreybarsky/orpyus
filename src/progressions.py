@@ -7,7 +7,7 @@ from .qualities import Major, Minor, Perfect, Diminished, parse_chord_modifiers,
 from .scales import infer_chord_scale, infer_scale, Scale, ScaleChord, NaturalMajor, NaturalMinor
 from .keys import Key, KeyChord, matching_keys# , most_likely_key
 from .util import reduce_aliases, rotate_list, check_all, reverse_dict, log
-from .parsing import auto_split, superscript, fl, sh, nat # roman_numerals, numerals_roman, modifier_marks,
+from .parsing import auto_split, superscript, fl, sh, nat, roman_numerals, numerals_roman, modifier_marks
 from .numerals import RomanNumeral
 from . import parsing, notes, scales
 from .config import settings, def_progressions
@@ -99,6 +99,7 @@ class Progression:
             # roman numeral strings
             # which we parse into RomanNumeral objects:
             numerals = [RomanNumeral(rn) for rn in numerals]
+            
 
         # now we can deal with RomanNumeral objects:
         if check_all(numerals, 'isinstance', RomanNumeral):
@@ -182,6 +183,8 @@ class Progression:
         self.chord_root_intervals_from_tonic = [self.scale.degree_intervals[d] if d in self.scale.degree_intervals else self.scale.fractional_degree_intervals[d]  for d in self.root_degrees]
         self.root_movements = [RootMotion(self.root_degrees[i], self.root_degrees[i+1], scale=self.scale) for i in range(len(self)-1)]
 
+
+
         assert check_all(self.chords, 'isinstance', ScaleChord) # sanity check: progression chords are always ScaleChords
 
 
@@ -245,32 +248,32 @@ class Progression:
     def analysis(self):
         return self.analyse(display=True, ret=False)
 
-    # def to_numerals(self, sep=' ', modifiers=True, marks=default_marks, diacritics=default_diacs):
-    #     """returns this Progression's representation in roman numeral form
-    #     with respect to its Scale"""
-    #
-    #     numerals = [ch.get_numeral(modifiers=modifiers, marks=marks, diacritics=diacritics) for ch in self.chords]
-    #
-    #     if sep is not None:
-    #         roman_chords_str = sep.join(numerals)
-    #         return roman_chords_str
-    #     else:
-    #         # just return the raw list, instead of a sep-connected string
-    #         return numerals
-    # get_numerals = as_numerals = to_numerals # convenience aliases
+    def to_numerals(self, sep=' ', modifiers=True, marks=default_marks, diacritics=default_diacs):
+        """returns this Progression's representation in roman numeral form
+        with respect to its Scale"""
+    
+        numerals = [ch.get_numeral(modifiers=modifiers, marks=marks, diacritics=diacritics) for ch in self.chords]
+    
+        if sep is not None:
+            roman_chords_str = sep.join(numerals)
+            return roman_chords_str
+        else:
+            # just return the raw list, instead of a sep-connected string
+            return numerals
+    get_numerals = as_numerals = to_numerals # convenience aliases
     # @property
     # def numerals(self):
     #     return self.to_numerals()
-    #
-    # @property
-    # def mod_numerals(self):
-    #     """upper/lowercase numerals with chord type modifiers like 7, sus4, etc."""
-    #     return self.to_numerals(sep=None, modifiers=True, marks=False, diacritics=False)
-    #
-    # @property
-    # def simple_numerals(self):
-    #     """just raw upper/lowercase numerals, no modifiers or diacritics etc."""
-    #     return self.to_numerals(sep=None, marks=False, diacritics=False, modifiers=False)
+    
+    @property
+    def mod_numerals(self):
+        """upper/lowercase numerals with chord type modifiers like 7, sus4, etc."""
+        return self.to_numerals(sep=None, modifiers=True, marks=False, diacritics=False)
+    
+    @property
+    def simple_numerals(self):
+        """just raw upper/lowercase numerals, no modifiers or diacritics etc."""
+        return self.to_numerals(sep=None, marks=False, diacritics=False, modifiers=False)
 
     def in_key(self, key, **kwargs):
         """returns a ChordProgression with these chords over a specified Key object"""
@@ -443,9 +446,13 @@ class Progression:
     # progression completion logic:
     def complete(self, model=None, display=True):
         if model is None:
-            from src.harmony import default_harmonic_models
+            from src.harmony import default_harmonic_models, common_major_model
             # get the default model for this progression's scale:
-            model = default_harmonic_models[self.scale]
+            if self.scale in default_harmonic_models:
+                model = default_harmonic_models[self.scale]
+            else:
+                # use the major model
+                model = common_major_model
         if display:
             model.complete(self, display=True)
         else:
@@ -728,6 +735,23 @@ class ChordProgression(Progression): # , ChordList):
         df.append(split_numerals) # degrees row
         return df.show(header=False, header_border=False, margin=' - ', fix_widths=True,
                        return_string=True, title=str(self.key), align='centre')
+
+
+    # chordprogression completion logic:
+    def complete(self, model=None, display=True):
+        if model is None:
+            from src.harmony import default_harmonic_models, common_major_model
+            # get the default model for this progression's scale:
+            if self.scale in default_harmonic_models:
+                model = default_harmonic_models[self.scale]
+            else:
+                # use the major model
+                model = common_major_model
+        if display:
+            model.complete(self, display=True)
+        else:
+            return model.complete(self, display=False)
+
 
     def chord_motions(self):
         for i in range(1, len(self)):
